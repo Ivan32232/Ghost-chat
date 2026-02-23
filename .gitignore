@@ -1,0 +1,18 @@
+node_modules/
+.env
+.DS_Store
+*.log
+
+# SSL certificates
+deploy/ssl/
+deploy/certbot/
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

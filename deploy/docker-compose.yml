@@ -1,0 +1,55 @@
+services:
+  ghost-chat:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.ghost-chat
+    container_name: ghost-chat
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - TRUST_PROXY=1
+      - TURN_SECRET=${TURN_SECRET}
+      - TURN_DOMAIN=${TURN_DOMAIN}
+    networks:
+      - ghost-network
+    expose:
+      - "3000"
+
+  nginx:
+    image: nginx:alpine
+    container_name: ghost-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - ghost-chat
+    networks:
+      - ghost-network
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: ghost-turn
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./turnserver.conf:/etc/turnserver.conf:ro
+      - ./ssl:/etc/ssl/turn:ro
+    command: ["-c", "/etc/turnserver.conf"]
+
+  certbot:
+    image: certbot/certbot
+    container_name: ghost-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  ghost-network:
+    driver: bridge

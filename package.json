@@ -1,0 +1,24 @@
+{
+  "name": "ghost-chat",
+  "version": "1.0.0",
+  "description": "Zero-trace ephemeral P2P encrypted messenger",
+  "main": "server/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "keywords": [
+    "encryption",
+    "p2p",
+    "webrtc",
+    "ephemeral",
+    "secure",
+    "messenger"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
