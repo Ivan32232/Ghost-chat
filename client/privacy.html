@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ghost Chat — Privacy Policy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000;
+      color: #e0e0e0;
+      line-height: 1.7;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #fff;
+      font-size: 2em;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #888;
+      margin-bottom: 40px;
+    }
+    h2 {
+      color: #fff;
+      font-size: 1.3em;
+      margin-top: 32px;
+      margin-bottom: 12px;
+    }
+    p, li {
+      color: #ccc;
+      margin-bottom: 12px;
+    }
+    ul {
+      padding-left: 24px;
+      margin-bottom: 16px;
+    }
+    a {
+      color: #4a9eff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .back {
+      display: inline-block;
+      margin-top: 40px;
+      color: #4a9eff;
+      font-size: 0.95em;
+    }
+    .updated {
+      color: #666;
+      font-size: 0.85em;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Privacy Policy</h1>
+    <p class="subtitle">Ghost Chat — zero-trace P2P encrypted messenger</p>
+
+    <h2>1. Overview</h2>
+    <p>Ghost Chat is a peer-to-peer encrypted messenger designed with privacy as its core principle. We do not collect, store, or process any personal data or message content.</p>
+
+    <h2>2. Data We Do NOT Collect</h2>
+    <ul>
+      <li><strong>Messages:</strong> All messages are end-to-end encrypted (AES-256-GCM) and exist only in device memory. They are never stored on any server.</li>
+      <li><strong>User accounts:</strong> Ghost Chat does not require registration, login, email, phone number, or any personal information.</li>
+      <li><strong>Metadata:</strong> We do not log who talks to whom, when, or how often.</li>
+      <li><strong>IP addresses:</strong> The signaling server does not log IP addresses. Privacy mode routes all traffic through TURN relay servers to hide IP addresses from peers.</li>
+      <li><strong>Device information:</strong> We do not collect device identifiers, OS version, or any device metadata.</li>
+    </ul>
+
+    <h2>3. How It Works</h2>
+    <p>Ghost Chat uses WebRTC for direct peer-to-peer connections. The signaling server only relays WebRTC handshake data to establish the connection — it is fully stateless and retains no information after the connection is established.</p>
+    <ul>
+      <li>Encryption: ECDH P-256 key exchange, HKDF key derivation, AES-256-GCM</li>
+      <li>Perfect Forward Secrecy: Keys rotate every 50 messages</li>
+      <li>Messages are padded to 256-byte blocks to prevent traffic analysis</li>
+      <li>Replay protection with nonce tracking and counter windows</li>
+    </ul>
+
+    <h2>4. Voice Calls</h2>
+    <p>Voice calls are transmitted directly between peers using WebRTC with DTLS-SRTP encryption. Audio data never passes through our servers. Call signaling is encrypted end-to-end through the existing secure data channel.</p>
+
+    <h2>5. Data Retention</h2>
+    <p>There is no data retention because there is no data to retain. Messages exist only in volatile memory and are permanently lost when you close the app or leave the chat. Empty rooms are automatically deleted after 10 minutes.</p>
+
+    <h2>6. Third-Party Services</h2>
+    <p>Ghost Chat uses STUN/TURN servers for WebRTC connectivity:</p>
+    <ul>
+      <li>Google STUN server (stun.l.google.com) — for NAT traversal only</li>
+      <li>Cloudflare STUN server (stun.cloudflare.com) — for NAT traversal only</li>
+      <li>Self-hosted TURN server — for relaying encrypted traffic when direct connection is not possible</li>
+    </ul>
+    <p>No analytics, tracking, or advertising services are used.</p>
+
+    <h2>7. Microphone & Camera Permissions</h2>
+    <p>The app requests microphone access only when you initiate or accept a voice call. Camera permission is declared for WebRTC framework compatibility but is not actively used. No audio or video is recorded or stored.</p>
+
+    <h2>8. Children's Privacy</h2>
+    <p>Ghost Chat is not directed at children under 13. We do not knowingly collect any information from anyone, including children.</p>
+
+    <h2>9. Changes to This Policy</h2>
+    <p>We may update this privacy policy from time to time. Changes will be posted on this page.</p>
+
+    <h2>10. Contact</h2>
+    <p>If you have questions about this privacy policy, contact us at <a href="mailto:pokhvalitovvanya@gmail.com">pokhvalitovvanya@gmail.com</a>.</p>
+
+    <a href="/" class="back">&larr; Back to Ghost Chat</a>
+    <p class="updated">Last updated: February 24, 2026</p>
+  </div>
+</body>
+</html>

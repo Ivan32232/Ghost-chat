@@ -1,0 +1,610 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 63;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0EF66BE9E45D6F10D9C121F6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D081DA9A43C01C7B3A02536F /* AppDelegate.swift */; };
+		1878584909E29EB31914FD49 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4A2DD11E34CC090F5F8E49F /* ChatViewModel.swift */; };
+		299C83A192A1AF513D161D9B /* GhostChatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00CBE7C43B5E520C11413BCA /* GhostChatApp.swift */; };
+		398696351E748D9C5071F5A3 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B488D980E5258ED06020F5C5 /* WelcomeView.swift */; };
+		39C408719FA1EB046AB6FD19 /* Room.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80A94CC8FD98225EE71C7FA0 /* Room.swift */; };
+		58209A39532A8ED5A470025C /* CryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACEFB146D2D33A6B206DC963 /* CryptoTests.swift */; };
+		64DB71F61150DC926E697661 /* SecurityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A498151B99C57B3E427D86 /* SecurityMonitor.swift */; };
+		6979690BD61D2E3D5E022DB2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 670DDFE8304B7C27B928FBA2 /* Assets.xcassets */; };
+		77AD558AE888508553150C0D /* GhostRTC.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6CA0AA773A5F980DB56CFE2 /* GhostRTC.swift */; };
+		8686EFA0292170C23C238658 /* ControlMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A98329F2B770C8EC8C24D44 /* ControlMessage.swift */; };
+		99B1FF9DD381D28AC3376724 /* TURNService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5501BD489B97A1624F66C9C8 /* TURNService.swift */; };
+		A5688E2BA46A8275B0A5F7F5 /* MessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2B32AB1BE8BF8750FBC3B9 /* MessageTests.swift */; };
+		B93345CA54E773D12634DA73 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A641EA0F8078A6573046F6AB /* ChatView.swift */; };
+		BF03DF14FAC28346AA911E46 /* CallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F007A754854C6C65927197A3 /* CallView.swift */; };
+		CEB2A76EE868B1E69B106B75 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96C9481A125A7C0BA370BC90 /* Message.swift */; };
+		DD354073EF248F0BCA0DC7D6 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 9AC7232D25B50ED04AEFD21A /* WebRTC */; };
+		E3F9A4728CD1D322862B23C8 /* SignalingClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103BADF5A3D6CB00841495BE /* SignalingClient.swift */; };
+		EA04FA3A94B8CC918AC62D18 /* GhostVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 814593199E942E0821A7FAE6 /* GhostVoice.swift */; };
+		F54988399D05D9EE06855218 /* GhostCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D426F2F749FF6099AF72323 /* GhostCrypto.swift */; };
+		FCCDAC753F2337E6829FDDA4 /* IncomingCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DB0652D8781E4CA4A761302 /* IncomingCallView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		49E59B714A6DF992CDA19BAF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CAB8823E36C467720F8BC113 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 591205D6B972BC64E1BDE234;
+			remoteInfo = GhostChat;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		00CBE7C43B5E520C11413BCA /* GhostChatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostChatApp.swift; sourceTree = "<group>"; };
+		0D2B32AB1BE8BF8750FBC3B9 /* MessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageTests.swift; sourceTree = "<group>"; };
+		103BADF5A3D6CB00841495BE /* SignalingClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalingClient.swift; sourceTree = "<group>"; };
+		1953330F4F52BD0467D19E9B /* Ghost chat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ghost chat.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A98329F2B770C8EC8C24D44 /* ControlMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlMessage.swift; sourceTree = "<group>"; };
+		410D730BA67A2D9E359B6E50 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4D426F2F749FF6099AF72323 /* GhostCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostCrypto.swift; sourceTree = "<group>"; };
+		5501BD489B97A1624F66C9C8 /* TURNService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TURNService.swift; sourceTree = "<group>"; };
+		57A498151B99C57B3E427D86 /* SecurityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityMonitor.swift; sourceTree = "<group>"; };
+		635F0ED23540C83A421176DC /* GhostChatTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = GhostChatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		670DDFE8304B7C27B928FBA2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		80A94CC8FD98225EE71C7FA0 /* Room.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Room.swift; sourceTree = "<group>"; };
+		814593199E942E0821A7FAE6 /* GhostVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostVoice.swift; sourceTree = "<group>"; };
+		851A8A637C76E3DE6553A60A /* GhostChat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GhostChat.entitlements; sourceTree = "<group>"; };
+		8DB0652D8781E4CA4A761302 /* IncomingCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingCallView.swift; sourceTree = "<group>"; };
+		96C9481A125A7C0BA370BC90 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		A4A2DD11E34CC090F5F8E49F /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		A641EA0F8078A6573046F6AB /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		ACEFB146D2D33A6B206DC963 /* CryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoTests.swift; sourceTree = "<group>"; };
+		B488D980E5258ED06020F5C5 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		C6CA0AA773A5F980DB56CFE2 /* GhostRTC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostRTC.swift; sourceTree = "<group>"; };
+		D081DA9A43C01C7B3A02536F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		F007A754854C6C65927197A3 /* CallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C5B9DF89A09A19DBECF70682 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DD354073EF248F0BCA0DC7D6 /* WebRTC in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1D5586C1FB6ACB7E5F29DB73 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				2BC27D7471B345671B7F3DC7 /* Crypto */,
+				563EE59BDC8D67F5CCE15E9A /* Network */,
+				5CF2B8889869739FB6951794 /* Security */,
+				41397D1C978C2F07B1E280CF /* WebRTC */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		23E4BABFED1507F2176FE926 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				D081DA9A43C01C7B3A02536F /* AppDelegate.swift */,
+				00CBE7C43B5E520C11413BCA /* GhostChatApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		2BC27D7471B345671B7F3DC7 /* Crypto */ = {
+			isa = PBXGroup;
+			children = (
+				4D426F2F749FF6099AF72323 /* GhostCrypto.swift */,
+			);
+			path = Crypto;
+			sourceTree = "<group>";
+		};
+		41397D1C978C2F07B1E280CF /* WebRTC */ = {
+			isa = PBXGroup;
+			children = (
+				C6CA0AA773A5F980DB56CFE2 /* GhostRTC.swift */,
+				814593199E942E0821A7FAE6 /* GhostVoice.swift */,
+			);
+			path = WebRTC;
+			sourceTree = "<group>";
+		};
+		55B83C4CD4129964137FD366 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1953330F4F52BD0467D19E9B /* Ghost chat.app */,
+				635F0ED23540C83A421176DC /* GhostChatTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		563EE59BDC8D67F5CCE15E9A /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				103BADF5A3D6CB00841495BE /* SignalingClient.swift */,
+				5501BD489B97A1624F66C9C8 /* TURNService.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		5CF2B8889869739FB6951794 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				57A498151B99C57B3E427D86 /* SecurityMonitor.swift */,
+			);
+			path = Security;
+			sourceTree = "<group>";
+		};
+		845CD4F1CDBAD32AC4A1C993 /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				A641EA0F8078A6573046F6AB /* ChatView.swift */,
+				A4A2DD11E34CC090F5F8E49F /* ChatViewModel.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		965943E5FEF7E201E52B1E7D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				670DDFE8304B7C27B928FBA2 /* Assets.xcassets */,
+				851A8A637C76E3DE6553A60A /* GhostChat.entitlements */,
+				410D730BA67A2D9E359B6E50 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		A9C631AA36F2AE8C6AF9DF74 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				2A98329F2B770C8EC8C24D44 /* ControlMessage.swift */,
+				96C9481A125A7C0BA370BC90 /* Message.swift */,
+				80A94CC8FD98225EE71C7FA0 /* Room.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		B024E13C2FC1F8AC004422D7 /* Welcome */ = {
+			isa = PBXGroup;
+			children = (
+				B488D980E5258ED06020F5C5 /* WelcomeView.swift */,
+			);
+			path = Welcome;
+			sourceTree = "<group>";
+		};
+		B8E0533865F9BDF86CDCCF3A = {
+			isa = PBXGroup;
+			children = (
+				C152486E7D8EF027BB6FAF00 /* GhostChat */,
+				FB4CA4E826D5DF8290DB404F /* GhostChatTests */,
+				55B83C4CD4129964137FD366 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C152486E7D8EF027BB6FAF00 /* GhostChat */ = {
+			isa = PBXGroup;
+			children = (
+				23E4BABFED1507F2176FE926 /* App */,
+				1D5586C1FB6ACB7E5F29DB73 /* Core */,
+				D8F7451C304150B7DD1A8CF9 /* Features */,
+				A9C631AA36F2AE8C6AF9DF74 /* Models */,
+				965943E5FEF7E201E52B1E7D /* Resources */,
+			);
+			path = GhostChat;
+			sourceTree = "<group>";
+		};
+		D8F7451C304150B7DD1A8CF9 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				DF6D2FAC1FBB6902EF07FEA8 /* Call */,
+				845CD4F1CDBAD32AC4A1C993 /* Chat */,
+				B024E13C2FC1F8AC004422D7 /* Welcome */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		DF6D2FAC1FBB6902EF07FEA8 /* Call */ = {
+			isa = PBXGroup;
+			children = (
+				F007A754854C6C65927197A3 /* CallView.swift */,
+				8DB0652D8781E4CA4A761302 /* IncomingCallView.swift */,
+			);
+			path = Call;
+			sourceTree = "<group>";
+		};
+		FB4CA4E826D5DF8290DB404F /* GhostChatTests */ = {
+			isa = PBXGroup;
+			children = (
+				ACEFB146D2D33A6B206DC963 /* CryptoTests.swift */,
+				0D2B32AB1BE8BF8750FBC3B9 /* MessageTests.swift */,
+			);
+			path = GhostChatTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		591205D6B972BC64E1BDE234 /* GhostChat */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C5F2AA7422595411672CF936 /* Build configuration list for PBXNativeTarget "GhostChat" */;
+			buildPhases = (
+				1C09913FF12CC0BD10FF83D4 /* Sources */,
+				493E5B3002B0F0FF25D2A101 /* Resources */,
+				C5B9DF89A09A19DBECF70682 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GhostChat;
+			packageProductDependencies = (
+				9AC7232D25B50ED04AEFD21A /* WebRTC */,
+			);
+			productName = GhostChat;
+			productReference = 1953330F4F52BD0467D19E9B /* Ghost chat.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D6E15DA8326F8131720E0FD7 /* GhostChatTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1361EB2D8AE2CA2E0C12B412 /* Build configuration list for PBXNativeTarget "GhostChatTests" */;
+			buildPhases = (
+				696063B39C63D62CE3669C67 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				14BB3E72782911C40E6D0769 /* PBXTargetDependency */,
+			);
+			name = GhostChatTests;
+			packageProductDependencies = (
+			);
+			productName = GhostChatTests;
+			productReference = 635F0ED23540C83A421176DC /* GhostChatTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CAB8823E36C467720F8BC113 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					591205D6B972BC64E1BDE234 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 5375EE9E6B19812F96CAE53D /* Build configuration list for PBXProject "GhostChat" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B8E0533865F9BDF86CDCCF3A;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5172C7E9B9E28F9670B33E75 /* XCRemoteSwiftPackageReference "WebRTC" */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				591205D6B972BC64E1BDE234 /* GhostChat */,
+				D6E15DA8326F8131720E0FD7 /* GhostChatTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		493E5B3002B0F0FF25D2A101 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6979690BD61D2E3D5E022DB2 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1C09913FF12CC0BD10FF83D4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0EF66BE9E45D6F10D9C121F6 /* AppDelegate.swift in Sources */,
+				BF03DF14FAC28346AA911E46 /* CallView.swift in Sources */,
+				B93345CA54E773D12634DA73 /* ChatView.swift in Sources */,
+				1878584909E29EB31914FD49 /* ChatViewModel.swift in Sources */,
+				8686EFA0292170C23C238658 /* ControlMessage.swift in Sources */,
+				299C83A192A1AF513D161D9B /* GhostChatApp.swift in Sources */,
+				F54988399D05D9EE06855218 /* GhostCrypto.swift in Sources */,
+				77AD558AE888508553150C0D /* GhostRTC.swift in Sources */,
+				EA04FA3A94B8CC918AC62D18 /* GhostVoice.swift in Sources */,
+				FCCDAC753F2337E6829FDDA4 /* IncomingCallView.swift in Sources */,
+				CEB2A76EE868B1E69B106B75 /* Message.swift in Sources */,
+				39C408719FA1EB046AB6FD19 /* Room.swift in Sources */,
+				64DB71F61150DC926E697661 /* SecurityMonitor.swift in Sources */,
+				E3F9A4728CD1D322862B23C8 /* SignalingClient.swift in Sources */,
+				99B1FF9DD381D28AC3376724 /* TURNService.swift in Sources */,
+				398696351E748D9C5071F5A3 /* WelcomeView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		696063B39C63D62CE3669C67 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				58209A39532A8ED5A470025C /* CryptoTests.swift in Sources */,
+				A5688E2BA46A8275B0A5F7F5 /* MessageTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		14BB3E72782911C40E6D0769 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 591205D6B972BC64E1BDE234 /* GhostChat */;
+			targetProxy = 49E59B714A6DF992CDA19BAF /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		42002A861BDDB35B64FDE132 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = G2VZKDYV38;
+				INFOPLIST_FILE = GhostChat/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ivanpokhvalitov.ghostchat;
+				PRODUCT_NAME = "Ghost chat";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		4AD174F98F89202D68100353 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = GhostChat/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		5756A3F6A6A4F77C2C89D4C2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = GhostChat/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B8B511763C5B57AFCABDC9D1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.ivanpokhvalitov.ghostchat.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GhostChat.app/GhostChat";
+			};
+			name = Debug;
+		};
+		C506F15222CA1AD0C651EDBE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = G2VZKDYV38;
+				INFOPLIST_FILE = GhostChat/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ivanpokhvalitov.ghostchat;
+				PRODUCT_NAME = "Ghost chat";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E6678CF5B44E02BAD87C2FF4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.ivanpokhvalitov.ghostchat.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GhostChat.app/GhostChat";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1361EB2D8AE2CA2E0C12B412 /* Build configuration list for PBXNativeTarget "GhostChatTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B8B511763C5B57AFCABDC9D1 /* Debug */,
+				E6678CF5B44E02BAD87C2FF4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5375EE9E6B19812F96CAE53D /* Build configuration list for PBXProject "GhostChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5756A3F6A6A4F77C2C89D4C2 /* Debug */,
+				4AD174F98F89202D68100353 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C5F2AA7422595411672CF936 /* Build configuration list for PBXNativeTarget "GhostChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C506F15222CA1AD0C651EDBE /* Debug */,
+				42002A861BDDB35B64FDE132 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5172C7E9B9E28F9670B33E75 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 125.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9AC7232D25B50ED04AEFD21A /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5172C7E9B9E28F9670B33E75 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = CAB8823E36C467720F8BC113 /* Project object */;
+}

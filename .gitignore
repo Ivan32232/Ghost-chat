@@ -16,3 +16,11 @@ CLAUDE.md
 .vscode/
 *.swp
 *.swo
+
+1.txt
+
+# iOS build artifacts
+GhostChat-iOS/build/
+GhostChat-iOS/*.xcworkspace/xcuserdata/
+GhostChat-iOS/*.xcodeproj/xcuserdata/
+GhostChat-iOS/Pods/

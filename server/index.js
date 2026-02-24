@@ -233,6 +233,9 @@ const httpServer = createServer(async (req, res) => {
   } else if (pathname.startsWith('/icons/') && pathname.endsWith('.png')) {
     filePath = join(clientDir, pathname);
     contentType = 'image/png';
+  } else if (pathname === '/privacy' || pathname === '/privacy.html') {
+    filePath = join(clientDir, 'privacy.html');
+    contentType = 'text/html';
   } else {
     res.writeHead(404);
     res.end('Not Found');
