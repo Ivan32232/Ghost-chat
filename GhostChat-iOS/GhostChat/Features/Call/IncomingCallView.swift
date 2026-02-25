@@ -11,7 +11,7 @@ struct IncomingCallView: View {
                     .foregroundStyle(.green)
                     .font(.title3)
 
-                Text("Входящий звонок")
+                Text("call.incoming")
                     .font(.headline)
                     .foregroundStyle(.white)
 
@@ -25,7 +25,7 @@ struct IncomingCallView: View {
                 } label: {
                     HStack {
                         Image(systemName: "phone.fill")
-                        Text("Принять")
+                        Text("call.accept")
                     }
                     .font(.headline)
                     .frame(maxWidth: .infinity)
@@ -40,7 +40,7 @@ struct IncomingCallView: View {
                 } label: {
                     HStack {
                         Image(systemName: "phone.down.fill")
-                        Text("Отклонить")
+                        Text("call.decline")
                     }
                     .font(.headline)
                     .frame(maxWidth: .infinity)

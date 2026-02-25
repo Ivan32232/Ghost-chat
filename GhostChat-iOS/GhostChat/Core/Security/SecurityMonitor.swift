@@ -63,7 +63,7 @@ final class SecurityMonitor {
         if UIScreen.main.isCaptured {
             triggerAlert(
                 type: "screen-capture-active",
-                message: "Запись экрана активна",
+                message: String(localized: "security.screenRecordingActive"),
                 severity: .high
             )
         }
@@ -77,7 +77,7 @@ final class SecurityMonitor {
             if UIScreen.main.isCaptured {
                 self?.triggerAlert(
                     type: "screen-capture-started",
-                    message: "Обнаружена запись экрана",
+                    message: String(localized: "security.screenRecordingDetected"),
                     severity: .high
                 )
             }
@@ -106,7 +106,7 @@ final class SecurityMonitor {
                        output.portType == .bluetoothLE {
                         self?.triggerAlert(
                             type: "audio-device-change",
-                            message: "Подключено Bluetooth устройство: \(output.portName)",
+                            message: String(format: String(localized: "security.bluetoothConnected"), output.portName),
                             severity: .medium
                         )
                     }
@@ -115,7 +115,7 @@ final class SecurityMonitor {
             case .oldDeviceUnavailable:
                 self?.triggerAlert(
                     type: "audio-device-removed",
-                    message: "Аудио устройство отключено",
+                    message: String(localized: "security.audioDeviceRemoved"),
                     severity: .low
                 )
 

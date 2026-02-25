@@ -14,9 +14,15 @@ struct CallView: View {
                     .font(.system(size: 40))
                     .foregroundStyle(.green)
 
-                Text(viewModel.callState == .calling ? "Звоним..." : viewModel.callTimer)
-                    .font(.system(size: 24, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white)
+                if viewModel.callState == .calling {
+                    Text("call.calling")
+                        .font(.system(size: 24, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white)
+                } else {
+                    Text(viewModel.callTimer)
+                        .font(.system(size: 24, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white)
+                }
             }
 
             Spacer()
@@ -35,7 +41,7 @@ struct CallView: View {
                             .clipShape(Circle())
                             .foregroundStyle(.white)
                     }
-                    Text(viewModel.isMuted ? "Вкл. микрофон" : "Выкл. микрофон")
+                    Text(LocalizedStringKey(viewModel.isMuted ? "call.unmute" : "call.mute"))
                         .font(.caption2)
                         .foregroundStyle(.gray)
                 }
@@ -52,7 +58,7 @@ struct CallView: View {
                             .clipShape(Circle())
                             .foregroundStyle(.white)
                     }
-                    Text(viewModel.isSpeakerOn ? "Динамик" : "На ухо")
+                    Text(LocalizedStringKey(viewModel.isSpeakerOn ? "call.speaker" : "call.earpiece"))
                         .font(.caption2)
                         .foregroundStyle(.gray)
                 }
@@ -69,7 +75,7 @@ struct CallView: View {
                             .clipShape(Circle())
                             .foregroundStyle(.white)
                     }
-                    Text("Завершить")
+                    Text("call.end")
                         .font(.caption2)
                         .foregroundStyle(.gray)
                 }

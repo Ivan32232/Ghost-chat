@@ -107,7 +107,7 @@ struct ChatView: View {
 
     private var messageInput: some View {
         HStack(spacing: 8) {
-            TextField("Сообщение", text: $messageText)
+            TextField(String(localized: "chat.message"), text: $messageText)
                 .textFieldStyle(.plain)
                 .padding(12)
                 .background(Color.white.opacity(0.08))
@@ -136,7 +136,7 @@ struct ChatView: View {
 
     private var verifySheet: some View {
         VStack(spacing: 24) {
-            Text("Код безопасности")
+            Text("chat.securityCode")
                 .font(.headline)
                 .foregroundStyle(.white)
 
@@ -148,7 +148,7 @@ struct ChatView: View {
                 .background(Color.white.opacity(0.05))
                 .cornerRadius(12)
 
-            Text("Сравните этот код с собеседником через другой канал связи")
+            Text("chat.compareCode")
                 .font(.caption)
                 .foregroundStyle(.gray)
                 .multilineTextAlignment(.center)
@@ -158,7 +158,7 @@ struct ChatView: View {
                     viewModel.markAsVerified(true)
                     showVerifyPanel = false
                 } label: {
-                    Text("Совпадает")
+                    Text("chat.matches")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                 }
@@ -169,7 +169,7 @@ struct ChatView: View {
                     viewModel.markAsVerified(false)
                     showVerifyPanel = false
                 } label: {
-                    Text("Не совпадает")
+                    Text("chat.doesNotMatch")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                 }

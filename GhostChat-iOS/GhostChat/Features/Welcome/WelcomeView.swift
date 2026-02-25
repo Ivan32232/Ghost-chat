@@ -21,7 +21,7 @@ struct WelcomeView: View {
                     .font(.system(size: 36, weight: .bold))
                     .foregroundStyle(.white)
 
-                Text("Приватный мессенджер")
+                Text("welcome.subtitle")
                     .font(.subheadline)
                     .foregroundStyle(.gray)
             }
@@ -37,7 +37,7 @@ struct WelcomeView: View {
             } label: {
                 HStack {
                     Image(systemName: "plus.circle.fill")
-                    Text(isCreating ? "Создаём..." : "Новый чат")
+                    Text(LocalizedStringKey(isCreating ? "welcome.creating" : "welcome.newChat"))
                 }
                 .font(.headline)
                 .frame(maxWidth: .infinity)
@@ -52,7 +52,7 @@ struct WelcomeView: View {
             // Divider
             HStack {
                 Rectangle().fill(Color.gray.opacity(0.3)).frame(height: 1)
-                Text("или").foregroundStyle(.gray).font(.footnote)
+                Text("welcome.or").foregroundStyle(.gray).font(.footnote)
                 Rectangle().fill(Color.gray.opacity(0.3)).frame(height: 1)
             }
             .padding(.horizontal, 24)
@@ -60,7 +60,7 @@ struct WelcomeView: View {
 
             // Join room
             VStack(spacing: 12) {
-                TextField("Код комнаты", text: $joinRoomId)
+                TextField(String(localized: "welcome.roomCode"), text: $joinRoomId)
                     .textFieldStyle(.plain)
                     .padding(14)
                     .background(Color.white.opacity(0.08))
@@ -76,7 +76,7 @@ struct WelcomeView: View {
                         isJoining = false
                     }
                 } label: {
-                    Text(isJoining ? "Входим..." : "Войти")
+                    Text(LocalizedStringKey(isJoining ? "welcome.joining" : "welcome.join"))
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -93,7 +93,7 @@ struct WelcomeView: View {
             Toggle(isOn: $viewModel.privacyMode) {
                 HStack(spacing: 8) {
                     Image(systemName: "shield.checkered")
-                    Text("Скрыть IP (relay)")
+                    Text("welcome.hideIP")
                         .font(.footnote)
                 }
                 .foregroundStyle(.gray)
@@ -104,7 +104,7 @@ struct WelcomeView: View {
             .padding(.bottom, 16)
 
             // Footer
-            Text("Сообщения не хранятся на сервере")
+            Text("welcome.footer")
                 .font(.caption2)
                 .foregroundStyle(.gray.opacity(0.5))
                 .padding(.bottom, 8)

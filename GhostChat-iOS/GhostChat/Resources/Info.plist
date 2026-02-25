@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>ru</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Ghost chat</string>
 	<key>CFBundleExecutable</key>
@@ -70,6 +70,17 @@
 	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ghostchat</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.ivanpokhvalitov.ghostchat</string>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

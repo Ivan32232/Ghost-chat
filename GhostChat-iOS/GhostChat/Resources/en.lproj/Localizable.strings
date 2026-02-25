@@ -1,0 +1,84 @@
+/* Welcome Screen */
+"welcome.subtitle" = "Private messenger";
+"welcome.newChat" = "New chat";
+"welcome.creating" = "Creating...";
+"welcome.or" = "or";
+"welcome.roomCode" = "Room code";
+"welcome.join" = "Join";
+"welcome.joining" = "Joining...";
+"welcome.hideIP" = "Hide IP (relay)";
+"welcome.footer" = "Messages are not stored on the server";
+
+/* Waiting Screen */
+"waiting.title" = "Waiting for peer";
+"waiting.copy" = "Copy";
+"waiting.share" = "Share";
+"waiting.shareMessage" = "Join private chat";
+"waiting.cancel" = "Cancel";
+
+/* Connecting Screen */
+"connecting.title" = "Connecting...";
+"connecting.subtitle" = "Establishing P2P connection";
+"connecting.cancel" = "Cancel";
+
+/* Chat Screen */
+"chat.message" = "Message";
+"chat.securityCode" = "Security code";
+"chat.compareCode" = "Compare this code with your peer through another channel";
+"chat.matches" = "Matches";
+"chat.doesNotMatch" = "Doesn't match";
+
+/* Call Screen */
+"call.calling" = "Calling...";
+"call.unmute" = "Unmute";
+"call.mute" = "Mute";
+"call.speaker" = "Speaker";
+"call.earpiece" = "Earpiece";
+"call.end" = "End";
+
+/* Incoming Call */
+"call.incoming" = "Incoming call";
+"call.accept" = "Accept";
+"call.decline" = "Decline";
+
+/* System Messages */
+"system.peerDisconnected" = "Peer disconnected";
+"system.connectionRestored" = "Connection restored";
+"system.connectionLost" = "Connection lost";
+"system.secureConnection" = "Secure connection established";
+"system.tapShield" = "Tap the shield to verify security codes";
+"system.keyExchangeError" = "Key exchange error";
+"system.screenshotTaken" = "⚠️ You took a screenshot";
+"system.decryptionError" = "Decryption error";
+"system.sendError" = "Send error";
+"system.calling" = "Calling...";
+"system.incomingCall" = "Incoming call...";
+"system.callConnected" = "Call connected";
+"system.callDeclined" = "Call declined";
+"system.callStarted" = "Call started";
+"system.callEnded" = "Call ended";
+"system.peerEndedCall" = "Peer ended the call";
+"system.peerScreenshot" = "Peer took a screenshot";
+"system.verified" = "Verified! Connection is secure.";
+"system.codesDoNotMatch" = "WARNING: Codes DON'T match! Possible attack!";
+"system.endSession" = "End the session immediately.";
+"system.connectionTimeout" = "Connection failed (timeout)";
+"system.callError" = "Call error: %@";
+"system.error" = "Error: %@";
+"system.securityWarning" = "⚠️ %@";
+
+/* Post-Quantum */
+"system.pqUpgraded" = "Post-quantum protection active (ML-KEM768)";
+
+/* Security Monitor */
+"security.screenRecordingActive" = "Screen recording active";
+"security.screenRecordingDetected" = "Screen recording detected";
+"security.bluetoothConnected" = "Bluetooth device connected: %@";
+"security.audioDeviceRemoved" = "Audio device disconnected";
+
+/* Signaling */
+"signaling.reconnectFailed" = "Failed to reconnect";
+
+/* Info.plist */
+"NSMicrophoneUsageDescription" = "Microphone is required for voice calls";
+"NSCameraUsageDescription" = "Camera may be used for video calls";

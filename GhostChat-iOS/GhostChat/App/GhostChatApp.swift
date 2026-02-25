@@ -10,9 +10,25 @@ struct GhostChatApp: App {
             ContentView(viewModel: viewModel)
                 .preferredColorScheme(.dark)
                 .task {
-                    // Пробуем восстановить сохранённую сессию
                     await viewModel.restoreSession()
                 }
+                .onOpenURL { url in
+                    handleIncomingURL(url)
+                }
+        }
+    }
+
+    /// Обработка deep link: https://gbskgs.xyz/?room=ROOM_ID или ghostchat://join?room=ROOM_ID
+    private func handleIncomingURL(_ url: URL) {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+        guard let roomId = components?.queryItems?.first(where: { $0.name == "room" })?.value,
+              !roomId.isEmpty else { return }
+
+        // Если уже в чате — игнорируем
+        guard viewModel.screen == .welcome else { return }
+
+        Task {
+            await viewModel.joinRoom(roomId)
         }
     }
 }
@@ -56,7 +72,7 @@ struct WaitingView: View {
                 .scaleEffect(1.2)
                 .tint(.white)
 
-            Text("Ожидание собеседника")
+            Text("waiting.title")
                 .font(.title3)
                 .foregroundStyle(.white)
 
@@ -80,7 +96,7 @@ struct WaitingView: View {
                             VStack(spacing: 6) {
                                 Image(systemName: "doc.on.doc")
                                     .font(.title3)
-                                Text("Скопировать")
+                                Text("waiting.copy")
                                     .font(.caption)
                             }
                             .foregroundStyle(.white)
@@ -92,12 +108,12 @@ struct WaitingView: View {
                         ShareLink(
                             item: viewModel.getInviteLink() ?? "",
                             subject: Text("Ghost Chat"),
-                            message: Text("Присоединяйся к приватному чату")
+                            message: Text("waiting.shareMessage")
                         ) {
                             VStack(spacing: 6) {
                                 Image(systemName: "square.and.arrow.up")
                                     .font(.title3)
-                                Text("Поделиться")
+                                Text("waiting.share")
                                     .font(.caption)
                             }
                             .foregroundStyle(.white)
@@ -114,7 +130,7 @@ struct WaitingView: View {
             Button {
                 viewModel.leave()
             } label: {
-                Text("Отмена")
+                Text("waiting.cancel")
                     .foregroundStyle(.red)
             }
             .padding(.bottom, 24)
@@ -136,11 +152,11 @@ struct ConnectingView: View {
                 .scaleEffect(1.2)
                 .tint(.white)
 
-            Text("Подключение...")
+            Text("connecting.title")
                 .font(.title3)
                 .foregroundStyle(.white)
 
-            Text("Устанавливаем P2P соединение")
+            Text("connecting.subtitle")
                 .font(.caption)
                 .foregroundStyle(.gray)
 
@@ -149,7 +165,7 @@ struct ConnectingView: View {
             Button {
                 viewModel.leave()
             } label: {
-                Text("Отмена")
+                Text("connecting.cancel")
                     .foregroundStyle(.red)
             }
             .padding(.bottom, 24)

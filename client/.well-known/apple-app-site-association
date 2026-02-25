@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["WDWX83YJFP.com.ivanpokhvalitov.ghostchat"],
+        "paths": ["/?room=*", "/*"],
+        "components": [
+          {
+            "/": "/",
+            "?": { "room": "?*" }
+          }
+        ]
+      }
+    ]
+  }
+}

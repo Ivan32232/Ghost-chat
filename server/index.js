@@ -236,6 +236,9 @@ const httpServer = createServer(async (req, res) => {
   } else if (pathname === '/privacy' || pathname === '/privacy.html') {
     filePath = join(clientDir, 'privacy.html');
     contentType = 'text/html';
+  } else if (pathname === '/.well-known/apple-app-site-association') {
+    filePath = join(clientDir, '.well-known', 'apple-app-site-association');
+    contentType = 'application/json';
   } else {
     res.writeHead(404);
     res.end('Not Found');

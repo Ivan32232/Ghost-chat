@@ -1,0 +1,84 @@
+/* Welcome Screen */
+"welcome.subtitle" = "Приватный мессенджер";
+"welcome.newChat" = "Новый чат";
+"welcome.creating" = "Создаём...";
+"welcome.or" = "или";
+"welcome.roomCode" = "Код комнаты";
+"welcome.join" = "Войти";
+"welcome.joining" = "Входим...";
+"welcome.hideIP" = "Скрыть IP (relay)";
+"welcome.footer" = "Сообщения не хранятся на сервере";
+
+/* Waiting Screen */
+"waiting.title" = "Ожидание собеседника";
+"waiting.copy" = "Скопировать";
+"waiting.share" = "Поделиться";
+"waiting.shareMessage" = "Присоединяйся к приватному чату";
+"waiting.cancel" = "Отмена";
+
+/* Connecting Screen */
+"connecting.title" = "Подключение...";
+"connecting.subtitle" = "Устанавливаем P2P соединение";
+"connecting.cancel" = "Отмена";
+
+/* Chat Screen */
+"chat.message" = "Сообщение";
+"chat.securityCode" = "Код безопасности";
+"chat.compareCode" = "Сравните этот код с собеседником через другой канал связи";
+"chat.matches" = "Совпадает";
+"chat.doesNotMatch" = "Не совпадает";
+
+/* Call Screen */
+"call.calling" = "Звоним...";
+"call.unmute" = "Вкл. микрофон";
+"call.mute" = "Выкл. микрофон";
+"call.speaker" = "Динамик";
+"call.earpiece" = "На ухо";
+"call.end" = "Завершить";
+
+/* Incoming Call */
+"call.incoming" = "Входящий звонок";
+"call.accept" = "Принять";
+"call.decline" = "Отклонить";
+
+/* System Messages */
+"system.peerDisconnected" = "Собеседник отключился";
+"system.connectionRestored" = "Соединение восстановлено";
+"system.connectionLost" = "Соединение потеряно";
+"system.secureConnection" = "Защищённое соединение установлено";
+"system.tapShield" = "Нажмите на щит для сверки кодов безопасности";
+"system.keyExchangeError" = "Ошибка обмена ключами";
+"system.screenshotTaken" = "⚠️ Вы сделали скриншот";
+"system.decryptionError" = "Ошибка расшифровки";
+"system.sendError" = "Ошибка отправки";
+"system.calling" = "Звоним...";
+"system.incomingCall" = "Входящий звонок...";
+"system.callConnected" = "Звонок подключён";
+"system.callDeclined" = "Звонок отклонён";
+"system.callStarted" = "Звонок начат";
+"system.callEnded" = "Звонок завершён";
+"system.peerEndedCall" = "Собеседник завершил звонок";
+"system.peerScreenshot" = "Собеседник сделал скриншот";
+"system.verified" = "Подтверждено! Соединение безопасно.";
+"system.codesDoNotMatch" = "ВНИМАНИЕ: Коды НЕ совпадают! Возможна атака!";
+"system.endSession" = "Немедленно завершите сессию.";
+"system.connectionTimeout" = "Не удалось подключиться (таймаут)";
+"system.callError" = "Ошибка звонка: %@";
+"system.error" = "Ошибка: %@";
+"system.securityWarning" = "⚠️ %@";
+
+/* Post-Quantum */
+"system.pqUpgraded" = "Пост-квантовая защита активна (ML-KEM768)";
+
+/* Security Monitor */
+"security.screenRecordingActive" = "Запись экрана активна";
+"security.screenRecordingDetected" = "Обнаружена запись экрана";
+"security.bluetoothConnected" = "Подключено Bluetooth устройство: %@";
+"security.audioDeviceRemoved" = "Аудио устройство отключено";
+
+/* Signaling */
+"signaling.reconnectFailed" = "Не удалось переподключиться";
+
+/* Info.plist */
+"NSMicrophoneUsageDescription" = "Микрофон необходим для голосовых звонков";
+"NSCameraUsageDescription" = "Камера может использоваться для видеозвонков";

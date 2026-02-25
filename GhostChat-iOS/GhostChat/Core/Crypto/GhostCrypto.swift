@@ -3,6 +3,7 @@ import CryptoKit
 
 /// Полный порт crypto.js — E2E шифрование Ghost Chat
 /// ECDH P-256 → HKDF → AES-256-GCM с двунаправленными ключами
+/// + Hybrid Post-Quantum: ML-KEM768 (iOS 18+) для защиты от квантовых компьютеров
 ///
 /// Совместимость с веб-клиентом:
 /// - Тот же ECDH P-256 key agreement
@@ -21,6 +22,18 @@ final class GhostCrypto {
     /// Двунаправленные ключи для корректного PFS
     private var sendKey: SymmetricKey?
     private var receiveKey: SymmetricKey?
+
+    // MARK: - Post-Quantum (ML-KEM768)
+
+    /// ML-KEM shared secret от KEM encapsulation/decapsulation
+    private var pqSharedSecret: Data?
+    /// Флаг: PQ-защита активна для этой сессии
+    private(set) var isPQEnabled = false
+
+    /// ML-KEM768 private key (только у host, для decapsulation)
+    private var mlkemPrivateKeyStorage: Any?
+    /// ML-KEM768 encapsulation key data (для отправки peer)
+    private(set) var mlkemEncapsulationKeyData: Data?
 
     // MARK: - Counters & Replay Protection
 
@@ -46,6 +59,72 @@ final class GhostCrypto {
         publicKey = key.publicKey
     }
 
+    // MARK: - Post-Quantum Key Generation
+
+    /// Генерация ML-KEM768 keypair (только iOS 18+, вызывается host-ом)
+    func generatePQKeyPair() {
+        if #available(iOS 26.0, *) {
+            do {
+                let mlkemKey = try CryptoKit.MLKEM768.PrivateKey()
+                mlkemPrivateKeyStorage = mlkemKey
+                mlkemEncapsulationKeyData = mlkemKey.publicKey.rawRepresentation
+            } catch {
+                print("[GhostCrypto] ML-KEM key generation failed: \(error)")
+            }
+        }
+    }
+
+    /// Экспорт ML-KEM encapsulation key в base64
+    func exportPQEncapsulationKey() -> String? {
+        mlkemEncapsulationKeyData?.base64EncodedString()
+    }
+
+    /// Encapsulate с чужим ML-KEM encapsulation key (вызывается guest-ом)
+    /// Возвращает (ciphertext_base64, shared_secret)
+    func pqEncapsulate(encapsKeyBase64: String) -> (ciphertext: String, success: Bool) {
+        guard #available(iOS 26.0, *),
+              let encapsKeyData = Data(base64Encoded: encapsKeyBase64) else {
+            return ("", false)
+        }
+
+        do {
+            let encapsKey = try CryptoKit.MLKEM768.PublicKey(rawRepresentation: encapsKeyData)
+            let result = try encapsKey.encapsulate()
+            pqSharedSecret = result.sharedSecret.withUnsafeBytes { Data($0) }
+            isPQEnabled = true
+            let ctBase64 = result.encapsulated.base64EncodedString()
+            return (ctBase64, true)
+        } catch {
+            print("[GhostCrypto] ML-KEM encapsulation failed: \(error)")
+            return ("", false)
+        }
+    }
+
+    /// Decapsulate ML-KEM ciphertext (вызывается host-ом)
+    func pqDecapsulate(ciphertextBase64: String) -> Bool {
+        guard #available(iOS 26.0, *),
+              let ctData = Data(base64Encoded: ciphertextBase64),
+              let mlkemKey = mlkemPrivateKeyStorage as? CryptoKit.MLKEM768.PrivateKey else {
+            return false
+        }
+
+        do {
+            let sharedKey = try mlkemKey.decapsulate(ctData)
+            pqSharedSecret = sharedKey.withUnsafeBytes { Data($0) }
+            isPQEnabled = true
+            return true
+        } catch {
+            print("[GhostCrypto] ML-KEM decapsulation failed: \(error)")
+            return false
+        }
+    }
+
+    /// Проверка доступности PQ на этом устройстве
+    static var isPQAvailable: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
+    }
+
     /// Экспорт публичного ключа в base64 (raw P-256 uncompressed, 65 bytes)
     /// Совместим с Web Crypto API exportKey('raw')
     func exportPublicKey() -> String? {
@@ -66,6 +145,7 @@ final class GhostCrypto {
 
     /// Деривация двунаправленных ключей — порт deriveSharedKey()
     /// Детерминистически определяет порядок по raw-байтам публичных ключей
+    /// Hybrid PQ: если ML-KEM shared secret доступен, комбинируем ECDH + PQ
     func deriveSharedKey() throws {
         guard let priv = privateKey, let peer = peerPublicKey, let pub = publicKey else {
             throw GhostCryptoError.keysNotReady
@@ -84,8 +164,18 @@ final class GhostCrypto {
             if ourKeyRaw[i] > peerKeyRaw[i] { weAreFirst = false; break }
         }
 
-        // Деривация двух направленных ключей через HKDF
-        let salt = Data("ghost-chat-v1".utf8)
+        // Если есть PQ shared secret — комбинируем ECDH + PQ
+        let salt: Data
+        if let pqSS = pqSharedSecret {
+            // Hybrid salt = "ghost-chat-v1-pq" + ML-KEM shared secret
+            // Это гарантирует что даже если ECDH будет сломан квантовым компьютером,
+            // PQ shared secret защищает ключи
+            var hybridSalt = Data("ghost-chat-v1-pq".utf8)
+            hybridSalt.append(pqSS)
+            salt = hybridSalt
+        } else {
+            salt = Data("ghost-chat-v1".utf8)
+        }
 
         let keyFirstToSecond = deriveDirectionalKey(
             sharedSecret: sharedSecret,
@@ -419,6 +509,11 @@ final class GhostCrypto {
         peerMessageCounter = 0
         sendKeyRotations = 0
         receiveKeyRotations = 0
+        // PQ cleanup
+        pqSharedSecret = nil
+        isPQEnabled = false
+        mlkemPrivateKeyStorage = nil
+        mlkemEncapsulationKeyData = nil
     }
 }
 

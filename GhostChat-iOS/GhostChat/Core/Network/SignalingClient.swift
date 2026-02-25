@@ -185,7 +185,7 @@ final class SignalingClient: NSObject {
         reconnectAttempts += 1
         if reconnectAttempts > maxReconnectAttempts {
             isReconnecting = false
-            onError?("Не удалось переподключиться")
+            onError?(String(localized: "signaling.reconnectFailed"))
             return
         }
 

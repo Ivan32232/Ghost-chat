@@ -155,7 +155,7 @@ final class ChatViewModel: ObservableObject {
         signaling?.onPeerLeft = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.addSystemMessage("Собеседник отключился")
+                self.addSystemMessage(String(localized: "system.peerDisconnected"))
                 self.leave()
             }
         }
@@ -208,13 +208,22 @@ final class ChatViewModel: ObservableObject {
                 if !wasConnected {
                     // First connection — exchange keys
                     guard let pubKey = self.crypto?.exportPublicKey() else { return }
-                    let msg: [String: Any] = ["type": "key-exchange", "publicKey": pubKey]
+                    var msg: [String: Any] = ["type": "key-exchange", "publicKey": pubKey]
+
+                    // Host включает ML-KEM768 encapsulation key (PQ)
+                    if self.isHost && GhostCrypto.isPQAvailable {
+                        self.crypto?.generatePQKeyPair()
+                        if let pqKey = self.crypto?.exportPQEncapsulationKey() {
+                            msg["pqKey"] = pqKey
+                        }
+                    }
+
                     if let data = try? JSONSerialization.data(withJSONObject: msg),
                        let text = String(data: data, encoding: .utf8) {
                         _ = self.rtc?.send(text)
                     }
                 } else {
-                    self.addSystemMessage("Соединение восстановлено")
+                    self.addSystemMessage(String(localized: "system.connectionRestored"))
                 }
             }
         }
@@ -222,7 +231,7 @@ final class ChatViewModel: ObservableObject {
         rtc?.onDisconnected = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.addSystemMessage("Соединение потеряно")
+                self.addSystemMessage(String(localized: "system.connectionLost"))
                 self.isConnected = false
 
                 // End call if active
@@ -337,9 +346,10 @@ final class ChatViewModel: ObservableObject {
 
         switch type {
         case "key-exchange":
-            if let publicKey = json["publicKey"] as? String {
-                await handleKeyExchange(publicKey)
-            }
+            await handleKeyExchange(json)
+
+        case "pq-exchange":
+            await handlePQExchange(json)
 
         case "encrypted-message":
             if let encryptedData = json["data"] as? String {
@@ -351,22 +361,61 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func handleKeyExchange(_ peerPublicKey: String) async {
+    private func handleKeyExchange(_ json: [String: Any]) async {
+        guard let peerPublicKey = json["publicKey"] as? String else { return }
+
         do {
             try crypto?.importPeerPublicKey(peerPublicKey)
+
+            // Guest: если host прислал pqKey → encapsulate и отправить ciphertext
+            if !isHost, let pqKeyBase64 = json["pqKey"] as? String {
+                let result = crypto?.pqEncapsulate(encapsKeyBase64: pqKeyBase64)
+                if let result, result.success {
+                    // Отправляем PQ ciphertext host-у
+                    let pqMsg: [String: Any] = ["type": "pq-exchange", "pqCiphertext": result.ciphertext]
+                    if let data = try? JSONSerialization.data(withJSONObject: pqMsg),
+                       let text = String(data: data, encoding: .utf8) {
+                        _ = rtc?.send(text)
+                    }
+                }
+            }
+
+            // Host: если guest прислал pqCiphertext → decapsulate
+            if isHost, let pqCt = json["pqCiphertext"] as? String {
+                _ = crypto?.pqDecapsulate(ciphertextBase64: pqCt)
+            }
+
             try crypto?.deriveSharedKey()
 
             fingerprint = (try? crypto?.generateFingerprint()) ?? ""
 
             screen = .chat
             isConnected = true
-            addSystemMessage("Защищённое соединение установлено")
-            addSystemMessage("Нажмите на щит для сверки кодов безопасности")
 
-            // Запускаем мониторинг безопасности
+            let pqStatus = (crypto?.isPQEnabled == true) ? " (PQ)" : ""
+            addSystemMessage(String(localized: "system.secureConnection") + pqStatus)
+            addSystemMessage(String(localized: "system.tapShield"))
+
             startSecurityMonitoring()
         } catch {
-            addSystemMessage("Ошибка обмена ключами")
+            addSystemMessage(String(localized: "system.keyExchangeError"))
+        }
+    }
+
+    /// Host получает PQ ciphertext от guest → decapsulate → пере-derive ключи
+    private func handlePQExchange(_ json: [String: Any]) async {
+        guard isHost, let pqCt = json["pqCiphertext"] as? String else { return }
+
+        let success = crypto?.pqDecapsulate(ciphertextBase64: pqCt) ?? false
+        if success {
+            do {
+                // Пере-деривация ключей с PQ shared secret
+                try crypto?.deriveSharedKey()
+                let pqStatus = (crypto?.isPQEnabled == true) ? " (PQ)" : ""
+                addSystemMessage(String(localized: "system.secureConnection") + pqStatus)
+            } catch {
+                print("[ChatViewModel] PQ re-derive failed: \(error)")
+            }
         }
     }
 
@@ -375,7 +424,7 @@ final class ChatViewModel: ObservableObject {
         securityMonitor.onAlert = { [weak self] alert in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.addSystemMessage("⚠️ \(alert.message)")
+                self.addSystemMessage(String(format: String(localized: "system.securityWarning"), alert.message))
                 self.securityAlert = alert
 
                 // Уведомляем собеседника
@@ -392,7 +441,7 @@ final class ChatViewModel: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.addSystemMessage("⚠️ Вы сделали скриншот")
+                self.addSystemMessage(String(localized: "system.screenshotTaken"))
                 // Уведомляем собеседника
                 await self.sendEncryptedControl(.securityAlert(alert: "screenshot-attempt"))
             }
@@ -420,7 +469,7 @@ final class ChatViewModel: ObservableObject {
                 await sendEncryptedControl(ack)
             }
         } catch {
-            addSystemMessage("Ошибка расшифровки")
+            addSystemMessage(String(localized: "system.decryptionError"))
         }
     }
 
@@ -442,7 +491,7 @@ final class ChatViewModel: ObservableObject {
 
         case .callSecurityAlert(let alert):
             if let message = alert["message"] as? String {
-                addSystemMessage("⚠️ \(message)")
+                addSystemMessage(String(format: String(localized: "system.securityWarning"), message))
             }
 
         case .securityAlert(let alert):
@@ -471,7 +520,7 @@ final class ChatViewModel: ObservableObject {
             let chatMsg = addMessage(trimmed, type: .sent)
             sentMessages[crypto.messageCounter] = chatMsg.id
         } catch {
-            addSystemMessage("Ошибка отправки")
+            addSystemMessage(String(localized: "system.sendError"))
         }
     }
 
@@ -545,9 +594,9 @@ final class ChatViewModel: ObservableObject {
             try voice?.startCall()
             callState = .calling
             await sendEncryptedControl(.callRequest)
-            addSystemMessage("Звоним...")
+            addSystemMessage(String(localized: "system.calling"))
         } catch {
-            addSystemMessage("Ошибка звонка: \(error.localizedDescription)")
+            addSystemMessage(String(format: String(localized: "system.callError"), error.localizedDescription))
             callState = .idle
         }
     }
@@ -561,7 +610,7 @@ final class ChatViewModel: ObservableObject {
         }
 
         callState = .ringing
-        addSystemMessage("Входящий звонок...")
+        addSystemMessage(String(localized: "system.incomingCall"))
 
         // Вибрация при входящем звонке (повторяется каждые 2 сек)
         startIncomingCallVibration()
@@ -671,9 +720,9 @@ final class ChatViewModel: ObservableObject {
             await sendEncryptedControl(.callResponse(accepted: true))
 
             callState = .active
-            addSystemMessage("Звонок подключён")
+            addSystemMessage(String(localized: "system.callConnected"))
         } catch {
-            addSystemMessage("Ошибка: \(error.localizedDescription)")
+            addSystemMessage(String(format: String(localized: "system.error"), error.localizedDescription))
             await sendEncryptedControl(.callResponse(accepted: false))
             callState = .idle
         }
@@ -690,7 +739,7 @@ final class ChatViewModel: ObservableObject {
         voice = nil
         callState = .idle
         pendingRenegotiationOffer = nil
-        addSystemMessage("Звонок отклонён")
+        addSystemMessage(String(localized: "system.callDeclined"))
     }
 
     private func handleCallResponse(_ accepted: Bool) {
@@ -699,13 +748,13 @@ final class ChatViewModel: ObservableObject {
         if accepted {
             voice?.callAccepted()
             callState = .active
-            addSystemMessage("Звонок начат")
+            addSystemMessage(String(localized: "system.callStarted"))
         } else {
             voice?.endCall()
             voice?.destroy()
             voice = nil
             callState = .idle
-            addSystemMessage("Звонок отклонён")
+            addSystemMessage(String(localized: "system.callDeclined"))
         }
     }
 
@@ -724,7 +773,7 @@ final class ChatViewModel: ObservableObject {
         isMuted = false
         isSpeakerOn = false
         pendingRenegotiationOffer = nil
-        addSystemMessage("Звонок завершён")
+        addSystemMessage(String(localized: "system.callEnded"))
     }
 
     private func handleCallEnded() {
@@ -739,7 +788,7 @@ final class ChatViewModel: ObservableObject {
         isMuted = false
         isSpeakerOn = false
         pendingRenegotiationOffer = nil
-        addSystemMessage("Собеседник завершил звонок")
+        addSystemMessage(String(localized: "system.peerEndedCall"))
     }
 
     private func endSystemCall() {
@@ -787,7 +836,7 @@ final class ChatViewModel: ObservableObject {
 
     private func handleSecurityAlert(_ alert: String) {
         if alert == "screenshot-attempt" {
-            addSystemMessage("Собеседник сделал скриншот")
+            addSystemMessage(String(localized: "system.peerScreenshot"))
         }
     }
 
@@ -804,10 +853,10 @@ final class ChatViewModel: ObservableObject {
     func markAsVerified(_ verified: Bool) {
         isVerified = verified
         if verified {
-            addSystemMessage("Подтверждено! Соединение безопасно.")
+            addSystemMessage(String(localized: "system.verified"))
         } else {
-            addSystemMessage("ВНИМАНИЕ: Коды НЕ совпадают! Возможна атака!")
-            addSystemMessage("Немедленно завершите сессию.")
+            addSystemMessage(String(localized: "system.codesDoNotMatch"))
+            addSystemMessage(String(localized: "system.endSession"))
         }
     }
 
@@ -841,7 +890,7 @@ final class ChatViewModel: ObservableObject {
         connectionTimeout = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, !self.isConnected else { return }
-                self.addSystemMessage("Не удалось подключиться (таймаут)")
+                self.addSystemMessage(String(localized: "system.connectionTimeout"))
                 self.leave()
             }
         }
