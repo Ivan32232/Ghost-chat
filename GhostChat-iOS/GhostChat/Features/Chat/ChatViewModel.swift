@@ -1,6 +1,8 @@
 import Foundation
 import Combine
 import WebRTC
+import AudioToolbox
+import UIKit
 
 /// Главный orchestrator — порт app.js (GhostChat class)
 /// Связывает SignalingClient + GhostRTC + GhostCrypto + GhostVoice
@@ -54,6 +56,9 @@ final class ChatViewModel: ObservableObject {
     private var sentMessages: [Int: UUID] = [:] // counter → message ID
     private var messageCleanupTimer: Timer?
     private var connectionTimeout: Timer?
+    private var vibrationTimer: Timer?
+    private var screenshotObserver: NSObjectProtocol?
+    private var activeCallUUID: UUID?
 
     // MARK: - Lifecycle
 
@@ -357,8 +362,40 @@ final class ChatViewModel: ObservableObject {
             isConnected = true
             addSystemMessage("Защищённое соединение установлено")
             addSystemMessage("Нажмите на щит для сверки кодов безопасности")
+
+            // Запускаем мониторинг безопасности
+            startSecurityMonitoring()
         } catch {
             addSystemMessage("Ошибка обмена ключами")
+        }
+    }
+
+    private func startSecurityMonitoring() {
+        // SecurityMonitor — запись экрана, bluetooth устройства
+        securityMonitor.onAlert = { [weak self] alert in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.addSystemMessage("⚠️ \(alert.message)")
+                self.securityAlert = alert
+
+                // Уведомляем собеседника
+                await self.sendEncryptedControl(.securityAlert(alert: alert.type))
+            }
+        }
+        securityMonitor.startMonitoring()
+
+        // Детекция скриншотов — iOS нативное API
+        screenshotObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.userDidTakeScreenshotNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.addSystemMessage("⚠️ Вы сделали скриншот")
+                // Уведомляем собеседника
+                await self.sendEncryptedControl(.securityAlert(alert: "screenshot-attempt"))
+            }
         }
     }
 
@@ -525,10 +562,96 @@ final class ChatViewModel: ObservableObject {
 
         callState = .ringing
         addSystemMessage("Входящий звонок...")
+
+        // Вибрация при входящем звонке (повторяется каждые 2 сек)
+        startIncomingCallVibration()
+
+        // CallKit — системный UI входящего звонка
+        reportIncomingCallToSystem()
+    }
+
+    private var ringtonePlayer: AVAudioPlayer?
+
+    private func startIncomingCallVibration() {
+        // Вибрация каждые 2 секунды
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        vibrationTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+
+        // Рингтон — системный звук или кастомный
+        playRingtone()
+    }
+
+    private func stopIncomingCallVibration() {
+        vibrationTimer?.invalidate()
+        vibrationTimer = nil
+        ringtonePlayer?.stop()
+        ringtonePlayer = nil
+    }
+
+    private func playRingtone() {
+        // Пробуем кастомный звук из бандла
+        if let url = Bundle.main.url(forResource: "ringtone", withExtension: "caf") ??
+                     Bundle.main.url(forResource: "ringtone", withExtension: "mp3") {
+            do {
+                // Настраиваем аудио сессию для громкого звонка
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.duckOthers])
+                try AVAudioSession.sharedInstance().setActive(true)
+
+                ringtonePlayer = try AVAudioPlayer(contentsOf: url)
+                ringtonePlayer?.numberOfLoops = -1 // бесконечный повтор
+                ringtonePlayer?.volume = 1.0
+                ringtonePlayer?.play()
+            } catch {
+                print("[Ringtone] Custom sound failed: \(error)")
+                fallbackSystemRingtone()
+            }
+        } else {
+            fallbackSystemRingtone()
+        }
+    }
+
+    private func fallbackSystemRingtone() {
+        // Системный звук звонка (1007 = Tock, 1005 = alarm)
+        // Используем триллинг как рингтон
+        AudioServicesPlaySystemSound(1007)
+        // Повторяем каждые 3 секунды через тот же vibrationTimer
+    }
+
+    private func reportIncomingCallToSystem() {
+        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
+        let uuid = UUID()
+        activeCallUUID = uuid
+
+        appDelegate.reportIncomingCall(uuid: uuid, handle: "Ghost Chat") { [weak self] error in
+            if let error {
+                print("[CallKit] Failed to report call: \(error)")
+                self?.activeCallUUID = nil
+            }
+        }
+
+        // Сохраняем ссылку на viewModel в AppDelegate для callback
+        appDelegate.onCallAnswer = { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.acceptCall()
+            }
+        }
+        appDelegate.onCallEnd = { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.declineCall()
+            }
+        }
+        appDelegate.onCallMute = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.toggleMute()
+            }
+        }
     }
 
     func acceptCall() async {
         guard callState == .ringing, let rtc else { return }
+        stopIncomingCallVibration()
 
         if voice == nil {
             voice = GhostVoice(peerConnection: rtc.peerConnection!, factory: createRTCFactory())
@@ -558,6 +681,8 @@ final class ChatViewModel: ObservableObject {
 
     func declineCall() async {
         guard callState == .ringing else { return }
+        stopIncomingCallVibration()
+        endSystemCall()
 
         await sendEncryptedControl(.callResponse(accepted: false))
 
@@ -586,6 +711,8 @@ final class ChatViewModel: ObservableObject {
 
     func endCall() async {
         guard callState != .idle else { return }
+        stopIncomingCallVibration()
+        endSystemCall()
 
         voice?.endCall()
         voice?.destroy()
@@ -601,6 +728,9 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func handleCallEnded() {
+        stopIncomingCallVibration()
+        endSystemCall()
+
         voice?.endCall()
         voice?.destroy()
         voice = nil
@@ -610,6 +740,13 @@ final class ChatViewModel: ObservableObject {
         isSpeakerOn = false
         pendingRenegotiationOffer = nil
         addSystemMessage("Собеседник завершил звонок")
+    }
+
+    private func endSystemCall() {
+        guard let uuid = activeCallUUID,
+              let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
+        appDelegate.endSystemCall(uuid: uuid)
+        activeCallUUID = nil
     }
 
     func toggleMute() {
@@ -793,6 +930,16 @@ final class ChatViewModel: ObservableObject {
         crypto = nil
 
         securityMonitor.destroy()
+        stopIncomingCallVibration()
+
+        if let observer = screenshotObserver {
+            NotificationCenter.default.removeObserver(observer)
+            screenshotObserver = nil
+        }
+
+        if let uuid = activeCallUUID {
+            endSystemCall()
+        }
 
         isHost = false
         isConnected = false

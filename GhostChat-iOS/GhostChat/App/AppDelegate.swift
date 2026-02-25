@@ -9,6 +9,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     var callProvider: CXProvider?
     var callController: CXCallController?
 
+    // Callbacks от ChatViewModel для CallKit actions
+    var onCallAnswer: (() -> Void)?
+    var onCallEnd: (() -> Void)?
+    var onCallMute: (() -> Void)?
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -72,20 +77,18 @@ extension AppDelegate: CXProviderDelegate {
     }
 
     func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
-        // Пользователь принял звонок через системный UI
         action.fulfill()
-        // TODO: уведомить ChatViewModel о принятии звонка
+        onCallAnswer?()
     }
 
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
-        // Пользователь завершил/отклонил звонок через системный UI
         action.fulfill()
-        // TODO: уведомить ChatViewModel о завершении звонка
+        onCallEnd?()
     }
 
     func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
         action.fulfill()
-        // TODO: уведомить ChatViewModel о mute
+        onCallMute?()
     }
 
     func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {

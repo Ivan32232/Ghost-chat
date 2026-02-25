@@ -53,7 +53,7 @@ final class SignalingClient: NSObject {
         webSocket?.resume()
 
         listenForMessages()
-        onConnected?()
+        // onConnected вызывается в didOpenWithProtocol delegate
     }
 
     func disconnect() {
@@ -239,7 +239,7 @@ extension SignalingClient: URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol protocol: String?
     ) {
-        // WebSocket connected
+        onConnected?()
     }
 
     func urlSession(
