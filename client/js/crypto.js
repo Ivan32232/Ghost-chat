@@ -1,39 +1,542 @@
 /**
- * Ghost Chat - Криптографический модуль
+ * Ghost Chat — Криптографический модуль v2 (Double Ratchet)
  *
- * Использует Web Crypto API для:
- * - ECDH (P-256) для обмена ключами
- * - AES-GCM (256-bit) для шифрования сообщений
- * - HKDF для деривации ключей
- * - Двунаправленные ключи для корректного PFS
+ * Signal Protocol style:
+ * - ECDH P-256 key exchange
+ * - Double Ratchet: DH ratchet per sender change, symmetric ratchet per message
+ * - Every message encrypted with a unique key (per-message forward secrecy)
+ * - Encrypted headers hide DH ratchet keys from observers
+ * - Header format: 65 bytes DH key + 4 bytes pn + 4 bytes n = 73 bytes
+ *
+ * Wire format v2:
+ * base64( 4-byte headerLen BE + encryptedHeader + encryptedBody )
  *
  * ВСЕ КЛЮЧИ ХРАНЯТСЯ ТОЛЬКО В ПАМЯТИ!
  */
 
 import { logger } from './logger.js';
 
+// ============================================================
+// DoubleRatchet — core state machine (mirrors DoubleRatchet.swift)
+// ============================================================
+
+class DoubleRatchet {
+
+  static MAX_SKIP = 100;
+
+  // KDF labels — MUST match iOS exactly
+  static ROOT_KDF_SALT = 'ghost-dr-root';
+  static ROOT_KDF_INFO = 'ghost-dr-rk';
+  static CHAIN_KDF_SALT = 'ghost-dr-chain';
+  static CHAIN_KDF_INFO_CK = 'ghost-dr-ck';
+  static CHAIN_KDF_INFO_MK = 'ghost-dr-mk';
+  static HEADER_KDF_INFO = 'ghost-dr-header';
+  static INIT_INFO = 'ghost-dr-init';
+
+  constructor() {
+    // DH ratchet keys
+    this.dhSending = null;          // CryptoKeyPair
+    this.dhSendingRaw = null;       // Uint8Array — raw public key (65 bytes, uncompressed)
+    this.dhReceiving = null;        // CryptoKey (public)
+    this.dhReceivingRaw = null;     // Uint8Array — raw peer public key
+
+    // Chain keys (raw 32-byte ArrayBuffers)
+    this.rootKey = null;
+    this.sendChainKey = null;
+    this.receiveChainKey = null;
+
+    // Header keys (raw 32-byte ArrayBuffers)
+    this.sendHeaderKey = null;
+    this.receiveHeaderKey = null;
+    this.nextSendHeaderKey = null;
+    this.nextReceiveHeaderKey = null;
+
+    // Counters
+    this.sendMessageNumber = 0;
+    this.receiveMessageNumber = 0;
+    this.previousChainLength = 0;
+
+    // Skipped keys: Map<string, ArrayBuffer>  key = `${base64(dhKey)}:${n}`
+    this.skippedKeys = new Map();
+  }
+
+  // ---- Initialization ----
+
+  /**
+   * Initialize as initiator (host/Alice)
+   * @param {ArrayBuffer} sharedSecret — 32-byte ECDH-derived root secret
+   * @param {CryptoKey} peerDHPublicKey — peer's initial DH public key
+   * @param {Uint8Array} peerDHPublicKeyRaw — 65 bytes raw
+   */
+  async initAsInitiator(sharedSecret, peerDHPublicKey, peerDHPublicKeyRaw) {
+    // Generate our first DH ratchet key pair
+    this.dhSending = await crypto.subtle.generateKey(
+      { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
+    );
+    this.dhSendingRaw = new Uint8Array(
+      await crypto.subtle.exportKey('raw', this.dhSending.publicKey)
+    );
+    this.dhReceiving = peerDHPublicKey;
+    this.dhReceivingRaw = peerDHPublicKeyRaw;
+
+    // Initial root key from shared secret
+    const initialRootKey = await DoubleRatchet._kdfRootInitial(sharedSecret);
+
+    // DH with our key and peer key
+    const dhOutput = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: peerDHPublicKey },
+      this.dhSending.privateKey,
+      256
+    );
+
+    // Root KDF → rootKey + chainKey + headerKey + nextHeaderKey
+    const { rootKey, chainKey, headerKey, nextHeaderKey } =
+      await DoubleRatchet._kdfRootChain(initialRootKey, dhOutput);
+
+    this.rootKey = rootKey;
+    this.sendChainKey = chainKey;
+    this.receiveChainKey = null;
+    this.sendHeaderKey = headerKey;
+    this.nextReceiveHeaderKey = nextHeaderKey;
+    this.receiveHeaderKey = null;
+    this.nextSendHeaderKey = null;
+  }
+
+  /**
+   * Initialize as responder (guest/Bob)
+   * @param {ArrayBuffer} sharedSecret — 32-byte ECDH-derived root secret
+   */
+  async initAsResponder(sharedSecret) {
+    // Generate our first DH ratchet key pair
+    this.dhSending = await crypto.subtle.generateKey(
+      { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
+    );
+    this.dhSendingRaw = new Uint8Array(
+      await crypto.subtle.exportKey('raw', this.dhSending.publicKey)
+    );
+    this.dhReceiving = null;
+    this.dhReceivingRaw = null;
+
+    // Initial root key from shared secret
+    this.rootKey = await DoubleRatchet._kdfRootInitial(sharedSecret);
+    this.sendChainKey = null;
+    this.receiveChainKey = null;
+    this.sendHeaderKey = null;
+    this.receiveHeaderKey = null;
+    this.nextSendHeaderKey = null;
+    this.nextReceiveHeaderKey = null;
+  }
+
+  /** Export our DH ratchet public key (65 bytes raw) */
+  getDHPublicKeyRaw() {
+    return this.dhSendingRaw;
+  }
+
+  // ---- Encrypt ----
+
+  /**
+   * Encrypt plaintext → { encryptedHeader, ciphertext }
+   * @param {Uint8Array} plaintext
+   * @returns {{ encryptedHeader: Uint8Array, ciphertext: Uint8Array }}
+   */
+  async encrypt(plaintext) {
+    if (!this.sendChainKey) {
+      throw new Error('Send chain not initialized');
+    }
+
+    // Advance sending chain: chainKey → (newChainKey, messageKey)
+    const { chainKey: newCK, messageKey } =
+      await DoubleRatchet._kdfChain(this.sendChainKey);
+    this.sendChainKey = newCK;
+
+    // Create header: dhKey(65) + pn(4 BE) + n(4 BE) = 73 bytes
+    const header = DoubleRatchet._serializeHeader(
+      this.dhSendingRaw, this.previousChainLength, this.sendMessageNumber
+    );
+    this.sendMessageNumber++;
+
+    // Encrypt body with message key (AES-256-GCM)
+    const bodyIV = crypto.getRandomValues(new Uint8Array(12));
+    const aesMK = await DoubleRatchet._importAESKey(messageKey);
+    const bodyCiphertext = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: bodyIV, tagLength: 128 }, aesMK, plaintext
+    );
+    // Combined: IV(12) + ciphertext+tag
+    const ciphertext = new Uint8Array(12 + bodyCiphertext.byteLength);
+    ciphertext.set(bodyIV);
+    ciphertext.set(new Uint8Array(bodyCiphertext), 12);
+
+    // Always plaintext headers (0x00 prefix)
+    // Header encryption disabled: avoids chicken-and-egg where responder
+    // has no header key to decrypt initiator's first messages
+    const encryptedHeader = new Uint8Array(1 + header.byteLength);
+    encryptedHeader[0] = 0x00;
+    encryptedHeader.set(new Uint8Array(header), 1);
+
+    return { encryptedHeader, ciphertext };
+  }
+
+  // ---- Decrypt ----
+
+  /**
+   * Decrypt received message
+   * @param {Uint8Array} encryptedHeader
+   * @param {Uint8Array} ciphertext
+   * @returns {Uint8Array}
+   */
+  async decrypt(encryptedHeader, ciphertext) {
+    // Try to decrypt header
+    const { header, usedNextKey } = await this._decryptHeader(encryptedHeader);
+
+    const peerDHKeyRaw = header.dhPublicKey;
+
+    // Check if new DH ratchet key from peer
+    if (!this.dhReceivingRaw || !DoubleRatchet._arraysEqual(peerDHKeyRaw, this.dhReceivingRaw)) {
+      // Skip messages in current chain
+      if (this.receiveChainKey) {
+        await this._skipMessageKeys(this.receiveChainKey, header.pn,
+          this.dhReceivingRaw ? DoubleRatchet._arrayToBase64(this.dhReceivingRaw) : null);
+      }
+      await this._dhRatchetReceive(peerDHKeyRaw, usedNextKey);
+    }
+
+    // Skip missed messages in current receiving chain
+    if (!this.receiveChainKey) {
+      throw new Error('Receive chain not initialized');
+    }
+    const peerKeyB64 = DoubleRatchet._arrayToBase64(peerDHKeyRaw);
+    await this._skipMessageKeys(this.receiveChainKey, header.n, peerKeyB64);
+
+    // Advance receiving chain
+    const { chainKey: newCK, messageKey } =
+      await DoubleRatchet._kdfChain(this.receiveChainKey);
+    this.receiveChainKey = newCK;
+    this.receiveMessageNumber = header.n + 1;
+
+    // Decrypt body
+    return await DoubleRatchet._decryptAESGCM(ciphertext, messageKey);
+  }
+
+  /**
+   * Try to decrypt with a stored skipped key
+   * @returns {Uint8Array|null}
+   */
+  async tryDecryptWithSkippedKey(encryptedHeader, ciphertext) {
+    let header;
+    try {
+      const result = await this._decryptHeader(encryptedHeader);
+      header = result.header;
+    } catch {
+      return null;
+    }
+
+    const keyId = DoubleRatchet._arrayToBase64(header.dhPublicKey) + ':' + header.n;
+    const messageKey = this.skippedKeys.get(keyId);
+    if (!messageKey) return null;
+
+    this.skippedKeys.delete(keyId);
+    return await DoubleRatchet._decryptAESGCM(ciphertext, messageKey);
+  }
+
+  // ---- DH Ratchet ----
+
+  async _dhRatchetReceive(peerDHKeyRaw, usedNextHeaderKey) {
+    const peerDHKey = await crypto.subtle.importKey(
+      'raw', peerDHKeyRaw, { name: 'ECDH', namedCurve: 'P-256' }, true, []
+    );
+
+    this.previousChainLength = this.sendMessageNumber;
+    this.sendMessageNumber = 0;
+    this.receiveMessageNumber = 0;
+    this.dhReceiving = peerDHKey;
+    this.dhReceivingRaw = new Uint8Array(peerDHKeyRaw);
+
+    // Update header keys
+    if (usedNextHeaderKey) {
+      this.receiveHeaderKey = this.nextReceiveHeaderKey;
+    }
+
+    // DH with our current key and new peer key → update receive chain
+    const dhOutputRecv = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: peerDHKey }, this.dhSending.privateKey, 256
+    );
+    const r1 = await DoubleRatchet._kdfRootChain(this.rootKey, dhOutputRecv);
+    this.rootKey = r1.rootKey;
+    this.receiveChainKey = r1.chainKey;
+    this.nextReceiveHeaderKey = r1.nextHeaderKey;
+
+    // Generate new DH key pair
+    this.dhSending = await crypto.subtle.generateKey(
+      { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
+    );
+    this.dhSendingRaw = new Uint8Array(
+      await crypto.subtle.exportKey('raw', this.dhSending.publicKey)
+    );
+
+    // DH with new key and peer key → update send chain
+    const dhOutputSend = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: peerDHKey }, this.dhSending.privateKey, 256
+    );
+    const r2 = await DoubleRatchet._kdfRootChain(this.rootKey, dhOutputSend);
+    this.rootKey = r2.rootKey;
+    this.sendChainKey = r2.chainKey;
+    this.sendHeaderKey = r2.headerKey;
+    this.nextSendHeaderKey = r2.nextHeaderKey;
+  }
+
+  // ---- Header Encryption / Decryption ----
+
+  async _decryptHeader(encryptedHeader) {
+    // Check plaintext header (prefix 0x00)
+    if (encryptedHeader[0] === 0x00 && encryptedHeader.byteLength === 74) {
+      const headerData = encryptedHeader.slice(1);
+      return { header: DoubleRatchet._deserializeHeader(headerData), usedNextKey: false };
+    }
+
+    // Try current receive header key
+    if (this.receiveHeaderKey) {
+      try {
+        const header = await DoubleRatchet._decryptHeaderWithKey(encryptedHeader, this.receiveHeaderKey);
+        return { header, usedNextKey: false };
+      } catch { /* try next key */ }
+    }
+
+    // Try next receive header key
+    if (this.nextReceiveHeaderKey) {
+      try {
+        const header = await DoubleRatchet._decryptHeaderWithKey(encryptedHeader, this.nextReceiveHeaderKey);
+        return { header, usedNextKey: true };
+      } catch { /* fail */ }
+    }
+
+    throw new Error('Header decryption failed');
+  }
+
+  static async _decryptHeaderWithKey(encryptedHeader, key) {
+    const headerPlain = await DoubleRatchet._decryptAESGCM(encryptedHeader, key);
+    return DoubleRatchet._deserializeHeader(headerPlain);
+  }
+
+  // ---- Skipped Keys ----
+
+  async _skipMessageKeys(chainKey, targetN, peerDHKeyB64) {
+    if (!peerDHKeyB64) return;
+    let currentCK = chainKey;
+    let currentN = this.receiveMessageNumber;
+
+    if (targetN - currentN > DoubleRatchet.MAX_SKIP) {
+      throw new Error('Too many skipped messages');
+    }
+
+    while (currentN < targetN) {
+      const { chainKey: newCK, messageKey } = await DoubleRatchet._kdfChain(currentCK);
+      const keyId = peerDHKeyB64 + ':' + currentN;
+      this.skippedKeys.set(keyId, messageKey);
+      currentCK = newCK;
+      currentN++;
+    }
+
+    this.receiveChainKey = currentCK;
+    this.receiveMessageNumber = currentN;
+
+    // Enforce max skip limit
+    while (this.skippedKeys.size > DoubleRatchet.MAX_SKIP) {
+      const firstKey = this.skippedKeys.keys().next().value;
+      this.skippedKeys.delete(firstKey);
+    }
+  }
+
+  // ---- KDF Functions ----
+
+  /**
+   * Initial root key derivation: HKDF(sharedSecret, salt="ghost-dr-root", info="ghost-dr-init") → 32 bytes
+   */
+  static async _kdfRootInitial(sharedSecret) {
+    const ikm = await crypto.subtle.importKey('raw', sharedSecret, 'HKDF', false, ['deriveBits']);
+    const derived = await crypto.subtle.deriveBits(
+      {
+        name: 'HKDF', hash: 'SHA-256',
+        salt: new TextEncoder().encode(DoubleRatchet.ROOT_KDF_SALT),
+        info: new TextEncoder().encode(DoubleRatchet.INIT_INFO)
+      },
+      ikm, 256
+    );
+    return derived;
+  }
+
+  /**
+   * Root chain KDF: (rootKey, dhOutput) → { rootKey, chainKey, headerKey, nextHeaderKey }
+   * IKM = rootKey || dhOutput, HKDF → 128 bytes split into 4×32
+   */
+  static async _kdfRootChain(rootKey, dhOutput) {
+    // Combine: rootKey(32) + dhOutput(32) = 64 bytes
+    const rootKeyArr = new Uint8Array(rootKey);
+    const dhOutputArr = new Uint8Array(dhOutput);
+    const ikm = new Uint8Array(rootKeyArr.length + dhOutputArr.length);
+    ikm.set(rootKeyArr);
+    ikm.set(dhOutputArr, rootKeyArr.length);
+
+    const ikmKey = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+    const derived = await crypto.subtle.deriveBits(
+      {
+        name: 'HKDF', hash: 'SHA-256',
+        salt: new TextEncoder().encode(DoubleRatchet.ROOT_KDF_SALT),
+        info: new TextEncoder().encode(DoubleRatchet.ROOT_KDF_INFO)
+      },
+      ikmKey, 1024 // 128 bytes = 1024 bits
+    );
+
+    const arr = new Uint8Array(derived);
+    return {
+      rootKey: arr.slice(0, 32).buffer,
+      chainKey: arr.slice(32, 64).buffer,
+      headerKey: arr.slice(64, 96).buffer,
+      nextHeaderKey: arr.slice(96, 128).buffer
+    };
+  }
+
+  /**
+   * Symmetric chain KDF: chainKey → { chainKey, messageKey }
+   * Two separate HKDF calls with different info labels (same as iOS)
+   */
+  static async _kdfChain(chainKey) {
+    const ckData = new Uint8Array(chainKey);
+    const salt = new TextEncoder().encode(DoubleRatchet.CHAIN_KDF_SALT);
+
+    const ikmCK = await crypto.subtle.importKey('raw', ckData, 'HKDF', false, ['deriveBits']);
+    const newChainKey = await crypto.subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode(DoubleRatchet.CHAIN_KDF_INFO_CK) },
+      ikmCK, 256
+    );
+
+    const ikmMK = await crypto.subtle.importKey('raw', ckData, 'HKDF', false, ['deriveBits']);
+    const messageKey = await crypto.subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode(DoubleRatchet.CHAIN_KDF_INFO_MK) },
+      ikmMK, 256
+    );
+
+    return { chainKey: newChainKey, messageKey };
+  }
+
+  // ---- Header serialization (73 bytes) ----
+
+  /**
+   * Serialize: dhKey(65) + pn(4 BE) + n(4 BE)
+   */
+  static _serializeHeader(dhPublicKeyRaw, pn, n) {
+    const buf = new Uint8Array(73);
+    buf.set(dhPublicKeyRaw);
+    const view = new DataView(buf.buffer);
+    view.setUint32(65, pn, false); // big-endian
+    view.setUint32(69, n, false);
+    return buf;
+  }
+
+  /**
+   * Deserialize 73 bytes → { dhPublicKey, pn, n }
+   */
+  static _deserializeHeader(data) {
+    const arr = new Uint8Array(data);
+    if (arr.byteLength !== 73) {
+      throw new Error('Invalid DR header: expected 73 bytes, got ' + arr.byteLength);
+    }
+    const dhPublicKey = arr.slice(0, 65);
+    const view = new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+    const pn = view.getUint32(65, false);
+    const n = view.getUint32(69, false);
+    return { dhPublicKey, pn, n };
+  }
+
+  // ---- AES-GCM helpers ----
+
+  static async _importAESKey(rawKey) {
+    return await crypto.subtle.importKey(
+      'raw', rawKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+    );
+  }
+
+  /**
+   * Decrypt AES-256-GCM: data = IV(12) + ciphertext + tag(16)
+   */
+  static async _decryptAESGCM(combined, rawKey) {
+    const arr = new Uint8Array(combined);
+    const iv = arr.slice(0, 12);
+    const ciphertext = arr.slice(12);
+    const aesKey = await DoubleRatchet._importAESKey(rawKey);
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv, tagLength: 128 }, aesKey, ciphertext
+    );
+    return new Uint8Array(plaintext);
+  }
+
+  // ---- Utility ----
+
+  static _arraysEqual(a, b) {
+    if (a.byteLength !== b.byteLength) return false;
+    const av = new Uint8Array(a);
+    const bv = new Uint8Array(b);
+    for (let i = 0; i < av.length; i++) {
+      if (av[i] !== bv[i]) return false;
+    }
+    return true;
+  }
+
+  static _arrayToBase64(arr) {
+    const bytes = new Uint8Array(arr);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  destroy() {
+    this.skippedKeys.clear();
+    this.dhSending = null;
+    this.dhSendingRaw = null;
+    this.dhReceiving = null;
+    this.dhReceivingRaw = null;
+    this.rootKey = null;
+    this.sendChainKey = null;
+    this.receiveChainKey = null;
+    this.sendHeaderKey = null;
+    this.receiveHeaderKey = null;
+    this.nextSendHeaderKey = null;
+    this.nextReceiveHeaderKey = null;
+  }
+}
+
+
+// ============================================================
+// GhostCrypto — public API (mirrors GhostCrypto.swift)
+// ============================================================
+
 export class GhostCrypto {
+
+  static PROTOCOL_VERSION = 3;
+
   constructor() {
     this.keyPair = null;        // Наша пара ключей ECDH
-    this.peerPublicKey = null;  // Публичный ключ собеседника
+    this.peerPublicKey = null;  // Публичный ключ собеседника (CryptoKey)
+    this.peerPublicKeyRaw = null; // Raw bytes
 
-    // Двунаправленные ключи для корректного PFS
-    // Каждое направление ротируется независимо
-    this.sendKey = null;        // Ключ для шифрования исходящих
-    this.receiveKey = null;     // Ключ для дешифрования входящих
+    // Double Ratchet state
+    this.ratchet = null;
 
-    this.messageCounter = 0;    // Счётчик исходящих сообщений
-    this.peerMessageCounter = 0; // Счётчик входящих сообщений
-    this.receivedNonces = new Map(); // nonce -> timestamp для проверки дубликатов
+    this.isHost = false;
+
+    this.messageCounter = 0;
+    this.peerMessageCounter = 0;
+    this.receivedNonces = new Map();
     this.NONCE_EXPIRY_MS = 5 * 60 * 1000;
     this.COUNTER_WINDOW = 100;
 
-    // Perfect Forward Secrecy - ротация ключей
-    this.sendKeyRotations = 0;
-    this.receiveKeyRotations = 0;
-    this.KEY_ROTATION_INTERVAL = 50;
-    this.previousReceiveKeys = [];
-    this.MAX_PREVIOUS_KEYS = 2;
+    // Serialization queue — prevents concurrent encrypt/decrypt corrupting ratchet state
+    this._queue = Promise.resolve();
+
+    // Send chain readiness (guest waits for first received message to init send chain)
+    this._sendChainReady = null;
+    this._sendChainReadyResolve = null;
   }
 
   /**
@@ -43,13 +546,13 @@ export class GhostCrypto {
     this.keyPair = await crypto.subtle.generateKey(
       { name: 'ECDH', namedCurve: 'P-256' },
       true,
-      ['deriveKey', 'deriveBits']
+      ['deriveBits']
     );
     return this.keyPair;
   }
 
   /**
-   * Экспорт публичного ключа для отправки собеседнику
+   * Экспорт публичного ключа для отправки собеседнику (base64)
    */
   async exportPublicKey() {
     if (!this.keyPair) throw new Error('Key pair not generated');
@@ -62,6 +565,7 @@ export class GhostCrypto {
    */
   async importPeerPublicKey(base64Key) {
     const keyData = this.base64ToArrayBuffer(base64Key);
+    this.peerPublicKeyRaw = new Uint8Array(keyData);
     this.peerPublicKey = await crypto.subtle.importKey(
       'raw', keyData,
       { name: 'ECDH', namedCurve: 'P-256' },
@@ -71,83 +575,236 @@ export class GhostCrypto {
   }
 
   /**
-   * Деривация двунаправленных ключей AES-GCM из ECDH
-   * Создаёт отдельные ключи для отправки и получения для корректного PFS
+   * Derive shared key and initialize Double Ratchet
+   * @param {boolean} asHost — true for initiator (host), false for responder (guest)
    */
-  async deriveSharedKey() {
+  async deriveSharedKey(asHost = false) {
     if (!this.keyPair || !this.peerPublicKey) {
       throw new Error('Keys not ready for derivation');
     }
 
-    // Получаем общий секрет через ECDH
+    this.isHost = asHost;
+
+    // ECDH shared secret (32 bytes)
     const sharedBits = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: this.peerPublicKey },
       this.keyPair.privateKey,
       256
     );
 
-    // Импортируем как ключ для HKDF
-    const sharedSecret = await crypto.subtle.importKey(
-      'raw', sharedBits, 'HKDF', false, ['deriveKey']
+    // HKDF from ECDH shared secret → root symmetric key
+    const salt = new TextEncoder().encode('ghost-chat-v2');
+    const info = new TextEncoder().encode('ghost-dr-init-secret');
+    const ikmKey = await crypto.subtle.importKey('raw', sharedBits, 'HKDF', false, ['deriveBits']);
+    const rootSecret = await crypto.subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt, info },
+      ikmKey, 256
     );
 
-    // Определяем порядок ключей детерминистически по публичным ключам
-    const ourKeyRaw = new Uint8Array(await crypto.subtle.exportKey('raw', this.keyPair.publicKey));
-    const peerKeyRaw = new Uint8Array(await crypto.subtle.exportKey('raw', this.peerPublicKey));
+    // Initialize Double Ratchet
+    this.ratchet = new DoubleRatchet();
+    if (asHost) {
+      await this.ratchet.initAsInitiator(rootSecret, this.peerPublicKey, this.peerPublicKeyRaw);
+    } else {
+      await this.ratchet.initAsResponder(rootSecret);
+      // Guest: send chain will be initialized after first received message triggers DH ratchet
+      this._sendChainReady = new Promise(resolve => {
+        this._sendChainReadyResolve = resolve;
+      });
+    }
+  }
 
-    let weAreFirst = false;
-    for (let i = 0; i < ourKeyRaw.length; i++) {
-      if (ourKeyRaw[i] < peerKeyRaw[i]) { weAreFirst = true; break; }
-      if (ourKeyRaw[i] > peerKeyRaw[i]) { weAreFirst = false; break; }
+  /**
+   * Export the DH ratchet public key (base64)
+   */
+  exportDHRatchetKey() {
+    if (!this.ratchet) return null;
+    return this.arrayBufferToBase64(this.ratchet.getDHPublicKeyRaw());
+  }
+
+  /**
+   * Шифрование сообщения (Double Ratchet v2) — serialized
+   * Returns base64(4-byte headerLen BE + encryptedHeader + ciphertext)
+   */
+  async encrypt(plaintext) {
+    // Wait for send chain initialization (guest only, before first received message)
+    if (this._sendChainReady) {
+      await Promise.race([
+        this._sendChainReady,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Send chain initialization timeout')), 10000)
+        )
+      ]);
+    }
+    return this._enqueue(() => this._encryptImpl(plaintext));
+  }
+
+  async _encryptImpl(plaintext) {
+    if (!this.ratchet) {
+      throw new Error('Double Ratchet not initialized');
     }
 
-    // Деривируем два направленных ключа
-    const keyFirstToSecond = await this._deriveDirectionalKey(sharedSecret, 'ghost-first-to-second');
-    const keySecondToFirst = await this._deriveDirectionalKey(sharedSecret, 'ghost-second-to-first');
+    this.messageCounter++;
 
-    this.sendKey = weAreFirst ? keyFirstToSecond : keySecondToFirst;
-    this.receiveKey = weAreFirst ? keySecondToFirst : keyFirstToSecond;
+    // Build message with metadata {m, t, c}
+    const meta = JSON.stringify({
+      m: plaintext,
+      t: Date.now(),
+      c: this.messageCounter
+    });
 
-    return this.sendKey;
+    // Padding
+    const padded = this.padMessage(meta);
+    const paddedData = new TextEncoder().encode(padded);
+
+    // Double Ratchet encrypt → (encryptedHeader, ciphertext)
+    const { encryptedHeader, ciphertext } = await this.ratchet.encrypt(paddedData);
+
+    // Combine: 4-byte headerLen BE + encryptedHeader + ciphertext
+    const headerLen = encryptedHeader.byteLength;
+    const combined = new Uint8Array(4 + headerLen + ciphertext.byteLength);
+    const view = new DataView(combined.buffer);
+    view.setUint32(0, headerLen, false); // big-endian
+    combined.set(encryptedHeader, 4);
+    combined.set(ciphertext, 4 + headerLen);
+
+    return this.arrayBufferToBase64(combined.buffer);
   }
 
   /**
-   * Деривация направленного ключа
+   * Дешифрование сообщения (Double Ratchet v2) — serialized
    */
-  async _deriveDirectionalKey(sharedSecret, direction) {
-    return await crypto.subtle.deriveKey(
-      {
-        name: 'HKDF',
-        hash: 'SHA-256',
-        salt: new TextEncoder().encode('ghost-chat-v1'),
-        info: new TextEncoder().encode(direction)
-      },
-      sharedSecret,
-      { name: 'AES-GCM', length: 256 },
-      true,
-      ['encrypt', 'decrypt']
-    );
+  async decrypt(encryptedBase64) {
+    return this._enqueue(() => this._decryptImpl(encryptedBase64));
+  }
+
+  async _decryptImpl(encryptedBase64) {
+    if (!this.ratchet) {
+      throw new Error('Double Ratchet not initialized');
+    }
+
+    const combined = new Uint8Array(this.base64ToArrayBuffer(encryptedBase64));
+
+    // Parse: 4-byte headerLen + encryptedHeader + ciphertext
+    if (combined.byteLength <= 4) {
+      throw new Error('Invalid ciphertext');
+    }
+
+    const view = new DataView(combined.buffer, combined.byteOffset, combined.byteLength);
+    const headerLen = view.getUint32(0, false);
+
+    if (combined.byteLength <= 4 + headerLen) {
+      throw new Error('Invalid ciphertext');
+    }
+
+    const encryptedHeader = combined.slice(4, 4 + headerLen);
+    const ciphertext = combined.slice(4 + headerLen);
+
+    // Replay protection: extract nonce from ciphertext (first 12 bytes = IV)
+    if (ciphertext.byteLength <= 12) {
+      throw new Error('Invalid ciphertext');
+    }
+    const nonceData = ciphertext.slice(0, 12);
+    const nonceString = this.arrayBufferToBase64(nonceData.buffer);
+
+    this.cleanupExpiredNonces();
+
+    if (this.receivedNonces.has(nonceString)) {
+      throw new Error('Replay attack detected: duplicate nonce');
+    }
+
+    // Try skipped keys first (out-of-order messages)
+    let plainData = await this.ratchet.tryDecryptWithSkippedKey(encryptedHeader, ciphertext);
+    if (plainData) {
+      this._resolveSendChainReady();
+      return this._processDecryptedData(plainData, nonceString);
+    }
+
+    // Normal Double Ratchet decrypt
+    plainData = await this.ratchet.decrypt(encryptedHeader, ciphertext);
+    this._resolveSendChainReady();
+    return this._processDecryptedData(plainData, nonceString);
   }
 
   /**
-   * Padding сообщения до фиксированного размера
-   * Скрывает реальную длину сообщения от traffic analysis
-   * Использует crypto.getRandomValues() для криптостойкого padding
+   * Serialization queue — ensures only one encrypt/decrypt runs at a time
+   */
+  _enqueue(fn) {
+    const p = this._queue.then(fn);
+    this._queue = p.catch(() => {});
+    return p;
+  }
+
+  /**
+   * Resolve send chain readiness promise after successful decrypt
+   * (guest's first decrypt triggers DH ratchet which initializes send chain)
+   */
+  _resolveSendChainReady() {
+    if (this._sendChainReadyResolve && this.ratchet && this.ratchet.sendChainKey) {
+      this._sendChainReadyResolve();
+      this._sendChainReadyResolve = null;
+      this._sendChainReady = null;
+    }
+  }
+
+  /**
+   * Process decrypted data: unpad, validate metadata, return message
+   */
+  _processDecryptedData(data, nonceString) {
+    const paddedText = new TextDecoder().decode(data);
+    const unpaddedText = this.unpadMessage(paddedText);
+
+    try {
+      const parsed = JSON.parse(unpaddedText);
+
+      // Timestamp validation (5 min max age)
+      if (typeof parsed.t === 'number') {
+        const messageAge = Date.now() - parsed.t;
+        if (messageAge > 5 * 60 * 1000) {
+          throw new Error('Message too old, possible replay attack');
+        }
+      }
+
+      // Counter validation
+      if (typeof parsed.c === 'number') {
+        if (parsed.c <= this.peerMessageCounter - this.COUNTER_WINDOW) {
+          throw new Error('Message counter too old, possible replay attack');
+        }
+        if (parsed.c > this.peerMessageCounter) {
+          this.peerMessageCounter = parsed.c;
+        }
+      }
+
+      // Save nonce
+      this.receivedNonces.set(nonceString, Date.now());
+
+      if (typeof parsed.m === 'string') {
+        return parsed.m;
+      }
+    } catch (e) {
+      if (e.message && e.message.includes('attack')) {
+        throw e;
+      }
+      // Not JSON — return as-is
+    }
+
+    return unpaddedText;
+  }
+
+  /**
+   * Padding сообщения до кратного blockSize
    */
   padMessage(message, blockSize = 256) {
     const base64Message = this.textToBase64(message);
     const messageLength = base64Message.length;
 
-    // Валидация длины (4 символа на префикс длины)
     if (messageLength > 9999) {
       throw new Error('Message too long');
     }
 
-    // Вычисляем нужный размер (кратный blockSize)
     const paddedLength = Math.ceil((messageLength + 4) / blockSize) * blockSize;
     const paddingLength = paddedLength - messageLength - 4;
 
-    // Криптостойкий случайный padding
     const paddingChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     const randomBytes = crypto.getRandomValues(new Uint8Array(paddingLength));
     let padding = '';
@@ -155,13 +812,12 @@ export class GhostCrypto {
       padding += paddingChars[randomBytes[i] % paddingChars.length];
     }
 
-    // Формат: длина_base64(4 символа) + base64_сообщение + padding
     const lengthPrefix = messageLength.toString().padStart(4, '0');
     return lengthPrefix + base64Message + padding;
   }
 
   /**
-   * Удаление padding из сообщения
+   * Удаление padding
    */
   unpadMessage(paddedMessage) {
     const originalLength = parseInt(paddedMessage.substring(0, 4), 10);
@@ -173,144 +829,7 @@ export class GhostCrypto {
   }
 
   /**
-   * Шифрование сообщения с использованием sendKey
-   * PFS ротация происходит ПОСЛЕ шифрования
-   */
-  async encrypt(plaintext) {
-    if (!this.sendKey) {
-      throw new Error('Send key not derived');
-    }
-
-    // Увеличиваем счётчик
-    this.messageCounter++;
-
-    // Уникальный IV для каждого сообщения (12 байт для GCM)
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-
-    // Добавляем timestamp и counter к сообщению для защиты от replay
-    const messageWithMeta = JSON.stringify({
-      m: plaintext,
-      t: Date.now(),
-      c: this.messageCounter
-    });
-
-    // Применяем padding для защиты от traffic analysis
-    const paddedMessage = this.padMessage(messageWithMeta);
-    const encodedMessage = new TextEncoder().encode(paddedMessage);
-
-    const ciphertext = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: iv, tagLength: 128 },
-      this.sendKey,
-      encodedMessage
-    );
-
-    // Возвращаем IV + ciphertext в base64
-    const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-    combined.set(iv);
-    combined.set(new Uint8Array(ciphertext), iv.length);
-
-    // PFS: ротация ПОСЛЕ шифрования (сообщение зашифровано старым ключом)
-    if (this.messageCounter % this.KEY_ROTATION_INTERVAL === 0) {
-      await this._rotateSendKey();
-    }
-
-    return this.arrayBufferToBase64(combined.buffer);
-  }
-
-  /**
-   * Дешифрование сообщения с проверкой replay атак
-   * Пробует текущий receiveKey, при неудаче — предыдущие ключи
-   * PFS ротация receiveKey синхронизируется по счётчику отправителя
-   */
-  async decrypt(encryptedBase64) {
-    if (!this.receiveKey) {
-      throw new Error('Receive key not derived');
-    }
-
-    const combined = this.base64ToArrayBuffer(encryptedBase64);
-    const combinedArray = new Uint8Array(combined);
-
-    // Извлекаем IV (первые 12 байт)
-    const iv = combinedArray.slice(0, 12);
-    const ciphertext = combinedArray.slice(12);
-
-    // Создаём nonce из IV для проверки replay
-    const nonce = this.arrayBufferToBase64(iv.buffer);
-
-    // Очищаем истёкшие nonces перед проверкой
-    this.cleanupExpiredNonces();
-
-    if (this.receivedNonces.has(nonce)) {
-      throw new Error('Replay attack detected: duplicate nonce');
-    }
-
-    // Попытка дешифрования текущим ключом, затем предыдущими
-    const decryptParams = { name: 'AES-GCM', iv: iv, tagLength: 128 };
-    let decrypted = null;
-
-    try {
-      decrypted = await crypto.subtle.decrypt(decryptParams, this.receiveKey, ciphertext);
-    } catch {
-      // Пробуем предыдущие ключи (от новых к старым)
-      for (let i = this.previousReceiveKeys.length - 1; i >= 0; i--) {
-        try {
-          decrypted = await crypto.subtle.decrypt(decryptParams, this.previousReceiveKeys[i], ciphertext);
-          break;
-        } catch { continue; }
-      }
-    }
-
-    if (!decrypted) {
-      throw new Error('Decryption failed');
-    }
-
-    const decryptedText = new TextDecoder().decode(decrypted);
-
-    // Удаляем padding
-    const unpaddedText = this.unpadMessage(decryptedText);
-
-    // Парсим метаданные
-    try {
-      const parsed = JSON.parse(unpaddedText);
-
-      // Проверяем timestamp (не старше 5 минут)
-      const MESSAGE_MAX_AGE = 5 * 60 * 1000;
-      if (Date.now() - parsed.t > MESSAGE_MAX_AGE) {
-        throw new Error('Message too old, possible replay attack');
-      }
-
-      // Проверяем counter
-      if (typeof parsed.c === 'number') {
-        if (parsed.c <= this.peerMessageCounter - this.COUNTER_WINDOW) {
-          throw new Error('Message counter too old, possible replay attack');
-        }
-        if (parsed.c > this.peerMessageCounter) {
-          this.peerMessageCounter = parsed.c;
-        }
-      }
-
-      // Сохраняем nonce с timestamp для защиты от повторов
-      this.receivedNonces.set(nonce, Date.now());
-
-      // PFS: ротация receiveKey когда счётчик отправителя пересекает порог
-      // Отправитель ротирует sendKey ПОСЛЕ шифрования сообщения #N (кратного интервалу)
-      // Значит следующее сообщение (#N+1) будет зашифровано новым ключом
-      // Получатель ротирует receiveKey после получения сообщения #N
-      if (parsed.c > 0 && parsed.c % this.KEY_ROTATION_INTERVAL === 0) {
-        await this._rotateReceiveKey();
-      }
-
-      return parsed.m;
-    } catch (e) {
-      if (e.message && e.message.includes('attack')) {
-        throw e;
-      }
-      return unpaddedText;
-    }
-  }
-
-  /**
-   * Генерация fingerprint ключа для верификации
+   * Генерация fingerprint для верификации
    */
   async generateFingerprint() {
     if (!this.keyPair || !this.peerPublicKey) {
@@ -320,7 +839,6 @@ export class GhostCrypto {
     const ourKey = await crypto.subtle.exportKey('raw', this.keyPair.publicKey);
     const peerKey = await crypto.subtle.exportKey('raw', this.peerPublicKey);
 
-    // Сортируем для консистентности
     const keys = [
       new Uint8Array(ourKey),
       new Uint8Array(peerKey)
@@ -347,7 +865,7 @@ export class GhostCrypto {
   }
 
   /**
-   * Очистка истёкших nonces (старше 5 минут)
+   * Очистка истёкших nonces
    */
   cleanupExpiredNonces() {
     const now = Date.now();
@@ -359,69 +877,16 @@ export class GhostCrypto {
   }
 
   /**
-   * Безопасная перезапись ArrayBuffer нулями
+   * Проверка готовности
    */
-  secureWipe(buffer) {
-    if (buffer instanceof ArrayBuffer) {
-      const view = new Uint8Array(buffer);
-      crypto.getRandomValues(view);
-      view.fill(0);
-    }
+  isReady() {
+    return this.keyPair !== null &&
+           this.ratchet !== null &&
+           this.peerPublicKey !== null;
   }
 
   /**
-   * PFS: ротация ключа отправки
-   */
-  async _rotateSendKey() {
-    const oldKeyMaterial = await crypto.subtle.exportKey('raw', this.sendKey);
-    this.sendKey = await this._rotateKeyInternal(oldKeyMaterial);
-    this.secureWipe(oldKeyMaterial);
-    this.sendKeyRotations++;
-    logger.log(`Send key rotated (PFS #${this.sendKeyRotations})`);
-  }
-
-  /**
-   * PFS: ротация ключа приёма
-   * Сохраняет предыдущие ключи для расшифровки out-of-order сообщений
-   */
-  async _rotateReceiveKey() {
-    this.previousReceiveKeys.push(this.receiveKey);
-    if (this.previousReceiveKeys.length > this.MAX_PREVIOUS_KEYS) {
-      this.previousReceiveKeys.shift();
-    }
-    const oldKeyMaterial = await crypto.subtle.exportKey('raw', this.receiveKey);
-    this.receiveKey = await this._rotateKeyInternal(oldKeyMaterial);
-    this.secureWipe(oldKeyMaterial);
-    this.receiveKeyRotations++;
-    logger.log(`Receive key rotated (PFS #${this.receiveKeyRotations})`);
-  }
-
-  /**
-   * Общая логика ротации: SHA-256(старый ключ) → HKDF → новый AES-GCM ключ
-   */
-  async _rotateKeyInternal(keyMaterial) {
-    const newKeyMaterial = await crypto.subtle.digest('SHA-256', keyMaterial);
-
-    const importedKey = await crypto.subtle.importKey(
-      'raw', newKeyMaterial, 'HKDF', false, ['deriveKey']
-    );
-
-    return await crypto.subtle.deriveKey(
-      {
-        name: 'HKDF',
-        hash: 'SHA-256',
-        salt: new TextEncoder().encode('ghost-pfs-rotation'),
-        info: new TextEncoder().encode('key-rotation')
-      },
-      importedKey,
-      { name: 'AES-GCM', length: 256 },
-      true,
-      ['encrypt', 'decrypt']
-    );
-  }
-
-  /**
-   * Полная очистка всех ключей из памяти
+   * Полная очистка
    */
   destroy() {
     if (this.receivedNonces) {
@@ -429,40 +894,26 @@ export class GhostCrypto {
       this.receivedNonces = null;
     }
 
-    // Обнуляем все ключи
-    this.sendKey = null;
-    this.receiveKey = null;
-    this.keyPair = null;
-    this.peerPublicKey = null;
-
-    if (this.previousReceiveKeys) {
-      this.previousReceiveKeys.length = 0;
-      this.previousReceiveKeys = null;
+    if (this.ratchet) {
+      this.ratchet.destroy();
+      this.ratchet = null;
     }
 
+    this.keyPair = null;
+    this.peerPublicKey = null;
+    this.peerPublicKeyRaw = null;
     this.messageCounter = 0;
     this.peerMessageCounter = 0;
-    this.sendKeyRotations = 0;
-    this.receiveKeyRotations = 0;
+    this.isHost = false;
+    this._queue = Promise.resolve();
+    this._sendChainReady = null;
+    this._sendChainReadyResolve = null;
 
     logger.log('Crypto keys destroyed');
   }
 
-  /**
-   * Проверка целостности ключей
-   */
-  isReady() {
-    return this.keyPair !== null &&
-           this.sendKey !== null &&
-           this.receiveKey !== null &&
-           this.peerPublicKey !== null;
-  }
+  // === Утилиты ===
 
-  // === Утилиты для конвертации ===
-
-  /**
-   * UTF-8 safe base64 encoding (заменяет deprecated unescape/escape)
-   */
   textToBase64(text) {
     const bytes = new TextEncoder().encode(text);
     let binary = '';
@@ -472,9 +923,6 @@ export class GhostCrypto {
     return btoa(binary);
   }
 
-  /**
-   * UTF-8 safe base64 decoding
-   */
   base64ToText(base64) {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);

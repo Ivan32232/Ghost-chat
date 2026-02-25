@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Ghost "G" logo -->
+    <path
+        android:fillColor="#0A84FF"
+        android:pathData="M54,27C39.088,27 27,39.088 27,54C27,68.912 39.088,81 54,81C68.912,81 81,68.912 81,54C81,39.088 68.912,27 54,27ZM62.4,58.8C62.4,58.8 62.4,59.4 61.8,59.4L58.2,59.4C58.2,59.4 54,59.4 54,59.4L54,55.2C54,55.2 58.2,55.2 58.2,55.2L58.2,53.4C58.2,51.037 56.363,49.2 54,49.2C51.637,49.2 49.8,51.037 49.8,53.4L49.8,54.6C49.8,56.963 51.637,58.8 54,58.8L54,63C49.363,63 45.6,59.237 45.6,54.6L45.6,53.4C45.6,48.763 49.363,45 54,45C58.637,45 62.4,48.763 62.4,53.4Z"/>
+</vector>

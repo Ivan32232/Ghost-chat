@@ -12,7 +12,11 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Configuration
 
     static let serverURL = URL(string: "https://gbskgs.xyz")!
-    private let messageAutoDeleteTime: TimeInterval = 5 * 60 // 5 минут
+
+    /// Auto-delete time derived from user setting
+    private var messageAutoDeleteTime: TimeInterval {
+        TimeInterval(autoDeleteMinutes) * 60
+    }
 
     // MARK: - Published State
 
@@ -22,7 +26,30 @@ final class ChatViewModel: ObservableObject {
     @Published var fingerprint: String = ""
     @Published var isConnected = false
     @Published var isVerified = false
-    @Published var privacyMode = false
+    @Published var privacyMode: Bool {
+        didSet { Self.saveSetting(privacyMode, forKey: "settings_privacy_mode") }
+    }
+
+    // MARK: - Settings (persisted via Keychain)
+
+    @Published var autoDeleteMinutes: Int {
+        didSet { Self.saveSetting(autoDeleteMinutes, forKey: "settings_auto_delete") }
+    }
+    @Published var screenshotNotifications: Bool {
+        didSet { Self.saveSetting(screenshotNotifications, forKey: "settings_screenshot_notify") }
+    }
+    @Published var messageSoundEnabled: Bool {
+        didSet { Self.saveSetting(messageSoundEnabled, forKey: "settings_sound") }
+    }
+    @Published var vibrationEnabled: Bool {
+        didSet { Self.saveSetting(vibrationEnabled, forKey: "settings_vibration") }
+    }
+    @Published var ringtoneId: String {
+        didSet { Self.saveStringSetting(ringtoneId, forKey: "settings_ringtone") }
+    }
+    @Published var messageSoundId: String {
+        didSet { Self.saveStringSetting(messageSoundId, forKey: "settings_msg_sound") }
+    }
 
     // Call state
     @Published var callState: CallUIState = .idle
@@ -32,6 +59,14 @@ final class ChatViewModel: ObservableObject {
 
     // Security alerts
     @Published var securityAlert: SecurityMonitor.SecurityAlert?
+
+    // H3: Deep link confirmation
+    @Published var pendingDeepLinkRoom: String?
+
+    // Contacts
+    @Published var currentPeerContact: Contact?
+    @Published var showSaveContactPrompt = false
+    @Published var pendingContactName: String = ""
 
     enum Screen {
         case welcome, waiting, connecting, chat
@@ -54,15 +89,28 @@ final class ChatViewModel: ObservableObject {
     private var pendingIceCandidates: [RTCIceCandidate] = []
     private var pendingRenegotiationOffer: RTCSessionDescription?
     private var sentMessages: [Int: UUID] = [:] // counter → message ID
+    private var keyExchangeCompleted = false    // C2: prevent re-exchange
+    private var pendingPQDerivation = false     // C1: host waits for PQ exchange
     private var messageCleanupTimer: Timer?
     private var connectionTimeout: Timer?
     private var vibrationTimer: Timer?
+    private var peerIdentityKeyData: Data?
+    private var expectedPeerIdentityKey: Data?
     private var screenshotObserver: NSObjectProtocol?
     private var activeCallUUID: UUID?
 
     // MARK: - Lifecycle
 
     init() {
+        // Load persisted settings from Keychain
+        self.privacyMode = Self.loadBoolSetting(forKey: "settings_privacy_mode", default: false)
+        self.autoDeleteMinutes = Self.loadIntSetting(forKey: "settings_auto_delete", default: 5)
+        self.screenshotNotifications = Self.loadBoolSetting(forKey: "settings_screenshot_notify", default: true)
+        self.messageSoundEnabled = Self.loadBoolSetting(forKey: "settings_sound", default: true)
+        self.vibrationEnabled = Self.loadBoolSetting(forKey: "settings_vibration", default: true)
+        self.ringtoneId = Self.loadStringSetting(forKey: "settings_ringtone", default: SoundLibrary.defaultRingtoneId)
+        self.messageSoundId = Self.loadStringSetting(forKey: "settings_msg_sound", default: SoundLibrary.defaultMessageSoundId)
+
         startMessageCleanup()
     }
 
@@ -96,6 +144,10 @@ final class ChatViewModel: ObservableObject {
     func joinRoom(_ inputRoomId: String) async {
         let trimmed = inputRoomId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+
+        // M3: Validate room ID format (base64url, 64 chars)
+        let roomIdPattern = "^[A-Za-z0-9_-]{64}$"
+        guard trimmed.range(of: roomIdPattern, options: .regularExpression) != nil else { return }
 
         isHost = false
         crypto = GhostCrypto()
@@ -206,11 +258,21 @@ final class ChatViewModel: ObservableObject {
                 self.isConnected = true
 
                 if !wasConnected {
-                    // First connection — exchange keys
+                    // First connection — exchange keys (v3 Double Ratchet + Identity Key)
                     guard let pubKey = self.crypto?.exportPublicKey() else { return }
-                    var msg: [String: Any] = ["type": "key-exchange", "publicKey": pubKey]
+                    var msg: [String: Any] = [
+                        "type": "key-exchange",
+                        "publicKey": pubKey,
+                        "identityKey": IdentityKeyService.shared.exportPublicKey(),
+                        "v": GhostCrypto.protocolVersion
+                    ]
 
-                    // Host включает ML-KEM768 encapsulation key (PQ)
+                    // Guest: include PQ capability so host knows whether to wait
+                    if !self.isHost {
+                        msg["pqSupported"] = GhostCrypto.isPQAvailable
+                    }
+
+                    // Host: include ML-KEM768 encapsulation key (PQ)
                     if self.isHost && GhostCrypto.isPQAvailable {
                         self.crypto?.generatePQKeyPair()
                         if let pqKey = self.crypto?.exportPQEncapsulationKey() {
@@ -272,7 +334,9 @@ final class ChatViewModel: ObservableObject {
         do {
             turnCreds = try await turnService?.fetchCredentials()
         } catch {
+            #if DEBUG
             print("[ChatViewModel] TURN fetch failed: \(error)")
+            #endif
         }
 
         guard let offer = await rtc?.initAsHost(turnCredentials: turnCreds) else { return }
@@ -288,7 +352,9 @@ final class ChatViewModel: ObservableObject {
         do {
             turnCreds = try await turnService?.fetchCredentials()
         } catch {
+            #if DEBUG
             print("[ChatViewModel] TURN fetch failed: \(error)")
+            #endif
         }
 
         rtc?.initAsGuest(turnCredentials: turnCreds)
@@ -362,7 +428,34 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func handleKeyExchange(_ json: [String: Any]) async {
+        // C2: reject re-exchange after initial key exchange
+        guard !keyExchangeCompleted else { return }
+
         guard let peerPublicKey = json["publicKey"] as? String else { return }
+
+        // Accept v2+ (backward compatible with v2 web client)
+        let peerVersion = json["v"] as? Int ?? 1
+        guard peerVersion >= 2 else {
+            addSystemMessage(String(localized: "system.incompatibleVersion"))
+            return
+        }
+
+        // v3: Extract and lookup identity key
+        if let idKeyBase64 = json["identityKey"] as? String,
+           let idKeyData = Data(base64Encoded: idKeyBase64) {
+            self.peerIdentityKeyData = idKeyData
+
+            let store = ContactStore()
+            if let knownContact = try? store.fetchByIdentityKey(idKeyData) {
+                self.currentPeerContact = knownContact
+                addSystemMessage(String(format: String(localized: "system.knownPeer"), knownContact.label))
+            }
+
+            // Verify expected peer if starting chat with specific contact
+            if let expected = expectedPeerIdentityKey, expected != idKeyData {
+                addSystemMessage(String(localized: "system.unexpectedPeer"))
+            }
+        }
 
         do {
             try crypto?.importPeerPublicKey(peerPublicKey)
@@ -371,7 +464,6 @@ final class ChatViewModel: ObservableObject {
             if !isHost, let pqKeyBase64 = json["pqKey"] as? String {
                 let result = crypto?.pqEncapsulate(encapsKeyBase64: pqKeyBase64)
                 if let result, result.success {
-                    // Отправляем PQ ciphertext host-у
                     let pqMsg: [String: Any] = ["type": "pq-exchange", "pqCiphertext": result.ciphertext]
                     if let data = try? JSONSerialization.data(withJSONObject: pqMsg),
                        let text = String(data: data, encoding: .utf8) {
@@ -380,43 +472,105 @@ final class ChatViewModel: ObservableObject {
                 }
             }
 
-            // Host: если guest прислал pqCiphertext → decapsulate
-            if isHost, let pqCt = json["pqCiphertext"] as? String {
-                _ = crypto?.pqDecapsulate(ciphertextBase64: pqCt)
+            // C1: Host defers derivation if PQ was offered and guest supports it
+            if isHost, crypto?.mlkemEncapsulationKeyData != nil {
+                let guestSupportsPQ = json["pqSupported"] as? Bool ?? false
+                if guestSupportsPQ {
+                    pendingPQDerivation = true
+                    return
+                }
             }
 
-            try crypto?.deriveSharedKey()
-
-            fingerprint = (try? crypto?.generateFingerprint()) ?? ""
-
-            screen = .chat
-            isConnected = true
-
-            let pqStatus = (crypto?.isPQEnabled == true) ? " (PQ)" : ""
-            addSystemMessage(String(localized: "system.secureConnection") + pqStatus)
-            addSystemMessage(String(localized: "system.tapShield"))
-
-            startSecurityMonitoring()
+            // Derive shared key with Double Ratchet initialization
+            try crypto?.deriveSharedKey(asHost: isHost)
+            completeKeyExchange()
         } catch {
             addSystemMessage(String(localized: "system.keyExchangeError"))
         }
     }
 
-    /// Host получает PQ ciphertext от guest → decapsulate → пере-derive ключи
+    /// Host receives PQ ciphertext from guest → decapsulate → derive keys
     private func handlePQExchange(_ json: [String: Any]) async {
-        guard isHost, let pqCt = json["pqCiphertext"] as? String else { return }
+        // C2: only accept if key exchange is pending PQ
+        guard isHost, pendingPQDerivation, !keyExchangeCompleted else { return }
+        guard let pqCt = json["pqCiphertext"] as? String else { return }
 
         let success = crypto?.pqDecapsulate(ciphertextBase64: pqCt) ?? false
-        if success {
-            do {
-                // Пере-деривация ключей с PQ shared secret
-                try crypto?.deriveSharedKey()
-                let pqStatus = (crypto?.isPQEnabled == true) ? " (PQ)" : ""
-                addSystemMessage(String(localized: "system.secureConnection") + pqStatus)
-            } catch {
-                print("[ChatViewModel] PQ re-derive failed: \(error)")
-            }
+        guard success else { return }
+
+        do {
+            try crypto?.deriveSharedKey(asHost: isHost)
+            pendingPQDerivation = false
+            completeKeyExchange()
+        } catch {
+            addSystemMessage(String(localized: "system.keyExchangeError"))
         }
+    }
+
+    /// Common completion after key derivation (used by both paths)
+    private func completeKeyExchange() {
+        keyExchangeCompleted = true
+        fingerprint = (try? crypto?.generateFingerprint()) ?? ""
+        screen = .chat
+        isConnected = true
+
+        let pqStatus = (crypto?.isPQEnabled == true) ? " (PQ)" : ""
+        addSystemMessage(String(localized: "system.secureConnection") + pqStatus)
+        addSystemMessage(String(localized: "system.tapShield"))
+
+        startSecurityMonitoring()
+        handleContactAutoSave()
+
+        // Host sends bootstrap message to initialize guest's send chain
+        // (guest's Double Ratchet needs to receive at least one message
+        // to trigger DH ratchet and initialize the send chain)
+        if isHost {
+            Task { await sendEncryptedControl(.ready) }
+        }
+    }
+
+    /// Auto-save or update contact after successful key exchange
+    private func handleContactAutoSave() {
+        guard peerIdentityKeyData != nil else { return } // v2 peer — no identity key
+
+        if let existingContact = currentPeerContact {
+            // Known contact — increment session count
+            let store = ContactStore()
+            try? store.incrementSessionCount(contactId: existingContact.id)
+        } else {
+            // New peer — show save prompt
+            showSaveContactPrompt = true
+        }
+    }
+
+    /// Save new contact from the save prompt
+    func saveNewContact(name: String) {
+        guard let peerIdKey = peerIdentityKeyData, !name.isEmpty else { return }
+        let contact = Contact(
+            label: name,
+            publicKey: peerIdKey,
+            identityKey: peerIdKey,
+            sessionCount: 1,
+            lastSessionAt: Date()
+        )
+        let store = ContactStore()
+        try? store.save(contact)
+        currentPeerContact = contact
+        showSaveContactPrompt = false
+        pendingContactName = ""
+    }
+
+    func skipSaveContact() {
+        showSaveContactPrompt = false
+        pendingContactName = ""
+    }
+
+    /// Start a room expecting a specific contact to join
+    func startChatWithContact(_ contact: Contact) async {
+        expectedPeerIdentityKey = contact.identityKey
+        currentPeerContact = contact
+        screen = .waiting
+        await createRoom()
     }
 
     private func startSecurityMonitoring() {
@@ -442,8 +596,10 @@ final class ChatViewModel: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.addSystemMessage(String(localized: "system.screenshotTaken"))
-                // Уведомляем собеседника
-                await self.sendEncryptedControl(.securityAlert(alert: "screenshot-attempt"))
+                // Уведомляем собеседника (если включено в настройках)
+                if self.screenshotNotifications {
+                    await self.sendEncryptedControl(.securityAlert(alert: "screenshot-attempt"))
+                }
             }
         }
     }
@@ -462,6 +618,14 @@ final class ChatViewModel: ObservableObject {
 
             // Обычное текстовое сообщение
             addMessage(plaintext, type: .received)
+
+            // Звук и вибрация при получении
+            if messageSoundEnabled {
+                let sound = SoundLibrary.messageSound(forId: messageSoundId)
+                SoundLibrary.playMessageSound(sound, withVibration: vibrationEnabled)
+            } else if vibrationEnabled {
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            }
 
             // Подтверждение доставки
             if let counter = crypto?.messageCounter {
@@ -499,6 +663,10 @@ final class ChatViewModel: ObservableObject {
 
         case .messageAck(let counter):
             handleMessageAck(counter)
+
+        case .ready:
+            // Bootstrap from host — decryption already triggered DH ratchet
+            break
         }
     }
 
@@ -540,7 +708,9 @@ final class ChatViewModel: ObservableObject {
                 _ = rtc?.send(text)
             }
         } catch {
+            #if DEBUG
             print("[ChatViewModel] Failed to send encrypted control: \(error)")
+            #endif
         }
     }
 
@@ -583,10 +753,10 @@ final class ChatViewModel: ObservableObject {
     // MARK: - Voice Calls
 
     func startCall() async {
-        guard isConnected, callState == .idle, let rtc else { return }
+        guard isConnected, callState == .idle, let rtc, let pc = rtc.peerConnection else { return }
 
         if voice == nil {
-            voice = GhostVoice(peerConnection: rtc.peerConnection!, factory: createRTCFactory())
+            voice = GhostVoice(peerConnection: pc, factory: createRTCFactory())
             setupVoiceCallbacks()
         }
 
@@ -619,53 +789,32 @@ final class ChatViewModel: ObservableObject {
         reportIncomingCallToSystem()
     }
 
-    private var ringtonePlayer: AVAudioPlayer?
+    private var ringtoneTimer: Timer?
 
     private func startIncomingCallVibration() {
-        // Вибрация каждые 2 секунды
-        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
-        vibrationTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        let ringtone = SoundLibrary.ringtone(forId: ringtoneId)
+        let shouldVibrate = vibrationEnabled
+
+        // Первое воспроизведение сразу
+        if shouldVibrate {
             AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
         }
+        SoundLibrary.playRingtoneSound(ringtone)
 
-        // Рингтон — системный звук или кастомный
-        playRingtone()
+        // Повтор каждые 2.5 секунды (рингтон + вибрация)
+        ringtoneTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
+            if shouldVibrate {
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            }
+            SoundLibrary.playRingtoneSound(ringtone)
+        }
     }
 
     private func stopIncomingCallVibration() {
         vibrationTimer?.invalidate()
         vibrationTimer = nil
-        ringtonePlayer?.stop()
-        ringtonePlayer = nil
-    }
-
-    private func playRingtone() {
-        // Пробуем кастомный звук из бандла
-        if let url = Bundle.main.url(forResource: "ringtone", withExtension: "caf") ??
-                     Bundle.main.url(forResource: "ringtone", withExtension: "mp3") {
-            do {
-                // Настраиваем аудио сессию для громкого звонка
-                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.duckOthers])
-                try AVAudioSession.sharedInstance().setActive(true)
-
-                ringtonePlayer = try AVAudioPlayer(contentsOf: url)
-                ringtonePlayer?.numberOfLoops = -1 // бесконечный повтор
-                ringtonePlayer?.volume = 1.0
-                ringtonePlayer?.play()
-            } catch {
-                print("[Ringtone] Custom sound failed: \(error)")
-                fallbackSystemRingtone()
-            }
-        } else {
-            fallbackSystemRingtone()
-        }
-    }
-
-    private func fallbackSystemRingtone() {
-        // Системный звук звонка (1007 = Tock, 1005 = alarm)
-        // Используем триллинг как рингтон
-        AudioServicesPlaySystemSound(1007)
-        // Повторяем каждые 3 секунды через тот же vibrationTimer
+        ringtoneTimer?.invalidate()
+        ringtoneTimer = nil
     }
 
     private func reportIncomingCallToSystem() {
@@ -675,7 +824,9 @@ final class ChatViewModel: ObservableObject {
 
         appDelegate.reportIncomingCall(uuid: uuid, handle: "Ghost Chat") { [weak self] error in
             if let error {
+                #if DEBUG
                 print("[CallKit] Failed to report call: \(error)")
+                #endif
                 self?.activeCallUUID = nil
             }
         }
@@ -699,11 +850,11 @@ final class ChatViewModel: ObservableObject {
     }
 
     func acceptCall() async {
-        guard callState == .ringing, let rtc else { return }
+        guard callState == .ringing, let rtc, let pc = rtc.peerConnection else { return }
         stopIncomingCallVibration()
 
         if voice == nil {
-            voice = GhostVoice(peerConnection: rtc.peerConnection!, factory: createRTCFactory())
+            voice = GhostVoice(peerConnection: pc, factory: createRTCFactory())
             setupVoiceCallbacks()
         }
 
@@ -870,7 +1021,8 @@ final class ChatViewModel: ObservableObject {
     }
 
     func addSystemMessage(_ text: String) {
-        messages.append(ChatMessage(text: text, type: .system))
+        // M4: System messages get 10 min TTL (not indefinite)
+        messages.append(ChatMessage(text: text, type: .system, autoDeleteInterval: 10 * 60))
     }
 
     /// Таймер автоудаления — порт startMessageTimerLoop()
@@ -878,7 +1030,12 @@ final class ChatViewModel: ObservableObject {
         messageCleanupTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.messages.removeAll { $0.isExpired && $0.type != .system }
+                // M4: All messages (including system) now have TTL
+                self.messages.removeAll { $0.isExpired }
+
+                // L2: Clean up unacknowledged sentMessages for expired messages
+                let validIds = Set(self.messages.map(\.id))
+                self.sentMessages = self.sentMessages.filter { validIds.contains($0.value) }
             }
         }
     }
@@ -896,20 +1053,24 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Session Persistence
+    // MARK: - Session Persistence (Keychain — C3 fix)
+
+    private static let sessionKey = "ghost-room"
 
     private func saveSession() {
         guard let roomId else { return }
-        let data: [String: Any] = [
+        let dict: [String: Any] = [
             "roomId": roomId,
             "isHost": isHost,
             "ts": Date().timeIntervalSince1970
         ]
-        UserDefaults.standard.set(data, forKey: "ghost-room")
+        guard let data = try? JSONSerialization.data(withJSONObject: dict) else { return }
+        KeychainService.save(data, forKey: Self.sessionKey)
     }
 
     func restoreSession() async {
-        guard let saved = UserDefaults.standard.dictionary(forKey: "ghost-room"),
+        guard let data = KeychainService.load(forKey: Self.sessionKey),
+              let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let roomId = saved["roomId"] as? String,
               let savedIsHost = saved["isHost"] as? Bool,
               let ts = saved["ts"] as? TimeInterval else { return }
@@ -941,7 +1102,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func clearSession() {
-        UserDefaults.standard.removeObject(forKey: "ghost-room")
+        KeychainService.delete(forKey: Self.sessionKey)
     }
 
     // MARK: - Invite Link
@@ -961,6 +1122,9 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func destroy() {
+        // Persist DR state for known contacts before cleanup
+        persistRatchetStateIfNeeded()
+
         connectionTimeout?.invalidate()
         connectionTimeout = nil
 
@@ -986,7 +1150,7 @@ final class ChatViewModel: ObservableObject {
             screenshotObserver = nil
         }
 
-        if let uuid = activeCallUUID {
+        if activeCallUUID != nil {
             endSystemCall()
         }
 
@@ -997,7 +1161,74 @@ final class ChatViewModel: ObservableObject {
         pendingIceCandidates.removeAll()
         pendingRenegotiationOffer = nil
         sentMessages.removeAll()
+        keyExchangeCompleted = false
+        pendingPQDerivation = false
         roomId = nil
         fingerprint = ""
+        currentPeerContact = nil
+        peerIdentityKeyData = nil
+        expectedPeerIdentityKey = nil
+        showSaveContactPrompt = false
+        pendingContactName = ""
+    }
+
+    // MARK: - DR State Persistence
+
+    private func persistRatchetStateIfNeeded() {
+        guard let contact = currentPeerContact,
+              let crypto = crypto,
+              let state = crypto.exportRatchetState() else { return }
+
+        let store = ContactStore()
+        do {
+            let stateData = try JSONEncoder().encode(state)
+            try store.updateRatchetState(contactId: contact.id, ratchetState: stateData)
+            let skippedKeys = crypto.exportSkippedKeys()
+            try store.saveSkippedKeys(contactId: contact.id, keys: skippedKeys)
+        } catch {
+            #if DEBUG
+            print("[ChatViewModel] Failed to persist DR state: \(error)")
+            #endif
+        }
+    }
+
+    // MARK: - Settings Persistence (Keychain)
+
+    private static func saveSetting(_ value: Bool, forKey key: String) {
+        let str = value ? "1" : "0"
+        if let data = str.data(using: .utf8) {
+            KeychainService.save(data, forKey: key)
+        }
+    }
+
+    private static func saveSetting(_ value: Int, forKey key: String) {
+        if let data = String(value).data(using: .utf8) {
+            KeychainService.save(data, forKey: key)
+        }
+    }
+
+    private static func loadBoolSetting(forKey key: String, default defaultValue: Bool) -> Bool {
+        guard let data = KeychainService.load(forKey: key),
+              let str = String(data: data, encoding: .utf8) else { return defaultValue }
+        return str == "1"
+    }
+
+    private static func loadIntSetting(forKey key: String, default defaultValue: Int) -> Int {
+        guard let data = KeychainService.load(forKey: key),
+              let str = String(data: data, encoding: .utf8),
+              let value = Int(str) else { return defaultValue }
+        return value
+    }
+
+    private static func saveStringSetting(_ value: String, forKey key: String) {
+        if let data = value.data(using: .utf8) {
+            KeychainService.save(data, forKey: key)
+        }
+    }
+
+    private static func loadStringSetting(forKey key: String, default defaultValue: String) -> String {
+        guard let data = KeychainService.load(forKey: key),
+              let str = String(data: data, encoding: .utf8), !str.isEmpty else { return defaultValue }
+        return str
     }
 }

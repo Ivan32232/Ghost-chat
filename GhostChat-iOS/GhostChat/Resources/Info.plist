@@ -51,8 +51,8 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон необходим для голосовых звонков</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Камера может использоваться для видеозвонков</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Face ID используется для защиты ваших данных</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

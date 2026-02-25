@@ -15,6 +15,11 @@
 "waiting.share" = "Share";
 "waiting.shareMessage" = "Join private chat";
 "waiting.cancel" = "Cancel";
+"waiting.recentContacts" = "Recent contacts";
+"waiting.invite" = "Invite";
+"waiting.inviteConfirm.title" = "Send invite?";
+"waiting.inviteConfirm.message" = "Copy invite link for %@? The link will expire from clipboard in 60 seconds.";
+"waiting.inviteConfirm.send" = "Copy link";
 
 /* Connecting Screen */
 "connecting.title" = "Connecting...";
@@ -76,9 +81,125 @@
 "security.bluetoothConnected" = "Bluetooth device connected: %@";
 "security.audioDeviceRemoved" = "Audio device disconnected";
 
+/* Deep Link */
+"deeplink.title" = "Join Room?";
+"deeplink.join" = "Join";
+"deeplink.cancel" = "Cancel";
+"deeplink.message" = "Join room %@...?";
+
+/* Protocol */
+"system.incompatibleVersion" = "Incompatible protocol version. Please update Ghost Chat.";
+
 /* Signaling */
 "signaling.reconnectFailed" = "Failed to reconnect";
 
+/* Biometric */
+"biometric.reason" = "Unlock Ghost Chat";
+"biometric.enable" = "Enable Face ID";
+"biometric.disable" = "Disable Face ID";
+"biometric.faceid" = "Face ID";
+"biometric.touchid" = "Touch ID";
+"biometric.locked" = "Ghost Chat is locked";
+"biometric.unlock" = "Unlock";
+
+/* Settings */
+"settings.title" = "Settings";
+"settings.done" = "Done";
+"settings.language" = "Language";
+"settings.language.header" = "LANGUAGE";
+"settings.language.search" = "Search";
+
+"settings.security" = "SECURITY";
+"settings.security.footer" = "Biometrics protect the app when it moves to background";
+"settings.autolock" = "Auto-lock";
+"settings.autolock.background" = "On background";
+
+"settings.privacy" = "PRIVACY";
+"settings.privacy.relay" = "Privacy mode (relay)";
+"settings.privacy.footer" = "All messages are deleted automatically after the set timer";
+"settings.autodelete" = "Auto-delete";
+"settings.autodelete.1" = "1 min";
+"settings.autodelete.3" = "3 min";
+"settings.autodelete.5" = "5 min";
+"settings.autodelete.10" = "10 min";
+"settings.autodelete.30" = "30 min";
+"settings.screenshot.notify" = "Screenshot alerts";
+
+"settings.sounds" = "SOUNDS & NOTIFICATIONS";
+"settings.sound" = "Message sound";
+"settings.sound.message" = "Notification sound";
+"settings.sound.ringtone" = "Ringtone";
+"settings.vibration" = "Vibration";
+
+/* Sound Names */
+"sound.none" = "None";
+"sound.tock" = "Tock";
+"sound.tink" = "Tink";
+"sound.pop" = "Pop";
+"sound.received" = "Received";
+"sound.sent" = "Sent";
+"sound.tweet" = "Tweet";
+"sound.anticipate" = "Anticipate";
+"sound.bloom" = "Bloom";
+"sound.calypso" = "Calypso";
+"sound.chooChoo" = "Choo Choo";
+"sound.descent" = "Descent";
+"sound.fanfare" = "Fanfare";
+"sound.ladder" = "Ladder";
+"sound.minuet" = "Minuet";
+"sound.newsFlash" = "News Flash";
+"sound.noir" = "Noir";
+"sound.sherwood" = "Sherwood Forest";
+"sound.spell" = "Spell";
+"sound.suspense" = "Suspense";
+"sound.telegraph" = "Telegraph";
+"sound.tiptoes" = "Tiptoes";
+"sound.typewriters" = "Typewriters";
+"sound.update" = "Update";
+
+"settings.data" = "DATA";
+"settings.data.footer" = "These actions cannot be undone";
+"settings.data.deleteContacts" = "Delete all contacts";
+"settings.data.destroyAll" = "Destroy everything";
+"settings.data.deleteContacts.confirm" = "Delete all contacts?";
+"settings.data.destroyAll.confirm" = "Destroy all data? This will wipe the database and reset all settings.";
+"settings.delete" = "Delete";
+"settings.destroy" = "Destroy";
+"settings.cancel" = "Cancel";
+
+"settings.about" = "ABOUT";
+"settings.about.version" = "Version";
+"settings.about.protocol" = "Protocol";
+"settings.about.encryption" = "Encryption";
+"settings.about.pq" = "Post-quantum";
+
+/* Contacts */
+"contacts.title" = "Contacts";
+"contacts.empty" = "No contacts";
+"contacts.emptyHint" = "Contacts are saved automatically after chat sessions";
+"contacts.name" = "Name";
+"contacts.editName" = "Edit name";
+"contacts.save" = "Save";
+"contacts.startChat" = "Start chat";
+"contacts.details" = "DETAILS";
+"contacts.fingerprint" = "Fingerprint";
+"contacts.created" = "Created";
+"contacts.lastSession" = "Last session";
+"contacts.sessions" = "Sessions";
+"contacts.keyState" = "Key state";
+"contacts.keyState.saved" = "Saved";
+"contacts.keyState.none" = "None";
+"contacts.delete" = "Delete contact";
+"contacts.deleteConfirm" = "Delete this contact? This will also remove saved encryption keys.";
+"contacts.savePrompt.title" = "Save contact?";
+"contacts.savePrompt.name" = "Name";
+"contacts.savePrompt.message" = "Save this peer as a contact to recognize them in future sessions";
+"contacts.skip" = "Skip";
+
+/* System — Contacts */
+"system.knownPeer" = "Connected: %@";
+"system.unexpectedPeer" = "WARNING: Different identity key! Possible impersonation.";
+
 /* Info.plist */
 "NSMicrophoneUsageDescription" = "Microphone is required for voice calls";
-"NSCameraUsageDescription" = "Camera may be used for video calls";
+"NSFaceIDUsageDescription" = "Face ID is used to protect your data";

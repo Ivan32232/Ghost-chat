@@ -1,17 +1,22 @@
 import Foundation
 import CryptoKit
 
-/// Полный порт crypto.js — E2E шифрование Ghost Chat
-/// ECDH P-256 → HKDF → AES-256-GCM с двунаправленными ключами
-/// + Hybrid Post-Quantum: ML-KEM768 (iOS 18+) для защиты от квантовых компьютеров
+/// Ghost Chat E2E Encryption — Double Ratchet Protocol (v2)
 ///
-/// Совместимость с веб-клиентом:
-/// - Тот же ECDH P-256 key agreement
-/// - Тот же HKDF salt ("ghost-chat-v1") и info ("ghost-first-to-second"/"ghost-second-to-first")
-/// - Тот же AES-256-GCM с 12-byte IV
-/// - Тот же padding (256-byte blocks)
-/// - Тот же PFS rotation (SHA-256 → HKDF с salt "ghost-pfs-rotation")
+/// Signal Protocol style:
+/// - Initial ECDH P-256 key exchange
+/// - Double Ratchet: DH ratchet per sender change, symmetric ratchet per message
+/// - Every message encrypted with a unique key (per-message forward secrecy)
+/// - Encrypted headers hide DH ratchet keys from observers
+/// - Hybrid Post-Quantum: ML-KEM768 (iOS 26+)
+///
+/// Wire format v2:
+/// { type: "encrypted-message", data: "base64(encryptedHeader + separator + encryptedBody)", v: 2 }
 final class GhostCrypto {
+
+    // MARK: - Protocol Version
+
+    static let protocolVersion = 3
 
     // MARK: - Keys
 
@@ -19,20 +24,15 @@ final class GhostCrypto {
     private(set) var publicKey: P256.KeyAgreement.PublicKey?
     private var peerPublicKey: P256.KeyAgreement.PublicKey?
 
-    /// Двунаправленные ключи для корректного PFS
-    private var sendKey: SymmetricKey?
-    private var receiveKey: SymmetricKey?
+    // MARK: - Double Ratchet
+
+    private var ratchet: DoubleRatchet?
 
     // MARK: - Post-Quantum (ML-KEM768)
 
-    /// ML-KEM shared secret от KEM encapsulation/decapsulation
     private var pqSharedSecret: Data?
-    /// Флаг: PQ-защита активна для этой сессии
     private(set) var isPQEnabled = false
-
-    /// ML-KEM768 private key (только у host, для decapsulation)
     private var mlkemPrivateKeyStorage: Any?
-    /// ML-KEM768 encapsulation key data (для отправки peer)
     private(set) var mlkemEncapsulationKeyData: Data?
 
     // MARK: - Counters & Replay Protection
@@ -40,16 +40,12 @@ final class GhostCrypto {
     private(set) var messageCounter: Int = 0
     private var peerMessageCounter: Int = 0
     private var receivedNonces: [String: Date] = [:]
-    private let nonceExpiryInterval: TimeInterval = 5 * 60 // 5 минут
+    private let nonceExpiryInterval: TimeInterval = 5 * 60
     private let counterWindow: Int = 100
 
-    // MARK: - PFS Key Rotation
+    // MARK: - Initialization tracking
 
-    private var sendKeyRotations: Int = 0
-    private var receiveKeyRotations: Int = 0
-    private let keyRotationInterval: Int = 50
-    private var previousReceiveKeys: [SymmetricKey] = []
-    private let maxPreviousKeys: Int = 2
+    private(set) var isHost = false
 
     // MARK: - Key Generation
 
@@ -61,7 +57,6 @@ final class GhostCrypto {
 
     // MARK: - Post-Quantum Key Generation
 
-    /// Генерация ML-KEM768 keypair (только iOS 18+, вызывается host-ом)
     func generatePQKeyPair() {
         if #available(iOS 26.0, *) {
             do {
@@ -69,18 +64,17 @@ final class GhostCrypto {
                 mlkemPrivateKeyStorage = mlkemKey
                 mlkemEncapsulationKeyData = mlkemKey.publicKey.rawRepresentation
             } catch {
+                #if DEBUG
                 print("[GhostCrypto] ML-KEM key generation failed: \(error)")
+                #endif
             }
         }
     }
 
-    /// Экспорт ML-KEM encapsulation key в base64
     func exportPQEncapsulationKey() -> String? {
         mlkemEncapsulationKeyData?.base64EncodedString()
     }
 
-    /// Encapsulate с чужим ML-KEM encapsulation key (вызывается guest-ом)
-    /// Возвращает (ciphertext_base64, shared_secret)
     func pqEncapsulate(encapsKeyBase64: String) -> (ciphertext: String, success: Bool) {
         guard #available(iOS 26.0, *),
               let encapsKeyData = Data(base64Encoded: encapsKeyBase64) else {
@@ -92,15 +86,15 @@ final class GhostCrypto {
             let result = try encapsKey.encapsulate()
             pqSharedSecret = result.sharedSecret.withUnsafeBytes { Data($0) }
             isPQEnabled = true
-            let ctBase64 = result.encapsulated.base64EncodedString()
-            return (ctBase64, true)
+            return (result.encapsulated.base64EncodedString(), true)
         } catch {
+            #if DEBUG
             print("[GhostCrypto] ML-KEM encapsulation failed: \(error)")
+            #endif
             return ("", false)
         }
     }
 
-    /// Decapsulate ML-KEM ciphertext (вызывается host-ом)
     func pqDecapsulate(ciphertextBase64: String) -> Bool {
         guard #available(iOS 26.0, *),
               let ctData = Data(base64Encoded: ciphertextBase64),
@@ -114,26 +108,25 @@ final class GhostCrypto {
             isPQEnabled = true
             return true
         } catch {
+            #if DEBUG
             print("[GhostCrypto] ML-KEM decapsulation failed: \(error)")
+            #endif
             return false
         }
     }
 
-    /// Проверка доступности PQ на этом устройстве
     static var isPQAvailable: Bool {
         if #available(iOS 26.0, *) { return true }
         return false
     }
 
-    /// Экспорт публичного ключа в base64 (raw P-256 uncompressed, 65 bytes)
-    /// Совместим с Web Crypto API exportKey('raw')
+    // MARK: - Key Export/Import
+
     func exportPublicKey() -> String? {
         guard let pub = publicKey else { return nil }
-        // x963Representation = 04 || x || y (65 bytes) — тот же формат что Web Crypto 'raw'
         return pub.x963Representation.base64EncodedString()
     }
 
-    /// Импорт публичного ключа собеседника из base64 (raw format)
     func importPeerPublicKey(_ base64Key: String) throws {
         guard let data = Data(base64Encoded: base64Key) else {
             throw GhostCryptoError.invalidKeyData
@@ -141,86 +134,68 @@ final class GhostCrypto {
         peerPublicKey = try P256.KeyAgreement.PublicKey(x963Representation: data)
     }
 
-    // MARK: - Key Derivation
+    // MARK: - Key Derivation (Double Ratchet Initialization)
 
-    /// Деривация двунаправленных ключей — порт deriveSharedKey()
-    /// Детерминистически определяет порядок по raw-байтам публичных ключей
-    /// Hybrid PQ: если ML-KEM shared secret доступен, комбинируем ECDH + PQ
-    func deriveSharedKey() throws {
-        guard let priv = privateKey, let peer = peerPublicKey, let pub = publicKey else {
+    /// Initialize Double Ratchet from ECDH shared secret
+    /// Host (initiator) calls with isHost=true, guest (responder) with isHost=false
+    func deriveSharedKey(asHost: Bool = false) throws {
+        guard let priv = privateKey, let peer = peerPublicKey else {
             throw GhostCryptoError.keysNotReady
         }
+
+        self.isHost = asHost
 
         // ECDH shared secret
         let sharedSecret = try priv.sharedSecretFromKeyAgreement(with: peer)
 
-        // Определяем порядок ключей детерминистически (как в JS)
-        let ourKeyRaw = [UInt8](pub.x963Representation)
-        let peerKeyRaw = [UInt8](peer.x963Representation)
-
-        var weAreFirst = false
-        for i in 0..<min(ourKeyRaw.count, peerKeyRaw.count) {
-            if ourKeyRaw[i] < peerKeyRaw[i] { weAreFirst = true; break }
-            if ourKeyRaw[i] > peerKeyRaw[i] { weAreFirst = false; break }
-        }
-
-        // Если есть PQ shared secret — комбинируем ECDH + PQ
+        // Build HKDF salt — hybrid PQ if available
         let salt: Data
         if let pqSS = pqSharedSecret {
-            // Hybrid salt = "ghost-chat-v1-pq" + ML-KEM shared secret
-            // Это гарантирует что даже если ECDH будет сломан квантовым компьютером,
-            // PQ shared secret защищает ключи
-            var hybridSalt = Data("ghost-chat-v1-pq".utf8)
+            var hybridSalt = Data("ghost-chat-v2-pq".utf8)
             hybridSalt.append(pqSS)
             salt = hybridSalt
         } else {
-            salt = Data("ghost-chat-v1".utf8)
+            salt = Data("ghost-chat-v2".utf8)
         }
 
-        let keyFirstToSecond = deriveDirectionalKey(
-            sharedSecret: sharedSecret,
-            salt: salt,
-            info: Data("ghost-first-to-second".utf8)
-        )
-        let keySecondToFirst = deriveDirectionalKey(
-            sharedSecret: sharedSecret,
-            salt: salt,
-            info: Data("ghost-second-to-first".utf8)
-        )
-
-        sendKey = weAreFirst ? keyFirstToSecond : keySecondToFirst
-        receiveKey = weAreFirst ? keySecondToFirst : keyFirstToSecond
-    }
-
-    private func deriveDirectionalKey(
-        sharedSecret: SharedSecret,
-        salt: Data,
-        info: Data
-    ) -> SymmetricKey {
-        // HKDF-SHA256, 256-bit output — совместимо с Web Crypto deriveKey AES-GCM 256
-        sharedSecret.hkdfDerivedSymmetricKey(
+        // Derive root symmetric key from ECDH shared secret
+        let rootSecret = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
             salt: salt,
-            sharedInfo: info,
+            sharedInfo: Data("ghost-dr-init-secret".utf8),
             outputByteCount: 32
         )
+
+        // Initialize Double Ratchet
+        if asHost {
+            // Host is initiator: knows peer's DH key, performs first DH ratchet
+            ratchet = try DoubleRatchet(asInitiator: rootSecret, peerDHKey: peer)
+        } else {
+            // Guest is responder: will perform DH ratchet on first received message
+            ratchet = DoubleRatchet(asResponder: rootSecret)
+        }
     }
 
-    // MARK: - Encryption
+    /// Export the DH ratchet public key for the key-exchange message
+    func exportDHRatchetKey() -> String? {
+        ratchet?.dhPublicKeyData.base64EncodedString()
+    }
 
-    /// Шифрование сообщения — порт encrypt()
-    /// Возвращает base64(IV + ciphertext + tag)
+    // MARK: - Encryption (Double Ratchet v2)
+
+    /// Encrypt a message using Double Ratchet
+    /// Returns base64(encryptedHeader + 0xFF + encryptedBody) with embedded {m, t, c} metadata
     func encrypt(_ plaintext: String) throws -> String {
-        guard let key = sendKey else {
+        guard let ratchet else {
             throw GhostCryptoError.sendKeyNotDerived
         }
 
         messageCounter += 1
 
-        // Формируем JSON с метаданными {m, t, c} — как в JS
+        // Build message with metadata {m, t, c}
         let meta: [String: Any] = [
             "m": plaintext,
-            "t": Int(Date().timeIntervalSince1970 * 1000), // JS Date.now() = milliseconds
+            "t": Int(Date().timeIntervalSince1970 * 1000),
             "c": messageCounter
         ]
         let metaJSON = try JSONSerialization.data(withJSONObject: meta)
@@ -228,34 +203,29 @@ final class GhostCrypto {
             throw GhostCryptoError.encodingFailed
         }
 
-        // Padding до 256-byte блоков
+        // Padding to 256-byte blocks
         let padded = try padMessage(metaString)
         let paddedData = Data(padded.utf8)
 
-        // AES-256-GCM с 12-byte nonce
-        let nonce = AES.GCM.Nonce()
-        let sealedBox = try AES.GCM.seal(paddedData, using: key, nonce: nonce)
+        // Double Ratchet encrypt → (encryptedHeader, ciphertext)
+        let (encryptedHeader, ciphertext) = try ratchet.encrypt(paddedData)
 
-        // Формат: IV (12) + ciphertext + tag (16) — совместимо с Web Crypto
-        // sealedBox.combined = nonce + ciphertext + tag
-        guard let combined = sealedBox.combined else {
-            throw GhostCryptoError.encryptionFailed
-        }
-
-        // PFS: ротация ПОСЛЕ шифрования
-        if messageCounter % keyRotationInterval == 0 {
-            try rotateSendKey()
-        }
+        // Combine: encryptedHeader + separator(0xFF) + ciphertext
+        var combined = Data()
+        // Header length as 4-byte big-endian prefix (to know where header ends)
+        let headerLen = UInt32(encryptedHeader.count)
+        combined.append(contentsOf: withUnsafeBytes(of: headerLen.bigEndian) { Array($0) })
+        combined.append(encryptedHeader)
+        combined.append(ciphertext)
 
         return combined.base64EncodedString()
     }
 
-    // MARK: - Decryption
+    // MARK: - Decryption (Double Ratchet v2)
 
-    /// Дешифрование — порт decrypt()
-    /// Принимает base64(IV + ciphertext + tag)
+    /// Decrypt a Double Ratchet message
     func decrypt(_ encryptedBase64: String) throws -> String {
-        guard let key = receiveKey else {
+        guard let ratchet else {
             throw GhostCryptoError.receiveKeyNotDerived
         }
 
@@ -263,50 +233,57 @@ final class GhostCrypto {
             throw GhostCryptoError.invalidCiphertext
         }
 
-        // Извлекаем nonce (первые 12 байт) для replay protection
-        guard combined.count > 12 else {
+        // Parse: 4-byte header length + encrypted header + ciphertext
+        guard combined.count > 4 else {
             throw GhostCryptoError.invalidCiphertext
         }
-        let nonceData = combined.prefix(12)
+
+        let headerLen = Int(UInt32(bigEndian: combined.prefix(4).withUnsafeBytes { $0.load(as: UInt32.self) }))
+        guard combined.count > 4 + headerLen else {
+            throw GhostCryptoError.invalidCiphertext
+        }
+
+        let encryptedHeader = combined.subdata(in: 4..<(4 + headerLen))
+        let ciphertext = combined.subdata(in: (4 + headerLen)..<combined.count)
+
+        // Replay protection: extract nonce from ciphertext
+        guard ciphertext.count > 12 else {
+            throw GhostCryptoError.invalidCiphertext
+        }
+        let nonceData = ciphertext.prefix(12)
         let nonceString = nonceData.base64EncodedString()
 
-        // Очистка expired nonces
         cleanupExpiredNonces()
 
         if receivedNonces[nonceString] != nil {
             throw GhostCryptoError.replayAttack
         }
 
-        // Пробуем текущий ключ, затем предыдущие
-        var decryptedData: Data?
-
-        if let result = try? decryptWithKey(combined, key: key) {
-            decryptedData = result
-        } else {
-            for prevKey in previousReceiveKeys.reversed() {
-                if let result = try? decryptWithKey(combined, key: prevKey) {
-                    decryptedData = result
-                    break
-                }
-            }
+        // Try skipped keys first (out-of-order messages)
+        if let plainData = try? ratchet.tryDecryptWithSkippedKey(
+            encryptedHeader: encryptedHeader,
+            ciphertext: ciphertext
+        ) {
+            return try processDecryptedData(plainData, nonceString: nonceString)
         }
 
-        guard let data = decryptedData else {
-            throw GhostCryptoError.decryptionFailed
-        }
+        // Normal Double Ratchet decrypt
+        let plainData = try ratchet.decrypt(encryptedHeader: encryptedHeader, ciphertext: ciphertext)
+        return try processDecryptedData(plainData, nonceString: nonceString)
+    }
 
+    /// Process decrypted data: unpad, validate metadata, return message
+    private func processDecryptedData(_ data: Data, nonceString: String) throws -> String {
         guard let paddedText = String(data: data, encoding: .utf8) else {
             throw GhostCryptoError.decodingFailed
         }
 
-        // Удаляем padding
         let unpaddedText = try unpadMessage(paddedText)
 
-        // Парсим метаданные
         if let jsonData = unpaddedText.data(using: .utf8),
            let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
 
-            // Проверяем timestamp (не старше 5 минут)
+            // Timestamp validation (5 min max age)
             if let timestamp = parsed["t"] as? Int {
                 let messageAge = Date().timeIntervalSince1970 * 1000 - Double(timestamp)
                 if messageAge > 5 * 60 * 1000 {
@@ -314,7 +291,7 @@ final class GhostCrypto {
                 }
             }
 
-            // Проверяем counter
+            // Counter validation
             if let counter = parsed["c"] as? Int {
                 if counter <= peerMessageCounter - counterWindow {
                     throw GhostCryptoError.counterTooOld
@@ -324,15 +301,8 @@ final class GhostCrypto {
                 }
             }
 
-            // Сохраняем nonce
+            // Save nonce
             receivedNonces[nonceString] = Date()
-
-            // PFS: ротация receiveKey по счётчику отправителя
-            if let counter = parsed["c"] as? Int,
-               counter > 0,
-               counter % keyRotationInterval == 0 {
-                try rotateReceiveKey()
-            }
 
             if let message = parsed["m"] as? String {
                 return message
@@ -342,15 +312,8 @@ final class GhostCrypto {
         return unpaddedText
     }
 
-    private func decryptWithKey(_ combined: Data, key: SymmetricKey) throws -> Data {
-        let sealedBox = try AES.GCM.SealedBox(combined: combined)
-        return try AES.GCM.open(sealedBox, using: key)
-    }
-
     // MARK: - Message Padding
 
-    /// Padding сообщения до блоков по 256 символов — порт padMessage()
-    /// Формат: длина(4 символа) + base64(сообщение) + рандомный padding
     func padMessage(_ message: String, blockSize: Int = 256) throws -> String {
         let base64Message = Data(message.utf8).base64EncodedString()
         let messageLength = base64Message.count
@@ -362,7 +325,6 @@ final class GhostCrypto {
         let paddedLength = ((messageLength + 4 + blockSize - 1) / blockSize) * blockSize
         let paddingLength = paddedLength - messageLength - 4
 
-        // Криптостойкий random padding
         let paddingChars = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
         var randomBytes = [UInt8](repeating: 0, count: paddingLength)
         _ = SecRandomCopyBytes(kSecRandomDefault, paddingLength, &randomBytes)
@@ -373,7 +335,6 @@ final class GhostCrypto {
         return lengthPrefix + base64Message + padding
     }
 
-    /// Удаление padding — порт unpadMessage()
     func unpadMessage(_ paddedMessage: String) throws -> String {
         guard paddedMessage.count >= 4 else {
             throw GhostCryptoError.invalidPaddedMessage
@@ -401,54 +362,8 @@ final class GhostCrypto {
         return text
     }
 
-    // MARK: - PFS Key Rotation
-
-    /// Ротация sendKey — порт _rotateSendKey()
-    /// SHA-256(старый ключ) → HKDF → новый AES-256-GCM ключ
-    private func rotateSendKey() throws {
-        guard let key = sendKey else { return }
-        sendKey = try rotateKeyInternal(key)
-        sendKeyRotations += 1
-    }
-
-    /// Ротация receiveKey — порт _rotateReceiveKey()
-    private func rotateReceiveKey() throws {
-        guard let key = receiveKey else { return }
-
-        previousReceiveKeys.append(key)
-        if previousReceiveKeys.count > maxPreviousKeys {
-            previousReceiveKeys.removeFirst()
-        }
-
-        receiveKey = try rotateKeyInternal(key)
-        receiveKeyRotations += 1
-    }
-
-    /// Общая логика ротации — порт _rotateKeyInternal()
-    private func rotateKeyInternal(_ key: SymmetricKey) throws -> SymmetricKey {
-        // SHA-256(старый ключ material)
-        let keyData = key.withUnsafeBytes { Data($0) }
-        let hash = SHA256.hash(data: keyData)
-        let hashData = Data(hash)
-
-        // HKDF с salt "ghost-pfs-rotation" и info "key-rotation"
-        let salt = Data("ghost-pfs-rotation".utf8)
-        let info = Data("key-rotation".utf8)
-
-        let newKey = HKDF<SHA256>.deriveKey(
-            inputKeyMaterial: SymmetricKey(data: hashData),
-            salt: salt,
-            info: info,
-            outputByteCount: 32
-        )
-
-        return newKey
-    }
-
     // MARK: - Fingerprint
 
-    /// Safety Number — порт generateFingerprint()
-    /// SHA-256(sorted(pubkey1 || pubkey2)) → hex → groups of 4
     func generateFingerprint() throws -> String {
         guard let pub = publicKey, let peer = peerPublicKey else {
             throw GhostCryptoError.keysNotReady
@@ -457,7 +372,6 @@ final class GhostCrypto {
         let ourKeyRaw = [UInt8](pub.x963Representation)
         let peerKeyRaw = [UInt8](peer.x963Representation)
 
-        // Сортируем для консистентности (как в JS)
         let sorted: [[UInt8]] = [ourKeyRaw, peerKeyRaw].sorted { a, b in
             for i in 0..<min(a.count, b.count) {
                 if a[i] != b[i] { return a[i] < b[i] }
@@ -471,7 +385,6 @@ final class GhostCrypto {
         let hash = SHA256.hash(data: combined)
         let hashBytes = Array(hash)
 
-        // Первые 16 байт → hex → группы по 4 → uppercase
         let hexString = hashBytes.prefix(16)
             .map { String(format: "%02x", $0) }
             .joined()
@@ -488,7 +401,7 @@ final class GhostCrypto {
     // MARK: - Utility
 
     var isReady: Bool {
-        privateKey != nil && sendKey != nil && receiveKey != nil && peerPublicKey != nil
+        privateKey != nil && ratchet != nil && peerPublicKey != nil
     }
 
     private func cleanupExpiredNonces() {
@@ -496,24 +409,43 @@ final class GhostCrypto {
         receivedNonces = receivedNonces.filter { now.timeIntervalSince($0.value) < nonceExpiryInterval }
     }
 
-    /// Полная очистка всех ключей из памяти
     func destroy() {
         privateKey = nil
         publicKey = nil
         peerPublicKey = nil
-        sendKey = nil
-        receiveKey = nil
-        previousReceiveKeys.removeAll()
+        ratchet?.destroy()
+        ratchet = nil
         receivedNonces.removeAll()
         messageCounter = 0
         peerMessageCounter = 0
-        sendKeyRotations = 0
-        receiveKeyRotations = 0
-        // PQ cleanup
         pqSharedSecret = nil
         isPQEnabled = false
         mlkemPrivateKeyStorage = nil
         mlkemEncapsulationKeyData = nil
+    }
+
+    // MARK: - DR State Persistence (for per-contact key storage)
+
+    /// Restore Double Ratchet from persisted state (known contacts)
+    func restoreRatchet(from state: DoubleRatchetState, skippedKeys: [(dhPublicKey: Data, messageNumber: Int, messageKey: Data)]) throws {
+        let dr = try DoubleRatchet(fromState: state)
+        dr.importSkippedKeys(skippedKeys)
+        self.ratchet = dr
+    }
+
+    /// Export current DR state for persistent storage
+    func exportRatchetState() -> DoubleRatchetState? {
+        ratchet?.exportState()
+    }
+
+    /// Export skipped keys for persistent storage
+    func exportSkippedKeys() -> [(dhPublicKey: Data, messageNumber: Int, messageKey: Data)] {
+        ratchet?.exportSkippedKeys() ?? []
+    }
+
+    /// Export message counters for replay protection persistence
+    var counters: (our: Int, peer: Int) {
+        (messageCounter, peerMessageCounter)
     }
 }
 
@@ -534,6 +466,7 @@ enum GhostCryptoError: LocalizedError {
     case counterTooOld
     case messageTooLong
     case invalidPaddedMessage
+    case incompatibleProtocolVersion
 
     var errorDescription: String? {
         switch self {
@@ -551,6 +484,7 @@ enum GhostCryptoError: LocalizedError {
         case .counterTooOld: return "Counter too old"
         case .messageTooLong: return "Message too long"
         case .invalidPaddedMessage: return "Invalid padded message"
+        case .incompatibleProtocolVersion: return "Incompatible protocol version"
         }
     }
 }

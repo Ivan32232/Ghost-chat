@@ -1,9 +1,9 @@
 import Foundation
-import WebRTC
+@preconcurrency import WebRTC
 
 /// WebRTC P2P модуль — порт webrtc.js
 /// RTCPeerConnection + DataChannel + Trickle ICE
-final class GhostRTC: NSObject {
+final class GhostRTC: NSObject, @unchecked Sendable {
 
     // MARK: - Properties
 
@@ -77,44 +77,7 @@ final class GhostRTC: NSObject {
     // MARK: - Host
 
     /// Инициализация как хост (создатель комнаты) — порт initAsHost()
-    func initAsHost(turnCredentials: TURNCredentials?) -> RTCSessionDescription? {
-        self.turnCredentials = turnCredentials
-        createPeerConnection()
-
-        guard let pc = peerConnection else { return nil }
-
-        // Хост создаёт DataChannel
-        let dcConfig = RTCDataChannelConfiguration()
-        dcConfig.isOrdered = true
-
-        dataChannel = pc.dataChannel(forLabel: "ghost-chat", configuration: dcConfig)
-        setupDataChannel()
-
-        // Создаём offer
-        var offer: RTCSessionDescription?
-        let semaphore = DispatchSemaphore(value: 0)
-
-        let constraints = RTCMediaConstraints(
-            mandatoryConstraints: nil,
-            optionalConstraints: nil
-        )
-
-        pc.offer(for: constraints) { sdp, error in
-            if let sdp {
-                pc.setLocalDescription(sdp) { _ in
-                    offer = sdp
-                    semaphore.signal()
-                }
-            } else {
-                semaphore.signal()
-            }
-        }
-
-        semaphore.wait()
-        return offer
-    }
-
-    /// Асинхронная версия initAsHost
+    /// M6: Removed synchronous semaphore version — use async only
     func initAsHost(turnCredentials: TURNCredentials?) async -> RTCSessionDescription? {
         self.turnCredentials = turnCredentials
         createPeerConnection()
@@ -248,7 +211,9 @@ final class GhostRTC: NSObject {
     func addIceCandidate(_ candidate: RTCIceCandidate) {
         peerConnection?.add(candidate) { error in
             if let error {
+                #if DEBUG
                 print("[GhostRTC] Error adding ICE candidate: \(error)")
+                #endif
             }
         }
     }
@@ -389,6 +354,8 @@ extension GhostRTC: RTCPeerConnectionDelegate {
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
+        // M8: Validate DataChannel label
+        guard dataChannel.label == "ghost-chat" else { return }
         // Гость получает DataChannel от хоста
         DispatchQueue.main.async { [weak self] in
             self?.dataChannel = dataChannel

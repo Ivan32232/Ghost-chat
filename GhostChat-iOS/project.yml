@@ -13,7 +13,10 @@ options:
 packages:
   WebRTC:
     url: https://github.com/stasel/WebRTC.git
-    from: "125.0.0"
+    exactVersion: "125.0.0"
+  SQLCipher:
+    url: https://github.com/sqlcipher/SQLCipher.swift.git
+    exactVersion: "4.13.0"
 
 settings:
   base:
@@ -29,6 +32,7 @@ targets:
       - GhostChat
     dependencies:
       - package: WebRTC
+      - package: SQLCipher
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ivanpokhvalitov.ghostchat

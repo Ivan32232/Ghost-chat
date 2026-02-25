@@ -14,7 +14,7 @@ import { readFile } from 'fs/promises';
 import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
-import { createHmac, randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -239,6 +239,9 @@ const httpServer = createServer(async (req, res) => {
   } else if (pathname === '/.well-known/apple-app-site-association') {
     filePath = join(clientDir, '.well-known', 'apple-app-site-association');
     contentType = 'application/json';
+  } else if (pathname === '/GhostChat.apk') {
+    filePath = join(clientDir, 'GhostChat.apk');
+    contentType = 'application/vnd.android.package-archive';
   } else {
     res.writeHead(404);
     res.end('Not Found');
@@ -256,16 +259,36 @@ const httpServer = createServer(async (req, res) => {
 
   try {
     const content = await readFile(resolvedPath);
-    const headers = { 'Content-Type': contentType };
-    // Service Worker: не кэшировать, разрешить scope='/'
-    if (pathname === '/sw.js') {
-      headers['Service-Worker-Allowed'] = '/';
-      headers['Cache-Control'] = 'no-cache, no-store';
+
+    // ETag на основе MD5 хеша содержимого файла
+    const etag = '"' + createHash('md5').update(content).digest('hex') + '"';
+
+    // Если браузер прислал If-None-Match и хеш совпадает — 304
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch === etag) {
+      res.writeHead(304);
+      res.end();
+      return;
     }
-    // Иконки можно кэшировать — они меняются редко
-    if (pathname.startsWith('/icons/')) {
+
+    const headers = {
+      'Content-Type': contentType,
+      'ETag': etag
+    };
+
+    // HTML, JS, CSS — всегда проверять свежесть (no-cache = revalidate каждый раз)
+    if (pathname.endsWith('.html') || pathname.endsWith('.js') || pathname.endsWith('.css') || pathname === '/') {
+      headers['Cache-Control'] = 'no-cache';
+    }
+    // Иконки и шрифты — кэшировать, но тоже с ETag
+    else if (pathname.startsWith('/icons/') || pathname.startsWith('/fonts/')) {
       headers['Cache-Control'] = 'public, max-age=604800'; // 7 дней
     }
+    // APK — кэшировать на день
+    else if (pathname.endsWith('.apk')) {
+      headers['Cache-Control'] = 'public, max-age=86400';
+    }
+
     res.writeHead(200, headers);
     res.end(content);
   } catch {

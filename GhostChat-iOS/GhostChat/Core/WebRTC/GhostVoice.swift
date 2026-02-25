@@ -59,7 +59,9 @@ final class GhostVoice {
                 try session.overrideOutputAudioPort(.none) // → earpiece
             }
         } catch {
+            #if DEBUG
             print("[GhostVoice] Audio session error: \(error)")
+            #endif
         }
     }
 

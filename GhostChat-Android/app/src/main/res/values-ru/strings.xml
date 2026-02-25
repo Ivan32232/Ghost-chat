@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ghost Chat</string>
+
+    <!-- Welcome Screen -->
+    <string name="welcome_subtitle">Приватный мессенджер</string>
+    <string name="welcome_new_chat">Новый чат</string>
+    <string name="welcome_creating">Создаём…</string>
+    <string name="welcome_or">или</string>
+    <string name="welcome_enter_code">Код комнаты</string>
+    <string name="welcome_join">Войти</string>
+    <string name="welcome_joining">Входим…</string>
+    <string name="welcome_privacy_mode">Скрыть IP (relay)</string>
+    <string name="welcome_footer">Сообщения не хранятся на сервере</string>
+
+    <!-- Waiting Screen -->
+    <string name="waiting_title">Ожидание собеседника</string>
+    <string name="waiting_copy">Скопировать</string>
+    <string name="waiting_share">Поделиться</string>
+    <string name="waiting_share_link">Поделитесь ссылкой с собеседником</string>
+    <string name="waiting_cancel">Отмена</string>
+    <string name="waiting_recent_contacts">Недавние контакты</string>
+    <string name="waiting_invite">Пригласить</string>
+    <string name="waiting_invite_confirm_title">Отправить приглашение?</string>
+    <string name="waiting_invite_confirm_message">Скопировать ссылку для %1$s? Ссылка исчезнет из буфера через 60 секунд.</string>
+    <string name="waiting_invite_confirm_send">Скопировать</string>
+
+    <!-- Connecting Screen -->
+    <string name="connecting_title">Подключение…</string>
+    <string name="connecting_subtitle">Устанавливаем P2P соединение</string>
+    <string name="connecting_cancel">Отмена</string>
+
+    <!-- Chat Screen -->
+    <string name="chat_placeholder">Сообщение</string>
+    <string name="chat_verification_title">Код безопасности</string>
+    <string name="chat_verification_info">Сравните этот код с собеседником через другой канал связи</string>
+    <string name="chat_verify">Совпадает</string>
+    <string name="chat_not_match">Не совпадает</string>
+    <string name="chat_verified">Подтверждено</string>
+    <string name="chat_close">Закрыть</string>
+
+    <!-- Call Screen -->
+    <string name="call_calling">Звоним…</string>
+    <string name="call_unmute">Вкл. микрофон</string>
+    <string name="call_mute">Выкл. микрофон</string>
+    <string name="call_speaker">Динамик</string>
+    <string name="call_earpiece">На ухо</string>
+    <string name="call_end">Завершить</string>
+    <string name="call_incoming">Входящий звонок</string>
+    <string name="call_accept">Принять</string>
+    <string name="call_decline">Отклонить</string>
+
+    <!-- System Messages -->
+    <string name="system_peer_disconnected">Собеседник отключился</string>
+    <string name="system_connection_restored">Соединение восстановлено</string>
+    <string name="system_connection_lost">Соединение потеряно</string>
+    <string name="system_secure_connection">Защищённое соединение установлено</string>
+    <string name="system_tap_shield">Нажмите на щит для сверки кодов безопасности</string>
+    <string name="system_key_exchange_error">Ошибка обмена ключами</string>
+    <string name="system_screenshot_taken">⚠️ Вы сделали скриншот</string>
+    <string name="system_decryption_error">Ошибка расшифровки</string>
+    <string name="system_send_error">Ошибка отправки</string>
+    <string name="system_calling">Звоним…</string>
+    <string name="system_incoming_call">Входящий звонок…</string>
+    <string name="system_call_connected">Звонок подключён</string>
+    <string name="system_call_declined">Звонок отклонён</string>
+    <string name="system_call_started">Звонок начат</string>
+    <string name="system_call_ended">Звонок завершён</string>
+    <string name="system_peer_ended_call">Собеседник завершил звонок</string>
+    <string name="system_peer_screenshot">Собеседник сделал скриншот</string>
+    <string name="system_verified">Подтверждено! Соединение безопасно.</string>
+    <string name="system_codes_do_not_match">ВНИМАНИЕ: Коды НЕ совпадают! Возможна атака!</string>
+    <string name="system_end_session">Немедленно завершите сессию.</string>
+    <string name="system_connection_timeout">Не удалось подключиться (таймаут)</string>
+    <string name="system_call_error">Ошибка звонка: %1$s</string>
+    <string name="system_error">Ошибка: %1$s</string>
+    <string name="system_security_warning">⚠️ %1$s</string>
+    <string name="system_pq_upgraded">Пост-квантовая защита активна (ML-KEM768)</string>
+    <string name="system_incompatible_version">Несовместимая версия протокола. Обновите Ghost Chat.</string>
+    <string name="system_known_peer">Подключён: %1$s</string>
+    <string name="system_unexpected_peer">ВНИМАНИЕ: Другой ключ идентификации! Возможна подмена.</string>
+    <string name="system_peer_security_alert">⚠️ Собеседник: %1$s</string>
+
+    <!-- Security Monitor -->
+    <string name="security_screen_recording_active">Запись экрана активна</string>
+    <string name="security_screen_recording_detected">Обнаружена запись экрана</string>
+    <string name="security_bluetooth_connected">Подключено Bluetooth устройство: %1$s</string>
+    <string name="security_audio_device_removed">Аудио устройство отключено</string>
+
+    <!-- Deep Link -->
+    <string name="deeplink_title">Присоединиться?</string>
+    <string name="deeplink_join">Войти</string>
+    <string name="deeplink_cancel">Отмена</string>
+    <string name="deeplink_message">Войти в комнату %1$s…?</string>
+
+    <!-- Signaling -->
+    <string name="signaling_reconnect_failed">Не удалось переподключиться</string>
+
+    <!-- Biometric -->
+    <string name="biometric_reason">Разблокировать Ghost Chat</string>
+    <string name="biometric_enable">Включить биометрию</string>
+    <string name="biometric_disable">Выключить биометрию</string>
+    <string name="biometric_locked">Ghost Chat заблокирован</string>
+    <string name="biometric_unlock">Разблокировать</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_done">Готово</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_language_section">ЯЗЫК</string>
+    <string name="settings_language_current">Русский</string>
+    <string name="settings_security_section">БЕЗОПАСНОСТЬ</string>
+    <string name="settings_biometric">Биометрическая блокировка</string>
+    <string name="settings_biometric_desc">Биометрия защищает приложение при сворачивании</string>
+    <string name="settings_privacy_mode">Режим приватности (relay)</string>
+    <string name="settings_privacy_mode_desc">Скрыть ваш IP адрес</string>
+    <string name="settings_screenshot_notify">Уведомления о скриншотах</string>
+    <string name="settings_screenshot_notify_desc">Уведомлять собеседника о скриншотах</string>
+    <string name="settings_messages_section">СООБЩЕНИЯ</string>
+    <string name="settings_auto_delete">Автоудаление</string>
+    <string name="settings_sounds_section">ЗВУКИ И УВЕДОМЛЕНИЯ</string>
+    <string name="settings_sound">Звук сообщений</string>
+    <string name="settings_vibration">Вибрация</string>
+    <string name="settings_ringtone">Рингтон</string>
+    <string name="settings_msg_sound">Звук уведомления</string>
+    <string name="settings_danger_section">ДАННЫЕ</string>
+    <string name="settings_delete_contacts">Удалить все контакты</string>
+    <string name="settings_delete_contacts_confirm">Удалить все контакты?</string>
+    <string name="settings_destroy_all">Уничтожить всё</string>
+    <string name="settings_destroy_all_confirm">Уничтожить все данные? База данных будет удалена, настройки сброшены.</string>
+    <string name="settings_delete">Удалить</string>
+    <string name="settings_destroy">Уничтожить</string>
+    <string name="settings_cancel">Отмена</string>
+
+    <!-- Contacts -->
+    <string name="contacts_title">Контакты</string>
+    <string name="contacts_empty">Нет контактов</string>
+    <string name="contacts_empty_hint">Контакты сохраняются автоматически после сессий</string>
+    <string name="contacts_name">Имя</string>
+    <string name="contacts_edit">Изменить имя</string>
+    <string name="contacts_save">Сохранить</string>
+    <string name="contacts_save_title">Сохранить контакт?</string>
+    <string name="contacts_name_placeholder">Имя</string>
+    <string name="contacts_save_message">Сохраните собеседника, чтобы узнавать его в будущих сессиях</string>
+    <string name="contacts_skip">Пропустить</string>
+    <string name="contacts_start_chat">Начать чат</string>
+    <string name="contacts_details">ДЕТАЛИ</string>
+    <string name="contacts_fingerprint">Отпечаток</string>
+    <string name="contacts_created">Создан</string>
+    <string name="contacts_last_session">Последняя сессия</string>
+    <string name="contacts_sessions">Сессии</string>
+    <string name="contacts_key_state">Ключи</string>
+    <string name="contacts_key_state_saved">Сохранены</string>
+    <string name="contacts_key_state_none">Нет</string>
+    <string name="contacts_delete">Удалить контакт</string>
+    <string name="contacts_delete_confirm">Удалить %1$s? Сохранённые ключи шифрования тоже будут удалены.</string>
+</resources>

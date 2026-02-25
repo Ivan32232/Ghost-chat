@@ -7,10 +7,10 @@
  * - Crypto для E2E шифрования
  */
 
-import { GhostCrypto } from './crypto.js?v=9';
-import { GhostRTC } from './webrtc.js?v=9';
-import { GhostVoice } from './voice.js?v=9';
-import { logger } from './logger.js?v=9';
+import { GhostCrypto } from './crypto.js';
+import { GhostRTC } from './webrtc.js';
+import { GhostVoice } from './voice.js';
+import { logger } from './logger.js';
 
 class GhostChat {
   constructor() {
@@ -227,7 +227,7 @@ class GhostChat {
     if (!this.crypto?.isReady() || !this.rtc?.isConnected()) return false;
     try {
       const encrypted = await this.crypto.encrypt(JSON.stringify(message));
-      return this.rtc.send(JSON.stringify({ type: 'encrypted-message', data: encrypted }));
+      return this.rtc.send(JSON.stringify({ type: 'encrypted-message', data: encrypted, v: 2 }));
     } catch (e) {
       logger.error('Failed to send encrypted control:', e);
       return false;
@@ -484,11 +484,12 @@ class GhostChat {
       this.elements.messageInput.disabled = false;
 
       if (!wasConnected) {
-        // First connection — exchange keys
+        // First connection — exchange keys (v2 Double Ratchet)
         const publicKey = await this.crypto.exportPublicKey();
         this.rtc.send(JSON.stringify({
           type: 'key-exchange',
-          publicKey: publicKey
+          publicKey: publicKey,
+          v: GhostCrypto.PROTOCOL_VERSION
         }));
       } else {
         // Reconnected after temporary disconnect
@@ -530,7 +531,8 @@ class GhostChat {
         }));
         this.rtc.send(JSON.stringify({
           type: 'encrypted-message',
-          data: encrypted
+          data: encrypted,
+          v: 2
         }));
       } catch (e) {
         logger.error('Failed to send renegotiation:', e);
@@ -614,7 +616,7 @@ class GhostChat {
 
       switch (message.type) {
         case 'key-exchange':
-          await this.handleKeyExchange(message.publicKey);
+          await this.handleKeyExchange(message.publicKey, message.v);
           break;
 
         case 'encrypted-message':
@@ -627,11 +629,17 @@ class GhostChat {
   }
 
   /**
-   * Обмен ключами
+   * Обмен ключами (v2 Double Ratchet)
    */
-  async handleKeyExchange(peerPublicKey) {
+  async handleKeyExchange(peerPublicKey, peerVersion) {
+    // Accept v2+ (backward compat: v3 iOS ↔ v2/v3 web)
+    if (!peerVersion || peerVersion < 2) {
+      this.addSystemMessage('Несовместимая версия протокола. Обновите Ghost Chat.');
+      return;
+    }
+
     await this.crypto.importPeerPublicKey(peerPublicKey);
-    await this.crypto.deriveSharedKey();
+    await this.crypto.deriveSharedKey(this.isHost);
 
     // Генерируем fingerprint для верификации
     const fingerprint = await this.crypto.generateFingerprint();
@@ -644,6 +652,14 @@ class GhostChat {
     this.updateConnectionStatus('connected');
     this.addSystemMessage('Защищённое соединение установлено');
     this.addSystemMessage('Нажмите на щит для сверки кодов безопасности');
+    this.addSystemMessage('Контакты доступны в приложении Ghost Chat для iOS');
+
+    // Host sends bootstrap message to initialize guest's send chain
+    // (guest's Double Ratchet needs to receive at least one message
+    // to trigger DH ratchet and initialize the send chain)
+    if (this.isHost) {
+      await this.sendEncryptedControl({ type: 'ready' });
+    }
 
     // Запрашиваем доступ к микрофону для звонков
     this.requestMicrophonePermission();
@@ -778,17 +794,39 @@ class GhostChat {
       this.callState = 'calling';
       this.updateCallUI('calling');
 
-      // Start local audio
+      // Suppress automatic onnegotiationneeded — we'll create the offer manually
+      this.rtc._suppressNegotiation = true;
+
+      // Start local audio (addTrack triggers onnegotiationneeded, but it's suppressed)
       await this.voice.startCall();
 
-      // Send call request through E2E
+      // Manually create renegotiation offer with our audio track
+      const offer = await this.rtc.peerConnection.createOffer();
+      await this.rtc.peerConnection.setLocalDescription(offer);
+
+      // Send call-request FIRST (so callee enters 'ringing' state before offer arrives)
       await this.sendEncryptedControl({ type: 'call-request' });
+
+      // Then send renegotiation offer
+      const encrypted = await this.crypto.encrypt(JSON.stringify({
+        type: 'renegotiate',
+        sdp: this.rtc.peerConnection.localDescription
+      }));
+      this.rtc.send(JSON.stringify({
+        type: 'encrypted-message',
+        data: encrypted,
+        v: 2
+      }));
+
+      // Keep suppression ON until we receive the answer
+      // (cleared in handleRenegotiation when answer arrives)
 
       this.addSystemMessage('Звоним...');
 
     } catch (error) {
       logger.error('Failed to start call:', error);
       this.addSystemMessage(`Ошибка звонка: ${error.message}`);
+      this.rtc._suppressNegotiation = false;
       this.callState = 'idle';
       this.updateCallUI('idle');
     }
@@ -886,6 +924,7 @@ class GhostChat {
     // Always update UI state
     this.callState = 'idle';
     this.pendingRenegotiationOffer = null;
+    if (this.rtc) this.rtc._suppressNegotiation = false;
     this.updateCallUI('idle');
     this.addSystemMessage('Звонок отклонён');
   }
@@ -914,6 +953,7 @@ class GhostChat {
       this._cleanupRemoteAudio();
       this._remoteStream = null;
       this.callState = 'idle';
+      if (this.rtc) this.rtc._suppressNegotiation = false;
       this.updateCallUI('idle');
       this.addSystemMessage('Звонок отклонён');
     }
@@ -942,6 +982,7 @@ class GhostChat {
     // Always update UI state
     this.callState = 'idle';
     this.pendingRenegotiationOffer = null;
+    if (this.rtc) this.rtc._suppressNegotiation = false;
     this.updateCallUI('idle');
     this.addSystemMessage('Звонок завершён');
   }
@@ -967,6 +1008,7 @@ class GhostChat {
     // Always update UI state
     this.callState = 'idle';
     this.pendingRenegotiationOffer = null;
+    if (this.rtc) this.rtc._suppressNegotiation = false;
     this.updateCallUI('idle');
     this.addSystemMessage('Собеседник завершил звонок');
   }
@@ -1314,6 +1356,9 @@ class GhostChat {
       case 'message-ack':
         this.handleMessageAck(msg.c);
         break;
+      case 'ready':
+        // Bootstrap from host — decryption already triggered DH ratchet
+        break;
     }
   }
 
@@ -1350,8 +1395,9 @@ class GhostChat {
         await this.processRenegotiationOffer(sdp);
 
       } else if (sdp.type === 'answer') {
-        // We received an answer
+        // We received an answer — clear suppression (caller side)
         await this.rtc.handleAnswer(sdp);
+        this.rtc._suppressNegotiation = false;
       }
     } catch (e) {
       logger.error('Renegotiation error:', e);
@@ -1362,32 +1408,41 @@ class GhostChat {
    * Process a renegotiation offer - add our audio and send answer
    */
   async processRenegotiationOffer(sdp) {
-    // If we're in a call and don't have our audio track yet, add it before answering
-    if (this.voice && !this.voice.localStream) {
-      logger.log('Adding our audio track before answering renegotiation');
-      try {
-        await this.voice.initializeAudio();
-        this.voice.localStream.getAudioTracks().forEach(track => {
-          this.voice.audioSender = this.rtc.peerConnection.addTrack(track, this.voice.localStream);
-        });
-        this.voice.startSecurityMonitoring();
-      } catch (e) {
-        logger.error('Failed to add audio track:', e);
+    // Suppress automatic onnegotiationneeded — addTrack would trigger a conflicting offer
+    this.rtc._suppressNegotiation = true;
+
+    try {
+      // Add our audio track BEFORE creating the answer
+      // This ensures the answer SDP includes our audio as sendrecv
+      if (this.voice && !this.voice.localStream) {
+        logger.log('Adding our audio track before answering renegotiation');
+        try {
+          await this.voice.initializeAudio();
+          this.voice.localStream.getAudioTracks().forEach(track => {
+            this.voice.audioSender = this.rtc.peerConnection.addTrack(track, this.voice.localStream);
+          });
+          this.voice.startSecurityMonitoring();
+        } catch (e) {
+          logger.error('Failed to add audio track:', e);
+        }
       }
+
+      // Create answer with our audio included
+      const answer = await this.rtc.handleOffer(sdp);
+
+      const encrypted = await this.crypto.encrypt(JSON.stringify({
+        type: 'renegotiate',
+        sdp: answer.sdp
+      }));
+
+      this.rtc.send(JSON.stringify({
+        type: 'encrypted-message',
+        data: encrypted,
+        v: 2
+      }));
+    } finally {
+      this.rtc._suppressNegotiation = false;
     }
-
-    // Create and send answer
-    const answer = await this.rtc.handleOffer(sdp);
-
-    const encrypted = await this.crypto.encrypt(JSON.stringify({
-      type: 'renegotiate',
-      sdp: answer.sdp
-    }));
-
-    this.rtc.send(JSON.stringify({
-      type: 'encrypted-message',
-      data: encrypted
-    }));
   }
 
   /**
@@ -1402,7 +1457,8 @@ class GhostChat {
 
       this.rtc.send(JSON.stringify({
         type: 'encrypted-message',
-        data: encrypted
+        data: encrypted,
+        v: 2
       }));
 
       const div = this.addMessage(text, 'sent');
@@ -1795,99 +1851,41 @@ class GhostChat {
   }
 }
 
-// Service Worker
+// Unregister any previously registered service workers
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    registrations.forEach(r => r.unregister());
+  });
 }
 
-// PWA Install Prompt
-// Android Chrome: перехватываем beforeinstallprompt
-// iOS Safari: показываем кастомный баннер с инструкцией
-let deferredInstallPrompt = null;
-
+// Suppress PWA install prompt
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
-  deferredInstallPrompt = e;
-  showInstallBanner('android');
 });
 
-function isIOSSafari() {
-  const ua = navigator.userAgent;
-  return /iPad|iPhone|iPod/.test(ua) && !window.MSStream && !navigator.standalone;
-}
+// Platform detection — show the right app promo
+function detectPlatform() {
+  const ua = navigator.userAgent || '';
+  const androidEl = document.getElementById('app-promo-android');
+  const iosEl = document.getElementById('app-promo-ios');
+  const desktopEl = document.getElementById('app-promo-desktop');
 
-function isInstalled() {
-  return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-}
-
-function showInstallBanner(platform) {
-  // Не показываем если уже установлено или уже показывали
-  if (isInstalled()) return;
-  if (sessionStorage.getItem('ghost-install-dismissed')) return;
-
-  const banner = document.createElement('div');
-  banner.className = 'install-banner';
-
-  if (platform === 'ios') {
-    banner.innerHTML = `
-      <div class="install-banner-content">
-        <strong>Установить Ghost</strong>
-        <span>Нажмите <svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;fill:var(--accent)"><path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V10c0-1.1.9-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .9 2 2z"/></svg> → «На экран Домой»</span>
-      </div>
-      <button class="install-banner-close">&times;</button>
-    `;
-  } else {
-    banner.innerHTML = `
-      <div class="install-banner-content">
-        <strong>Установить Ghost</strong>
-        <span>Быстрый доступ с домашнего экрана</span>
-      </div>
-      <button class="install-banner-action">Установить</button>
-      <button class="install-banner-close">&times;</button>
-    `;
-  }
-
-  document.body.appendChild(banner);
-
-  // Анимация появления
-  requestAnimationFrame(() => banner.classList.add('visible'));
-
-  // Кнопка «Установить» (Android)
-  const actionBtn = banner.querySelector('.install-banner-action');
-  if (actionBtn && deferredInstallPrompt) {
-    actionBtn.addEventListener('click', async () => {
-      banner.remove();
-      deferredInstallPrompt.prompt();
-      const result = await deferredInstallPrompt.userChoice;
-      if (result.outcome === 'accepted') {
-        sessionStorage.setItem('ghost-install-dismissed', '1');
-      }
-      deferredInstallPrompt = null;
-    });
-  }
-
-  // Кнопка закрытия
-  banner.querySelector('.install-banner-close').addEventListener('click', () => {
-    banner.classList.remove('visible');
-    setTimeout(() => banner.remove(), 300);
-    sessionStorage.setItem('ghost-install-dismissed', '1');
-  });
-
-  // Автоскрытие через 15 секунд
-  setTimeout(() => {
-    if (banner.parentElement) {
-      banner.classList.remove('visible');
-      setTimeout(() => banner.remove(), 300);
+  if (/android/i.test(ua)) {
+    if (androidEl) {
+      androidEl.style.display = '';
+      androidEl.addEventListener('click', () => {
+        window.location.href = '/GhostChat.apk';
+      });
     }
-  }, 15000);
+  } else if (/iPhone|iPad|iPod/i.test(ua)) {
+    if (iosEl) iosEl.style.display = '';
+  } else {
+    if (desktopEl) desktopEl.style.display = '';
+  }
 }
 
 // Инициализация приложения
 window.addEventListener('DOMContentLoaded', () => {
   window.ghostChat = new GhostChat();
-
-  // iOS: показываем баннер через 2 секунды после загрузки
-  if (isIOSSafari() && !isInstalled()) {
-    setTimeout(() => showInstallBanner('ios'), 2000);
-  }
+  detectPlatform();
 });

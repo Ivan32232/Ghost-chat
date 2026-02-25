@@ -9,18 +9,22 @@ struct TURNCredentials: Decodable {
     let urls: [String]
 }
 
-final class TURNService {
+final class TURNService: NSObject {
 
     private let baseURL: URL
+    private lazy var session: URLSession = {
+        URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    }()
 
     init(baseURL: URL) {
         self.baseURL = baseURL
+        super.init()
     }
 
     /// Загрузка временных TURN credentials с сервера
     func fetchCredentials() async throws -> TURNCredentials {
         let url = baseURL.appendingPathComponent("api/turn-credentials")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -28,6 +32,18 @@ final class TURNService {
         }
 
         return try JSONDecoder().decode(TURNCredentials.self, from: data)
+    }
+}
+
+// MARK: - Certificate Pinning (M1)
+
+extension TURNService: URLSessionDelegate {
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        CertificatePinning.handleChallenge(challenge, completionHandler: completionHandler)
     }
 }
 

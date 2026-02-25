@@ -58,9 +58,9 @@ final class SecurityMonitor {
     // MARK: - Screen Capture Detection
 
     /// Детекция записи экрана — UIScreen.isCaptured (нативное API)
+    /// L4: Use scene-based screen check instead of deprecated UIScreen.main
     private func setupScreenCaptureDetection() {
-        // Проверяем текущее состояние
-        if UIScreen.main.isCaptured {
+        if screenIsCaptured {
             triggerAlert(
                 type: "screen-capture-active",
                 message: String(localized: "security.screenRecordingActive"),
@@ -68,13 +68,12 @@ final class SecurityMonitor {
             )
         }
 
-        // Подписываемся на изменения
         screenCaptureObserver = NotificationCenter.default.addObserver(
             forName: UIScreen.capturedDidChangeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            if UIScreen.main.isCaptured {
+            if self?.screenIsCaptured == true {
                 self?.triggerAlert(
                     type: "screen-capture-started",
                     message: String(localized: "security.screenRecordingDetected"),
@@ -82,6 +81,12 @@ final class SecurityMonitor {
                 )
             }
         }
+    }
+
+    private var screenIsCaptured: Bool {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.screen.isCaptured ?? false
     }
 
     // MARK: - Audio Route Monitoring

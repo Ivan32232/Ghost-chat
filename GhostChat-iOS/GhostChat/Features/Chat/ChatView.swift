@@ -2,9 +2,11 @@ import SwiftUI
 
 /// Экран чата — сообщения + ввод
 struct ChatView: View {
+    @EnvironmentObject var biometricAuth: BiometricAuthService
     @ObservedObject var viewModel: ChatViewModel
     @State private var messageText = ""
     @State private var showVerifyPanel = false
+    @State private var showSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +35,23 @@ struct ChatView: View {
         }
         .sheet(isPresented: $showVerifyPanel) {
             verifySheet
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(viewModel: viewModel)
+        }
+        .alert(
+            String(localized: "contacts.savePrompt.title"),
+            isPresented: $viewModel.showSaveContactPrompt
+        ) {
+            TextField(String(localized: "contacts.savePrompt.name"), text: $viewModel.pendingContactName)
+            Button(String(localized: "contacts.save")) {
+                viewModel.saveNewContact(name: viewModel.pendingContactName)
+            }
+            Button(String(localized: "contacts.skip"), role: .cancel) {
+                viewModel.skipSaveContact()
+            }
+        } message: {
+            Text("contacts.savePrompt.message")
         }
     }
 
@@ -65,6 +84,14 @@ struct ChatView: View {
                     .foregroundStyle(viewModel.callState == .idle ? .white : .gray)
             }
             .disabled(viewModel.callState != .idle || !viewModel.isConnected)
+
+            // Settings button
+            Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .foregroundStyle(.gray)
+            }
 
             // Leave button
             Button {

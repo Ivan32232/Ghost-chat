@@ -2,14 +2,37 @@ import SwiftUI
 
 /// Экран приветствия — создать/войти в комнату
 struct WelcomeView: View {
+    @EnvironmentObject var biometricAuth: BiometricAuthService
     @ObservedObject var viewModel: ChatViewModel
     @State private var joinRoomId = ""
     @State private var isCreating = false
     @State private var isJoining = false
+    @State private var showSettings = false
+    @State private var showContacts = false
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer()
+            // Top bar — Contacts left, Settings right
+            HStack {
+                Button {
+                    showContacts = true
+                } label: {
+                    Image(systemName: "person.2.fill")
+                        .font(.title3)
+                        .foregroundStyle(.gray)
+                        .padding(12)
+                }
+                Spacer()
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title3)
+                        .foregroundStyle(.gray)
+                        .padding(12)
+                }
+            }
+            .padding(.horizontal, 8)
 
             // Logo
             VStack(spacing: 12) {
@@ -27,17 +50,16 @@ struct WelcomeView: View {
             }
             .padding(.bottom, 48)
 
-            // Create room
+            // Create room — мгновенный переход
             Button {
+                guard !isCreating else { return }
                 isCreating = true
-                Task {
-                    await viewModel.createRoom()
-                    isCreating = false
-                }
+                viewModel.screen = .waiting
+                Task { await viewModel.createRoom() }
             } label: {
                 HStack {
                     Image(systemName: "plus.circle.fill")
-                    Text(LocalizedStringKey(isCreating ? "welcome.creating" : "welcome.newChat"))
+                    Text("welcome.newChat")
                 }
                 .font(.headline)
                 .frame(maxWidth: .infinity)
@@ -110,5 +132,14 @@ struct WelcomeView: View {
                 .padding(.bottom, 8)
         }
         .background(Color.black)
+        .sheet(isPresented: $showSettings) {
+            SettingsView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showContacts) {
+            ContactsView(onStartChat: { contact in
+                showContacts = false
+                Task { await viewModel.startChatWithContact(contact) }
+            })
+        }
     }
 }

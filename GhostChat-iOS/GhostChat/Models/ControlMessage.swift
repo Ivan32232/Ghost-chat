@@ -10,6 +10,7 @@ enum ControlMessage {
     case callSecurityAlert(alert: [String: Any])
     case securityAlert(alert: String)
     case messageAck(counter: Int)
+    case ready
 
     /// Создание из JSON (парсинг входящих)
     static func from(_ json: [String: Any]) -> ControlMessage? {
@@ -35,6 +36,8 @@ enum ControlMessage {
         case "message-ack":
             guard let counter = json["c"] as? Int else { return nil }
             return .messageAck(counter: counter)
+        case "ready":
+            return .ready
         default:
             return nil
         }
@@ -57,6 +60,8 @@ enum ControlMessage {
             return ["type": "security-alert", "alert": alert]
         case .messageAck(let counter):
             return ["type": "message-ack", "c": counter]
+        case .ready:
+            return ["type": "ready"]
         }
     }
 }

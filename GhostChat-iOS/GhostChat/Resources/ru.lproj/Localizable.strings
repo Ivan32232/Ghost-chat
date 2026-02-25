@@ -15,6 +15,11 @@
 "waiting.share" = "Поделиться";
 "waiting.shareMessage" = "Присоединяйся к приватному чату";
 "waiting.cancel" = "Отмена";
+"waiting.recentContacts" = "Недавние контакты";
+"waiting.invite" = "Пригласить";
+"waiting.inviteConfirm.title" = "Отправить приглашение?";
+"waiting.inviteConfirm.message" = "Скопировать ссылку для %@? Ссылка исчезнет из буфера через 60 секунд.";
+"waiting.inviteConfirm.send" = "Скопировать";
 
 /* Connecting Screen */
 "connecting.title" = "Подключение...";
@@ -76,9 +81,125 @@
 "security.bluetoothConnected" = "Подключено Bluetooth устройство: %@";
 "security.audioDeviceRemoved" = "Аудио устройство отключено";
 
+/* Deep Link */
+"deeplink.title" = "Присоединиться?";
+"deeplink.join" = "Войти";
+"deeplink.cancel" = "Отмена";
+"deeplink.message" = "Войти в комнату %@...?";
+
+/* Protocol */
+"system.incompatibleVersion" = "Несовместимая версия протокола. Обновите Ghost Chat.";
+
 /* Signaling */
 "signaling.reconnectFailed" = "Не удалось переподключиться";
 
+/* Biometric */
+"biometric.reason" = "Разблокировать Ghost Chat";
+"biometric.enable" = "Включить Face ID";
+"biometric.disable" = "Выключить Face ID";
+"biometric.faceid" = "Face ID";
+"biometric.touchid" = "Touch ID";
+"biometric.locked" = "Ghost Chat заблокирован";
+"biometric.unlock" = "Разблокировать";
+
+/* Settings */
+"settings.title" = "Настройки";
+"settings.done" = "Готово";
+"settings.language" = "Язык";
+"settings.language.header" = "ЯЗЫК";
+"settings.language.search" = "Поиск";
+
+"settings.security" = "БЕЗОПАСНОСТЬ";
+"settings.security.footer" = "Биометрия защищает приложение при сворачивании";
+"settings.autolock" = "Автоблокировка";
+"settings.autolock.background" = "При сворачивании";
+
+"settings.privacy" = "ПРИВАТНОСТЬ";
+"settings.privacy.relay" = "Режим приватности (relay)";
+"settings.privacy.footer" = "Все сообщения автоматически удаляются по истечении таймера";
+"settings.autodelete" = "Автоудаление";
+"settings.autodelete.1" = "1 мин";
+"settings.autodelete.3" = "3 мин";
+"settings.autodelete.5" = "5 мин";
+"settings.autodelete.10" = "10 мин";
+"settings.autodelete.30" = "30 мин";
+"settings.screenshot.notify" = "Уведомления о скриншотах";
+
+"settings.sounds" = "ЗВУКИ И УВЕДОМЛЕНИЯ";
+"settings.sound" = "Звук сообщений";
+"settings.sound.message" = "Звук уведомления";
+"settings.sound.ringtone" = "Рингтон";
+"settings.vibration" = "Вибрация";
+
+/* Sound Names */
+"sound.none" = "Нет";
+"sound.tock" = "Тик";
+"sound.tink" = "Тинь";
+"sound.pop" = "Поп";
+"sound.received" = "Получено";
+"sound.sent" = "Отправлено";
+"sound.tweet" = "Твит";
+"sound.anticipate" = "Anticipate";
+"sound.bloom" = "Bloom";
+"sound.calypso" = "Calypso";
+"sound.chooChoo" = "Choo Choo";
+"sound.descent" = "Descent";
+"sound.fanfare" = "Fanfare";
+"sound.ladder" = "Ladder";
+"sound.minuet" = "Minuet";
+"sound.newsFlash" = "News Flash";
+"sound.noir" = "Noir";
+"sound.sherwood" = "Sherwood Forest";
+"sound.spell" = "Spell";
+"sound.suspense" = "Suspense";
+"sound.telegraph" = "Telegraph";
+"sound.tiptoes" = "Tiptoes";
+"sound.typewriters" = "Typewriters";
+"sound.update" = "Update";
+
+"settings.data" = "ДАННЫЕ";
+"settings.data.footer" = "Эти действия нельзя отменить";
+"settings.data.deleteContacts" = "Удалить все контакты";
+"settings.data.destroyAll" = "Уничтожить всё";
+"settings.data.deleteContacts.confirm" = "Удалить все контакты?";
+"settings.data.destroyAll.confirm" = "Уничтожить все данные? База данных будет удалена, настройки сброшены.";
+"settings.delete" = "Удалить";
+"settings.destroy" = "Уничтожить";
+"settings.cancel" = "Отмена";
+
+"settings.about" = "О ПРИЛОЖЕНИИ";
+"settings.about.version" = "Версия";
+"settings.about.protocol" = "Протокол";
+"settings.about.encryption" = "Шифрование";
+"settings.about.pq" = "Пост-квантовое";
+
+/* Contacts */
+"contacts.title" = "Контакты";
+"contacts.empty" = "Нет контактов";
+"contacts.emptyHint" = "Контакты сохраняются автоматически после сессий";
+"contacts.name" = "Имя";
+"contacts.editName" = "Изменить имя";
+"contacts.save" = "Сохранить";
+"contacts.startChat" = "Начать чат";
+"contacts.details" = "ДЕТАЛИ";
+"contacts.fingerprint" = "Отпечаток";
+"contacts.created" = "Создан";
+"contacts.lastSession" = "Последняя сессия";
+"contacts.sessions" = "Сессии";
+"contacts.keyState" = "Ключи";
+"contacts.keyState.saved" = "Сохранены";
+"contacts.keyState.none" = "Нет";
+"contacts.delete" = "Удалить контакт";
+"contacts.deleteConfirm" = "Удалить контакт? Сохранённые ключи шифрования тоже будут удалены.";
+"contacts.savePrompt.title" = "Сохранить контакт?";
+"contacts.savePrompt.name" = "Имя";
+"contacts.savePrompt.message" = "Сохраните собеседника, чтобы узнавать его в будущих сессиях";
+"contacts.skip" = "Пропустить";
+
+/* System — Contacts */
+"system.knownPeer" = "Подключён: %@";
+"system.unexpectedPeer" = "ВНИМАНИЕ: Другой ключ идентификации! Возможна подмена.";
+
 /* Info.plist */
 "NSMicrophoneUsageDescription" = "Микрофон необходим для голосовых звонков";
-"NSCameraUsageDescription" = "Камера может использоваться для видеозвонков";
+"NSFaceIDUsageDescription" = "Face ID используется для защиты ваших данных";

@@ -21,6 +21,7 @@ export class GhostRTC {
     this.onTrack = null;              // Callback для входящих audio/video tracks
     this.onRenegotiationNeeded = null; // Callback для renegotiation при добавлении tracks
     this._negotiating = false;         // Флаг для предотвращения race conditions
+    this._suppressNegotiation = false; // Manual suppression during call setup
 
     // Конфигурация ICE серверов
     // Для localhost не нужны STUN серверы - прямое соединение
@@ -235,8 +236,8 @@ export class GhostRTC {
 
     // Renegotiation при добавлении новых tracks (например, аудио для звонка)
     this.peerConnection.onnegotiationneeded = async () => {
-      if (this._negotiating) {
-        logger.log('Already negotiating, skipping...');
+      if (this._negotiating || this._suppressNegotiation) {
+        logger.log('Negotiation suppressed or already in progress');
         return;
       }
 
@@ -430,6 +431,7 @@ export class GhostRTC {
     this.onRenegotiationNeeded = null;
     this._connected = false;
     this._negotiating = false;
+    this._suppressNegotiation = false;
     this.turnCredentials = null;
   }
 }

@@ -8,6 +8,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     var callProvider: CXProvider?
     var callController: CXCallController?
+    private var pushRegistry: PKPushRegistry?  // H2: retain to prevent ARC deallocation
 
     // Callbacks от ChatViewModel для CallKit actions
     var onCallAnswer: (() -> Void)?
@@ -62,9 +63,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     // MARK: - PushKit
 
     private func setupPushKit() {
-        let registry = PKPushRegistry(queue: .main)
-        registry.delegate = self
-        registry.desiredPushTypes = [.voIP]
+        pushRegistry = PKPushRegistry(queue: .main)
+        pushRegistry?.delegate = self
+        pushRegistry?.desiredPushTypes = [.voIP]
     }
 }
 
@@ -110,8 +111,10 @@ extension AppDelegate: PKPushRegistryDelegate {
         for type: PKPushType
     ) {
         // VoIP push token получен
+        #if DEBUG
         let token = pushCredentials.token.map { String(format: "%02x", $0) }.joined()
         print("[PushKit] VoIP token: \(token)")
+        #endif
         // TODO: отправить token на сервер для push notifications
     }
 
@@ -133,7 +136,9 @@ extension AppDelegate: PKPushRegistryDelegate {
 
         reportIncomingCall(uuid: uuid, handle: handle) { error in
             if let error {
+                #if DEBUG
                 print("[PushKit] Failed to report call: \(error)")
+                #endif
             }
             completion()
         }

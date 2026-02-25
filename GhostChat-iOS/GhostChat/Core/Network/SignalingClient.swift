@@ -72,7 +72,9 @@ final class SignalingClient: NSObject {
 
         webSocket?.send(.string(text)) { error in
             if let error {
+                #if DEBUG
                 print("[SignalingClient] Send error: \(error)")
+                #endif
             }
         }
     }
@@ -119,7 +121,9 @@ final class SignalingClient: NSObject {
                 self.listenForMessages()
 
             case .failure(let error):
+                #if DEBUG
                 print("[SignalingClient] Receive error: \(error)")
+                #endif
                 self.onDisconnected?()
             }
         }
@@ -230,7 +234,7 @@ final class SignalingClient: NSObject {
     }
 }
 
-// MARK: - URLSessionWebSocketDelegate
+// MARK: - URLSessionWebSocketDelegate + Certificate Pinning (M1)
 
 extension SignalingClient: URLSessionWebSocketDelegate {
 
@@ -249,5 +253,14 @@ extension SignalingClient: URLSessionWebSocketDelegate {
         reason: Data?
     ) {
         onDisconnected?()
+    }
+
+    /// M1: Certificate pinning — validate server certificate's public key
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        CertificatePinning.handleChallenge(challenge, completionHandler: completionHandler)
     }
 }

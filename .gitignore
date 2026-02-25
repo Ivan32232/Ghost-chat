@@ -24,3 +24,21 @@ GhostChat-iOS/build/
 GhostChat-iOS/*.xcworkspace/xcuserdata/
 GhostChat-iOS/*.xcodeproj/xcuserdata/
 GhostChat-iOS/Pods/
+
+# Android build artifacts
+GhostChat-Android/.gradle/
+GhostChat-Android/app/build/
+GhostChat-Android/build/
+GhostChat-Android/local.properties
+GhostChat-Android/*.apk
+GhostChat-Android/**/*.apk
+GhostChat-Android/**/*.aab
+
+# Signing keys — NEVER commit
+*.jks
+*.keystore
+
+# Temp files
+2.txt
+Midjourney.html
+Midjourney_files/

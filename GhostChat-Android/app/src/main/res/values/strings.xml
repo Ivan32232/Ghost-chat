@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ghost Chat</string>
+
+    <!-- Welcome Screen -->
+    <string name="welcome_subtitle">Private messenger</string>
+    <string name="welcome_new_chat">New chat</string>
+    <string name="welcome_creating">Creating…</string>
+    <string name="welcome_or">or</string>
+    <string name="welcome_enter_code">Room code</string>
+    <string name="welcome_join">Join</string>
+    <string name="welcome_joining">Joining…</string>
+    <string name="welcome_privacy_mode">Hide IP (relay)</string>
+    <string name="welcome_footer">Messages are not stored on the server</string>
+
+    <!-- Waiting Screen -->
+    <string name="waiting_title">Waiting for peer</string>
+    <string name="waiting_copy">Copy</string>
+    <string name="waiting_share">Share</string>
+    <string name="waiting_share_link">Share the link with your peer</string>
+    <string name="waiting_cancel">Cancel</string>
+    <string name="waiting_recent_contacts">Recent contacts</string>
+    <string name="waiting_invite">Invite</string>
+    <string name="waiting_invite_confirm_title">Send invite?</string>
+    <string name="waiting_invite_confirm_message">Copy invite link for %1$s? The link will expire from clipboard in 60 seconds.</string>
+    <string name="waiting_invite_confirm_send">Copy link</string>
+
+    <!-- Connecting Screen -->
+    <string name="connecting_title">Connecting…</string>
+    <string name="connecting_subtitle">Establishing P2P connection</string>
+    <string name="connecting_cancel">Cancel</string>
+
+    <!-- Chat Screen -->
+    <string name="chat_placeholder">Message</string>
+    <string name="chat_verification_title">Security code</string>
+    <string name="chat_verification_info">Compare this code with your peer through another channel</string>
+    <string name="chat_verify">Matches</string>
+    <string name="chat_not_match">Doesn\'t match</string>
+    <string name="chat_verified">Verified</string>
+    <string name="chat_close">Close</string>
+
+    <!-- Call Screen -->
+    <string name="call_calling">Calling…</string>
+    <string name="call_unmute">Unmute</string>
+    <string name="call_mute">Mute</string>
+    <string name="call_speaker">Speaker</string>
+    <string name="call_earpiece">Earpiece</string>
+    <string name="call_end">End</string>
+    <string name="call_incoming">Incoming call</string>
+    <string name="call_accept">Accept</string>
+    <string name="call_decline">Decline</string>
+
+    <!-- System Messages -->
+    <string name="system_peer_disconnected">Peer disconnected</string>
+    <string name="system_connection_restored">Connection restored</string>
+    <string name="system_connection_lost">Connection lost</string>
+    <string name="system_secure_connection">Secure connection established</string>
+    <string name="system_tap_shield">Tap the shield to verify security codes</string>
+    <string name="system_key_exchange_error">Key exchange error</string>
+    <string name="system_screenshot_taken">⚠️ You took a screenshot</string>
+    <string name="system_decryption_error">Decryption error</string>
+    <string name="system_send_error">Send error</string>
+    <string name="system_calling">Calling…</string>
+    <string name="system_incoming_call">Incoming call…</string>
+    <string name="system_call_connected">Call connected</string>
+    <string name="system_call_declined">Call declined</string>
+    <string name="system_call_started">Call started</string>
+    <string name="system_call_ended">Call ended</string>
+    <string name="system_peer_ended_call">Peer ended the call</string>
+    <string name="system_peer_screenshot">Peer took a screenshot</string>
+    <string name="system_verified">Verified! Connection is secure.</string>
+    <string name="system_codes_do_not_match">WARNING: Codes DON\'T match! Possible attack!</string>
+    <string name="system_end_session">End the session immediately.</string>
+    <string name="system_connection_timeout">Connection failed (timeout)</string>
+    <string name="system_call_error">Call error: %1$s</string>
+    <string name="system_error">Error: %1$s</string>
+    <string name="system_security_warning">⚠️ %1$s</string>
+    <string name="system_pq_upgraded">Post-quantum protection active (ML-KEM768)</string>
+    <string name="system_incompatible_version">Incompatible protocol version. Please update Ghost Chat.</string>
+    <string name="system_known_peer">Connected: %1$s</string>
+    <string name="system_unexpected_peer">WARNING: Different identity key! Possible impersonation.</string>
+    <string name="system_peer_security_alert">⚠️ Peer: %1$s</string>
+
+    <!-- Security Monitor -->
+    <string name="security_screen_recording_active">Screen recording active</string>
+    <string name="security_screen_recording_detected">Screen recording detected</string>
+    <string name="security_bluetooth_connected">Bluetooth device connected: %1$s</string>
+    <string name="security_audio_device_removed">Audio device disconnected</string>
+
+    <!-- Deep Link -->
+    <string name="deeplink_title">Join Room?</string>
+    <string name="deeplink_join">Join</string>
+    <string name="deeplink_cancel">Cancel</string>
+    <string name="deeplink_message">Join room %1$s…?</string>
+
+    <!-- Signaling -->
+    <string name="signaling_reconnect_failed">Failed to reconnect</string>
+
+    <!-- Biometric -->
+    <string name="biometric_reason">Unlock Ghost Chat</string>
+    <string name="biometric_enable">Enable biometrics</string>
+    <string name="biometric_disable">Disable biometrics</string>
+    <string name="biometric_locked">Ghost Chat is locked</string>
+    <string name="biometric_unlock">Unlock</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_done">Done</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_section">LANGUAGE</string>
+    <string name="settings_language_current">English</string>
+    <string name="settings_security_section">SECURITY</string>
+    <string name="settings_biometric">Biometric lock</string>
+    <string name="settings_biometric_desc">Biometrics protect the app when it moves to background</string>
+    <string name="settings_privacy_mode">Privacy mode (relay)</string>
+    <string name="settings_privacy_mode_desc">Hide your IP address</string>
+    <string name="settings_screenshot_notify">Screenshot alerts</string>
+    <string name="settings_screenshot_notify_desc">Notify peer when screenshots are taken</string>
+    <string name="settings_messages_section">MESSAGES</string>
+    <string name="settings_auto_delete">Auto-delete</string>
+    <string name="settings_sounds_section">SOUNDS &amp; NOTIFICATIONS</string>
+    <string name="settings_sound">Message sound</string>
+    <string name="settings_vibration">Vibration</string>
+    <string name="settings_ringtone">Ringtone</string>
+    <string name="settings_msg_sound">Notification sound</string>
+    <string name="settings_danger_section">DATA</string>
+    <string name="settings_delete_contacts">Delete all contacts</string>
+    <string name="settings_delete_contacts_confirm">Delete all contacts?</string>
+    <string name="settings_destroy_all">Destroy everything</string>
+    <string name="settings_destroy_all_confirm">Destroy all data? This will wipe the database and reset all settings.</string>
+    <string name="settings_delete">Delete</string>
+    <string name="settings_destroy">Destroy</string>
+    <string name="settings_cancel">Cancel</string>
+
+    <!-- Contacts -->
+    <string name="contacts_title">Contacts</string>
+    <string name="contacts_empty">No contacts</string>
+    <string name="contacts_empty_hint">Contacts are saved automatically after chat sessions</string>
+    <string name="contacts_name">Name</string>
+    <string name="contacts_edit">Edit name</string>
+    <string name="contacts_save">Save</string>
+    <string name="contacts_save_title">Save contact?</string>
+    <string name="contacts_name_placeholder">Name</string>
+    <string name="contacts_save_message">Save this peer as a contact to recognize them in future sessions</string>
+    <string name="contacts_skip">Skip</string>
+    <string name="contacts_start_chat">Start chat</string>
+    <string name="contacts_details">DETAILS</string>
+    <string name="contacts_fingerprint">Fingerprint</string>
+    <string name="contacts_created">Created</string>
+    <string name="contacts_last_session">Last session</string>
+    <string name="contacts_sessions">Sessions</string>
+    <string name="contacts_key_state">Key state</string>
+    <string name="contacts_key_state_saved">Saved</string>
+    <string name="contacts_key_state_none">None</string>
+    <string name="contacts_delete">Delete contact</string>
+    <string name="contacts_delete_confirm">Delete %1$s? This will also remove saved encryption keys.</string>
+</resources>
