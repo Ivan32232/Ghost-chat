@@ -50,6 +50,7 @@
 "call.unmute" = "음소거 해제";
 "call.mute" = "음소거";
 "call.speaker" = "스피커";
+"call.audioOutput" = "오디오";
 "call.earpiece" = "수화기";
 "call.end" = "종료";
 

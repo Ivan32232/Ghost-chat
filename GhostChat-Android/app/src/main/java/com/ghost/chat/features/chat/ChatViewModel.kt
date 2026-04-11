@@ -201,6 +201,12 @@ class ChatViewModel(private val appContext: Context) : ViewModel() {
     /// Buffered "user tapped Accept in system UI" when P2P isn't ready yet.
     /// Symmetric with iOS pendingAcceptCall. Flushed from completeKeyExchange.
     private var pendingAcceptCall = false
+
+    /// HOST-side PQ deferral flag. When host sends ML-KEM encapsulation key in
+    /// key-exchange, it waits for guest's pq-exchange ciphertext before deriving
+    /// the Double Ratchet root secret (so hybrid PQ salt can be used).
+    /// Symmetric with iOS pendingPQDerivation.
+    private var pendingPQDerivation = false
     private var localFcmToken: String? = null
     private var pushAuthToken: String? = null  // Auth token for push endpoints (from TURN credentials)
 
@@ -626,6 +632,17 @@ class ChatViewModel(private val appContext: Context) : ViewModel() {
                     put("identityKey", IdentityKeyService.exportPublicKey())
                     put("v", GhostCrypto.PROTOCOL_VERSION)
                     put("platform", "android")
+                    // Post-quantum capability advertisement (symmetric with iOS)
+                    put("pqSupported", GhostCrypto.IS_PQ_AVAILABLE)
+                }
+
+                // HOST: generate ML-KEM768 encapsulation key and include in message
+                if (isHost && GhostCrypto.IS_PQ_AVAILABLE) {
+                    crypto?.generatePQKeyPair()
+                    crypto?.exportPQEncapsulationKey()?.let { pqKey ->
+                        msg.put("pqKey", pqKey)
+                        Log.d("GhostChat", "[ChatViewModel] RTC onConnected — attached ML-KEM768 encapsulation key")
+                    }
                 }
 
                 // DTLS fingerprint for transport binding (anti-MITM)
@@ -981,10 +998,40 @@ class ChatViewModel(private val appContext: Context) : ViewModel() {
             return
         }
 
+        // Post-quantum hybrid key exchange (symmetric with iOS):
+        // 1. GUEST receives host's pqKey → encapsulate → send back ciphertext → derive with hybrid salt
+        // 2. HOST defers derivation if guest advertised pqSupported, waits for pq-exchange message
+        val pqKeyFromHost = json.optString("pqKey", "")
+        if (!isHost && pqKeyFromHost.isNotEmpty()) {
+            Log.d("GhostChat", "[ChatViewModel] handleKeyExchange — GUEST: received PQ encapsulation key, encapsulating")
+            val pqCiphertext = crypto?.pqEncapsulate(pqKeyFromHost)
+            if (pqCiphertext != null) {
+                val pqMsg = JSONObject().apply {
+                    put("type", "pq-exchange")
+                    put("pqCiphertext", pqCiphertext)
+                }
+                Log.d("GhostChat", "[ChatViewModel] handleKeyExchange — GUEST: sending pq-exchange ciphertext")
+                rtc?.send(pqMsg.toString())
+            } else {
+                Log.e("GhostChat", "[ChatViewModel] handleKeyExchange — GUEST: PQ encapsulation failed, falling back to classic ECDH")
+            }
+        }
+
+        // HOST: defer derivation if PQ was offered and guest advertises support
+        if (isHost && crypto?.let { it.isPQEnabled || GhostCrypto.IS_PQ_AVAILABLE } == true) {
+            val guestSupportsPQ = json.optBoolean("pqSupported", false)
+            // Only defer if we actually generated a PQ key (host did in onConnected)
+            if (guestSupportsPQ && crypto?.exportPQEncapsulationKey() != null) {
+                pendingPQDerivation = true
+                Log.d("GhostChat", "[ChatViewModel] handleKeyExchange — HOST: deferring derivation, waiting for pq-exchange")
+                return
+            }
+        }
+
         // Derive shared key with Double Ratchet
         try {
             crypto?.deriveSharedKey(asHost = isHost)
-            Log.d("GhostChat", "[ChatViewModel] handleKeyExchange — shared key derived")
+            Log.d("GhostChat", "[ChatViewModel] handleKeyExchange — shared key derived, PQ=${crypto?.isPQEnabled}")
         } catch (e: Exception) {
             Log.e("GhostChat", "[ChatViewModel] handleKeyExchange — derive key error: ${e.message}")
             addSystemMessage(appContext.getString(com.ghost.chat.R.string.system_key_exchange_error))
@@ -993,6 +1040,38 @@ class ChatViewModel(private val appContext: Context) : ViewModel() {
 
         Log.d("GhostChat", "[ChatViewModel] handleKeyExchange — completing key exchange")
         completeKeyExchange()
+    }
+
+    /// HOST: receives PQ ciphertext from guest → decapsulate → derive keys with hybrid salt.
+    /// Symmetric with iOS handlePQExchange.
+    private fun handlePQExchange(json: JSONObject) {
+        Log.d("GhostChat", "[ChatViewModel] handlePQExchange called, isHost=$isHost, pendingPQDerivation=$pendingPQDerivation")
+        // Only HOST should process this, and only while waiting for it
+        if (!isHost || !pendingPQDerivation || keyExchangeCompleted) {
+            Log.d("GhostChat", "[ChatViewModel] handlePQExchange — ignored (isHost=$isHost, pending=$pendingPQDerivation, completed=$keyExchangeCompleted)")
+            return
+        }
+        val pqCiphertext = json.optString("pqCiphertext", "")
+        if (pqCiphertext.isEmpty()) {
+            Log.e("GhostChat", "[ChatViewModel] handlePQExchange — empty pqCiphertext")
+            return
+        }
+
+        val success = crypto?.pqDecapsulate(pqCiphertext) ?: false
+        if (!success) {
+            Log.e("GhostChat", "[ChatViewModel] handlePQExchange — decapsulation failed, falling back to classic")
+            // Proceed with classic ECDH derivation (don't block user)
+        }
+
+        try {
+            crypto?.deriveSharedKey(asHost = isHost)
+            pendingPQDerivation = false
+            Log.d("GhostChat", "[ChatViewModel] handlePQExchange — shared key derived (PQ=${crypto?.isPQEnabled}), completing exchange")
+            completeKeyExchange()
+        } catch (e: Exception) {
+            Log.e("GhostChat", "[ChatViewModel] handlePQExchange — derive key error: ${e.message}")
+            addSystemMessage(appContext.getString(com.ghost.chat.R.string.system_key_exchange_error))
+        }
     }
 
     private fun completeKeyExchange() {
@@ -1368,6 +1447,10 @@ class ChatViewModel(private val appContext: Context) : ViewModel() {
                 "key-exchange" -> {
                     Log.d("GhostChat", "[ChatViewModel] handleP2PMessage — dispatching to handleKeyExchange")
                     handleKeyExchange(json)
+                }
+                "pq-exchange" -> {
+                    Log.d("GhostChat", "[ChatViewModel] handleP2PMessage — dispatching to handlePQExchange")
+                    handlePQExchange(json)
                 }
                 "encrypted-message" -> {
                     val encryptedData = json.optString("data", "")
@@ -2552,6 +2635,20 @@ class ChatViewModel(private val appContext: Context) : ViewModel() {
         Log.d("GhostChat", "[ChatViewModel] toggleSpeaker — isSpeakerOn=$isSpeakerOn")
     }
 
+    /// Telegram-style audio route picker API
+    fun availableAudioRoutes(): List<com.ghost.chat.core.webrtc.GhostVoice.AudioRouteOption> {
+        return voice?.availableAudioRoutes() ?: emptyList()
+    }
+
+    fun selectAudioRoute(route: com.ghost.chat.core.webrtc.GhostVoice.AudioRoute) {
+        Log.d("GhostChat", "[ChatViewModel] selectAudioRoute called, route=$route")
+        val ok = voice?.selectAudioRoute(route) ?: false
+        if (ok) {
+            // Reflect in UI state so button icon updates
+            isSpeakerOn = (route == com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.SPEAKER)
+        }
+    }
+
     private fun setupVoiceCallbacks() {
         Log.d("GhostChat", "[ChatViewModel] setupVoiceCallbacks called")
         voice?.onCallTimer = { time ->
@@ -3314,6 +3411,7 @@ class ChatViewModel(private val appContext: Context) : ViewModel() {
         tokensSentToPeerThisSession = false
         isFromPush = false
         pendingAcceptCall = false
+        pendingPQDerivation = false
         peerIsNativeApp = false
         peerSupportsFiles = false
         fileTransfer.cancelAll()

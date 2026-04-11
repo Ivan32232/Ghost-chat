@@ -89,6 +89,10 @@
     <string name="system_connecting">Connecting…</string>
     <string name="system_not_connected">Not connected</string>
     <string name="system_peer_no_files">Peer does not support file transfer</string>
+    <string name="call_audio_output">Audio</string>
+    <string name="call_audio_no_devices">No audio devices available</string>
+    <string name="call_route_earpiece">Earpiece</string>
+    <string name="call_route_speaker">Speaker</string>
     <string name="system_call_connected">Call connected</string>
     <string name="system_call_declined">Call declined</string>
     <string name="system_call_started">Call started</string>

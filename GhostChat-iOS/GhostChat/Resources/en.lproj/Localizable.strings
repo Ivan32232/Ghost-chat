@@ -50,6 +50,7 @@
 "call.unmute" = "Unmute";
 "call.mute" = "Mute";
 "call.speaker" = "Speaker";
+"call.audioOutput" = "Audio";
 "call.earpiece" = "Earpiece";
 "call.end" = "End";
 

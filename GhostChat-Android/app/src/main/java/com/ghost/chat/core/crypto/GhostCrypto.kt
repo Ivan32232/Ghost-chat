@@ -6,6 +6,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMExtractor
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMGenerator
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMKeyGenerationParameters
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMKeyPairGenerator
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMParameters
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMPrivateKeyParameters
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMPublicKeyParameters
 import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.security.KeyPair
@@ -34,6 +41,13 @@ class GhostCrypto {
 
         private val ECDH_SALT = "ghost-chat-v2".toByteArray(Charsets.UTF_8)
         private val ECDH_INFO = "ghost-dr-init-secret".toByteArray(Charsets.UTF_8)
+
+        // Post-Quantum: ML-KEM768 hybrid salt marker — MUST match iOS GhostCrypto.swift
+        private val PQ_HYBRID_SALT_PREFIX = "ghost-chat-v2-pq".toByteArray(Charsets.UTF_8)
+
+        // ML-KEM768 is always available on Android (pure-Java BouncyCastle implementation).
+        // On iOS it requires iOS 26+ because CryptoKit ships with it; Android has no OS gate.
+        const val IS_PQ_AVAILABLE = true
     }
 
     // Keys
@@ -43,6 +57,13 @@ class GhostCrypto {
 
     // Double Ratchet
     private var ratchet: DoubleRatchet? = null
+
+    // Post-Quantum (ML-KEM768) — symmetric with iOS GhostCrypto.swift
+    private var pqPrivateKey: MLKEMPrivateKeyParameters? = null
+    private var pqPublicKey: MLKEMPublicKeyParameters? = null
+    private var pqSharedSecret: ByteArray? = null
+    var isPQEnabled: Boolean = false
+        private set
 
     // Counters & Replay Protection
     var messageCounter: Long = 0
@@ -73,6 +94,72 @@ class GhostCrypto {
         } catch (e: Exception) {
             Log.e("GhostChat", "[GhostCrypto] generateKeyPair FAILED: ${e.message}")
             throw e
+        }
+    }
+
+    // MARK: - Post-Quantum Key Generation (ML-KEM768)
+
+    /// HOST: generate ML-KEM768 keypair. Called before sending key-exchange message.
+    /// Symmetric with iOS generatePQKeyPair().
+    fun generatePQKeyPair() {
+        Log.d("GhostChat", "[GhostCrypto] generatePQKeyPair called")
+        try {
+            val kpg = MLKEMKeyPairGenerator()
+            kpg.init(MLKEMKeyGenerationParameters(SecureRandom(), MLKEMParameters.ml_kem_768))
+            val kp = kpg.generateKeyPair()
+            pqPublicKey = kp.public as MLKEMPublicKeyParameters
+            pqPrivateKey = kp.private as MLKEMPrivateKeyParameters
+            Log.d("GhostChat", "[GhostCrypto] generatePQKeyPair success, encapKeySize=${pqPublicKey?.encoded?.size}")
+        } catch (e: Exception) {
+            Log.e("GhostChat", "[GhostCrypto] generatePQKeyPair FAILED: ${e.message}")
+        }
+    }
+
+    /// HOST: export ML-KEM encapsulation (public) key for wire transmission.
+    fun exportPQEncapsulationKey(): String? {
+        val pub = pqPublicKey ?: return null
+        return Base64.encodeToString(pub.encoded, Base64.NO_WRAP)
+    }
+
+    /// GUEST: receive host's encapsulation key, generate shared secret, return ciphertext.
+    /// Symmetric with iOS pqEncapsulate(encapsKeyBase64).
+    /// Returns base64 ciphertext on success, null on failure.
+    fun pqEncapsulate(encapsKeyBase64: String): String? {
+        Log.d("GhostChat", "[GhostCrypto] pqEncapsulate called, keyBase64Len=${encapsKeyBase64.length}")
+        return try {
+            val encapsKeyBytes = Base64.decode(encapsKeyBase64, Base64.NO_WRAP)
+            val encapsKey = MLKEMPublicKeyParameters(MLKEMParameters.ml_kem_768, encapsKeyBytes)
+            val generator = MLKEMGenerator(SecureRandom())
+            val encResult = generator.generateEncapsulated(encapsKey)
+            pqSharedSecret = encResult.secret
+            isPQEnabled = true
+            Log.d("GhostChat", "[GhostCrypto] pqEncapsulate success, ctSize=${encResult.encapsulation.size}, secretSize=${encResult.secret.size}")
+            Base64.encodeToString(encResult.encapsulation, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            Log.e("GhostChat", "[GhostCrypto] pqEncapsulate FAILED: ${e.message}")
+            null
+        }
+    }
+
+    /// HOST: receive guest's ciphertext, decapsulate to recover shared secret.
+    /// Symmetric with iOS pqDecapsulate(ciphertextBase64).
+    fun pqDecapsulate(ciphertextBase64: String): Boolean {
+        Log.d("GhostChat", "[GhostCrypto] pqDecapsulate called, ctBase64Len=${ciphertextBase64.length}")
+        val priv = pqPrivateKey ?: run {
+            Log.e("GhostChat", "[GhostCrypto] pqDecapsulate FAILED — no private key")
+            return false
+        }
+        return try {
+            val ctBytes = Base64.decode(ciphertextBase64, Base64.NO_WRAP)
+            val extractor = MLKEMExtractor(priv)
+            val secret = extractor.extractSecret(ctBytes)
+            pqSharedSecret = secret
+            isPQEnabled = true
+            Log.d("GhostChat", "[GhostCrypto] pqDecapsulate success, secretSize=${secret.size}")
+            true
+        } catch (e: Exception) {
+            Log.e("GhostChat", "[GhostCrypto] pqDecapsulate FAILED: ${e.message}")
+            false
         }
     }
 
@@ -121,9 +208,23 @@ class GhostCrypto {
         val sharedSecret = DoubleRatchet.ecdh(priv, peer)
         Log.d("GhostChat", "[GhostCrypto] deriveSharedKey — ECDH complete, secretSize=${sharedSecret.size}")
 
+        // Hybrid PQ salt: "ghost-chat-v2-pq" + pqSharedSecret (matches iOS).
+        // When PQ is not available, fall back to classic "ghost-chat-v2" salt.
+        val salt: ByteArray = if (pqSharedSecret != null) {
+            val pqSS = pqSharedSecret!!
+            val hybrid = ByteArray(PQ_HYBRID_SALT_PREFIX.size + pqSS.size)
+            System.arraycopy(PQ_HYBRID_SALT_PREFIX, 0, hybrid, 0, PQ_HYBRID_SALT_PREFIX.size)
+            System.arraycopy(pqSS, 0, hybrid, PQ_HYBRID_SALT_PREFIX.size, pqSS.size)
+            Log.d("GhostChat", "[GhostCrypto] deriveSharedKey — using HYBRID PQ salt, size=${hybrid.size}")
+            hybrid
+        } else {
+            Log.d("GhostChat", "[GhostCrypto] deriveSharedKey — using classic ECDH salt")
+            ECDH_SALT
+        }
+
         // Derive root symmetric key from ECDH shared secret
         Log.d("GhostChat", "[GhostCrypto] deriveSharedKey — deriving root key via HKDF")
-        val rootSecret = DoubleRatchet.hkdf(sharedSecret, ECDH_SALT, ECDH_INFO, 32)
+        val rootSecret = DoubleRatchet.hkdf(sharedSecret, salt, ECDH_INFO, 32)
         Log.d("GhostChat", "[GhostCrypto] deriveSharedKey — HKDF complete, rootSecretSize=${rootSecret.size}")
 
         // Initialize Double Ratchet
@@ -459,6 +560,12 @@ class GhostCrypto {
         messageCounter = 0
         peerMessageCounter = 0
         sendChainReady = null
+        // Zero out post-quantum material
+        pqSharedSecret?.fill(0)
+        pqSharedSecret = null
+        pqPrivateKey = null
+        pqPublicKey = null
+        isPQEnabled = false
         Log.d("GhostChat", "[GhostCrypto] destroy complete — all keys zeroed")
     }
 

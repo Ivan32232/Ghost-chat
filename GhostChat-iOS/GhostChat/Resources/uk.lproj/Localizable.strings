@@ -50,6 +50,7 @@
 "call.unmute" = "Увімкнути мікрофон";
 "call.mute" = "Вимкнути мікрофон";
 "call.speaker" = "Динамік";
+"call.audioOutput" = "Звук";
 "call.earpiece" = "Навушник";
 "call.end" = "Завершити";
 

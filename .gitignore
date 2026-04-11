@@ -52,6 +52,23 @@ GoogleService-Info.plist
 *.apk
 client/GhostChat.apk
 
+# Collected debug logs — pulled from devices, may contain user data
+all-logs-*.log
+logs/
+
+# Test artifacts
+test-results/
+playwright-report/
+blob-report/
+
+# Scratch / temp text files
+1.txt
+2.txt
+
+# Old .bak directories
+*.bak
+ghost-chat.bak/
+
 # Temp files
 2.txt
 Midjourney.html

@@ -50,6 +50,7 @@
 "call.unmute" = "Вкл. микрофон";
 "call.mute" = "Выкл. микрофон";
 "call.speaker" = "Динамик";
+"call.audioOutput" = "Звук";
 "call.earpiece" = "На ухо";
 "call.end" = "Завершить";
 

@@ -127,15 +127,29 @@ fun ChatScreen(
         if (viewModel.callState == ChatViewModel.CallUIState.CALLING ||
             viewModel.callState == ChatViewModel.CallUIState.ACTIVE
         ) {
+            var showAudioRoutePicker by remember { mutableStateOf(false) }
             ActiveCallBanner(
                 timer = viewModel.callTimer,
                 isMuted = viewModel.isMuted,
                 isSpeakerOn = viewModel.isSpeakerOn,
                 isActive = viewModel.callState == ChatViewModel.CallUIState.ACTIVE,
                 onToggleMute = { Log.d("GhostChat", "[UI] Toggle mute button tapped, currentMuted=${viewModel.isMuted}"); viewModel.toggleMute() },
-                onToggleSpeaker = { Log.d("GhostChat", "[UI] Toggle speaker button tapped, currentSpeaker=${viewModel.isSpeakerOn}"); viewModel.toggleSpeaker() },
+                onToggleSpeaker = {
+                    Log.d("GhostChat", "[UI] Audio route button tapped")
+                    showAudioRoutePicker = true
+                },
                 onEndCall = { Log.d("GhostChat", "[UI] End call button tapped"); viewModel.endCall() }
             )
+            if (showAudioRoutePicker) {
+                AudioRoutePickerDialog(
+                    routes = viewModel.availableAudioRoutes(),
+                    onSelect = { route ->
+                        viewModel.selectAudioRoute(route)
+                        showAudioRoutePicker = false
+                    },
+                    onDismiss = { showAudioRoutePicker = false }
+                )
+            }
         }
 
         // Save contact prompt
@@ -1330,6 +1344,81 @@ private fun SaveContactDialog(
         },
         dismissButton = {
             TextButton(onClick = { Log.d("GhostChat", "[UI] SaveContact dismiss button tapped"); onDismiss() }) {
+                Text(stringResource(R.string.chat_close), color = GhostGray)
+            }
+        },
+        containerColor = GhostSurface
+    )
+}
+
+/// Telegram-style audio route picker — dialog listing all available output devices
+/// (earpiece, speaker, bluetooth headset, wired headset) with the active one highlighted.
+@Composable
+private fun AudioRoutePickerDialog(
+    routes: List<com.ghost.chat.core.webrtc.GhostVoice.AudioRouteOption>,
+    onSelect: (com.ghost.chat.core.webrtc.GhostVoice.AudioRoute) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.call_audio_output), color = GhostWhite) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (routes.isEmpty()) {
+                    Text(stringResource(R.string.call_audio_no_devices), color = GhostGray)
+                } else {
+                    routes.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    Log.d("GhostChat", "[UI] AudioRoutePicker selected route=${option.route}")
+                                    onSelect(option.route)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val icon = when (option.route) {
+                                com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.EARPIECE -> Icons.Default.Phone
+                                com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.SPEAKER -> Icons.Default.VolumeUp
+                                com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.BLUETOOTH -> Icons.Default.Bluetooth
+                                com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.WIRED_HEADSET -> Icons.Default.Headset
+                            }
+                            val label = when (option.route) {
+                                com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.EARPIECE -> stringResource(R.string.call_route_earpiece)
+                                com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.SPEAKER -> stringResource(R.string.call_route_speaker)
+                                com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.BLUETOOTH -> option.name
+                                com.ghost.chat.core.webrtc.GhostVoice.AudioRoute.WIRED_HEADSET -> option.name
+                            }
+                            Icon(
+                                icon,
+                                contentDescription = label,
+                                tint = if (option.isActive) GhostAccent else GhostWhite,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text(
+                                label,
+                                color = if (option.isActive) GhostAccent else GhostWhite,
+                                fontSize = 15.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (option.isActive) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = GhostAccent,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.chat_close), color = GhostGray)
             }
         },

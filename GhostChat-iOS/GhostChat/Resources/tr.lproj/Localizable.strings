@@ -50,6 +50,7 @@
 "call.unmute" = "Sesi aç";
 "call.mute" = "Sessize al";
 "call.speaker" = "Hoparlör";
+"call.audioOutput" = "Ses";
 "call.earpiece" = "Kulaklık";
 "call.end" = "Sonlandır";
 

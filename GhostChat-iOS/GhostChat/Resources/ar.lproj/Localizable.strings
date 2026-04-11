@@ -50,6 +50,7 @@
 "call.unmute" = "إلغاء كتم الصوت";
 "call.mute" = "كتم الصوت";
 "call.speaker" = "مكبر الصوت";
+"call.audioOutput" = "الصوت";
 "call.earpiece" = "سماعة الأذن";
 "call.end" = "إنهاء";
 

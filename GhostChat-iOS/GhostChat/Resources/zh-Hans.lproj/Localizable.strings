@@ -50,6 +50,7 @@
 "call.unmute" = "取消静音";
 "call.mute" = "静音";
 "call.speaker" = "扬声器";
+"call.audioOutput" = "音频";
 "call.earpiece" = "听筒";
 "call.end" = "结束";
 

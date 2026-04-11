@@ -50,6 +50,7 @@
 "call.unmute" = "Riattiva audio";
 "call.mute" = "Disattiva audio";
 "call.speaker" = "Altoparlante";
+"call.audioOutput" = "Audio";
 "call.earpiece" = "Auricolare";
 "call.end" = "Fine";
 

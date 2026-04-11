@@ -1,4 +1,21 @@
 import SwiftUI
+import AVKit
+import UIKit
+
+/// Telegram-style audio output route picker.
+/// Wraps AVRoutePickerView so the user can pick between earpiece / speaker /
+/// Bluetooth headset / AirPods from a system sheet — same UX as Telegram.
+private struct AudioRoutePickerButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let view = AVRoutePickerView()
+        view.activeTintColor = .white
+        view.tintColor = .white
+        view.backgroundColor = .clear
+        view.prioritizesVideoDevices = false
+        return view
+    }
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}
 
 /// Overlay активного звонка
 struct CallView: View {
@@ -46,19 +63,24 @@ struct CallView: View {
                         .foregroundStyle(.gray)
                 }
 
-                // Speaker
+                // Audio output route — Telegram-style picker
+                // System AVRoutePickerView shows all available outputs (earpiece,
+                // speaker, Bluetooth headsets, AirPods, CarPlay).
                 VStack(spacing: 8) {
-                    Button {
-                        viewModel.toggleSpeaker()
-                    } label: {
-                        Image(systemName: viewModel.isSpeakerOn ? "speaker.wave.3.fill" : "speaker.fill")
-                            .font(.title)
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.15))
                             .frame(width: 72, height: 72)
-                            .background(viewModel.isSpeakerOn ? Color(white: 0.88).opacity(0.3) : Color.white.opacity(0.15))
-                            .clipShape(Circle())
+                        // Visual icon layer — AVRoutePickerView receives the tap
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.title)
                             .foregroundStyle(.white)
+                            .allowsHitTesting(false)
+                        AudioRoutePickerButton()
+                            .frame(width: 72, height: 72)
+                            .clipShape(Circle())
                     }
-                    Text(LocalizedStringKey(viewModel.isSpeakerOn ? "call.speaker" : "call.earpiece"))
+                    Text("call.audioOutput")
                         .font(.caption)
                         .foregroundStyle(.gray)
                 }

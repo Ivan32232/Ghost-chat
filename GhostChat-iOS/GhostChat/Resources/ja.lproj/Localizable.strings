@@ -50,6 +50,7 @@
 "call.unmute" = "ミュート解除";
 "call.mute" = "ミュート";
 "call.speaker" = "スピーカー";
+"call.audioOutput" = "音声";
 "call.earpiece" = "受話器";
 "call.end" = "終了";
 
