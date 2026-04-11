@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "dev": "node --watch server/index.js",
+    "test": "node --test server/test.js",
+    "test:e2e": "npx playwright test",
+    "test:all": "node --test server/test.js && npx playwright test"
   },
   "keywords": [
     "encryption",
@@ -20,5 +23,9 @@
   "license": "MIT",
   "dependencies": {
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "playwright": "^1.58.2"
   }
 }

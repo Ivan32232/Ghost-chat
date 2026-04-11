@@ -9,9 +9,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,8 +24,6 @@ import androidx.compose.ui.unit.sp
 import com.ghost.chat.R
 import com.ghost.chat.models.Contact
 import com.ghost.chat.ui.theme.*
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 @Composable
 fun ContactsScreen(
@@ -33,11 +31,42 @@ fun ContactsScreen(
     onBack: () -> Unit,
     onStartChat: (Contact) -> Unit
 ) {
-    var editingContact by remember { mutableStateOf<Contact?>(null) }
-    var editName by remember { mutableStateOf("") }
-    var deletingContact by remember { mutableStateOf<Contact?>(null) }
+    var selectedContact by remember { mutableStateOf<Contact?>(null) }
 
     LaunchedEffect(Unit) { viewModel.loadContacts() }
+
+    // Navigation: detail or list
+    val contact = selectedContact
+    if (contact != null) {
+        ContactDetailScreen(
+            contact = contact,
+            viewModel = viewModel,
+            onBack = {
+                viewModel.loadContacts()
+                selectedContact = null
+            },
+            onStartChat = onStartChat
+        )
+    } else {
+        ContactsListScreen(
+            viewModel = viewModel,
+            onBack = onBack,
+            onContactClick = { selectedContact = it }
+        )
+    }
+}
+
+@Composable
+private fun ContactsListScreen(
+    viewModel: ContactsViewModel,
+    onBack: () -> Unit,
+    onContactClick: (Contact) -> Unit
+) {
+    var searchText by remember { mutableStateOf("") }
+    val filteredContacts = remember(viewModel.contacts.toList(), searchText) {
+        if (searchText.isBlank()) viewModel.contacts.toList()
+        else viewModel.contacts.filter { it.label.contains(searchText, ignoreCase = true) }
+    }
 
     Column(
         modifier = Modifier
@@ -53,7 +82,7 @@ fun ContactsScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GhostBlue)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GhostWhite)
             }
             Text(
                 stringResource(R.string.contacts_title),
@@ -63,16 +92,53 @@ fun ContactsScreen(
             )
         }
 
+        // Search bar
+        if (viewModel.contacts.isNotEmpty()) {
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = { searchText = it },
+                placeholder = { Text(stringResource(R.string.contacts_search), color = GhostGray) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = GhostGray) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = GhostGrayLight,
+                    unfocusedBorderColor = GhostGrayLight,
+                    focusedTextColor = GhostWhite,
+                    unfocusedTextColor = GhostWhite,
+                    cursorColor = GhostAccent
+                ),
+                singleLine = true
+            )
+        }
+
         if (viewModel.contacts.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    stringResource(R.string.contacts_empty),
-                    color = GhostGray,
-                    fontSize = 16.sp
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        tint = GhostGray.copy(alpha = 0.4f),
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        stringResource(R.string.contacts_empty),
+                        color = GhostGray,
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.contacts_empty_hint),
+                        color = GhostGray.copy(alpha = 0.6f),
+                        fontSize = 12.sp
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -80,86 +146,22 @@ fun ContactsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(viewModel.contacts, key = { it.id }) { contact ->
+                items(filteredContacts, key = { it.id }) { contact ->
                     ContactRow(
                         contact = contact,
-                        onClick = { onStartChat(contact) },
-                        onEdit = {
-                            editingContact = contact
-                            editName = contact.label
-                        },
-                        onDelete = { deletingContact = contact }
+                        onClick = { onContactClick(contact) }
                     )
                 }
             }
         }
-    }
-
-    // Edit dialog
-    editingContact?.let { contact ->
-        AlertDialog(
-            onDismissRequest = { editingContact = null },
-            title = { Text(stringResource(R.string.contacts_edit), color = GhostWhite) },
-            text = {
-                OutlinedTextField(
-                    value = editName,
-                    onValueChange = { editName = it },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GhostBlue,
-                        unfocusedBorderColor = GhostGrayLight,
-                        focusedTextColor = GhostWhite,
-                        unfocusedTextColor = GhostWhite,
-                        cursorColor = GhostBlue
-                    ),
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.updateLabel(contact, editName)
-                    editingContact = null
-                }) { Text(stringResource(R.string.contacts_save), color = GhostBlue) }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingContact = null }) {
-                    Text(stringResource(R.string.settings_cancel), color = GhostGray)
-                }
-            },
-            containerColor = GhostSurface
-        )
-    }
-
-    // Delete dialog
-    deletingContact?.let { contact ->
-        AlertDialog(
-            onDismissRequest = { deletingContact = null },
-            title = { Text(stringResource(R.string.contacts_delete), color = GhostWhite) },
-            text = { Text(stringResource(R.string.contacts_delete_confirm, contact.label), color = GhostGray) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteContact(contact)
-                    deletingContact = null
-                }) { Text(stringResource(R.string.settings_delete), color = GhostRed) }
-            },
-            dismissButton = {
-                TextButton(onClick = { deletingContact = null }) {
-                    Text(stringResource(R.string.settings_cancel), color = GhostGray)
-                }
-            },
-            containerColor = GhostSurface
-        )
     }
 }
 
 @Composable
 private fun ContactRow(
     contact: Contact,
-    onClick: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onClick: () -> Unit
 ) {
-    val dateFormat = remember { SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()) }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -173,38 +175,53 @@ private fun ContactRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar
+            // Colored avatar from identity key hash
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
-                    .background(GhostSurfaceLight),
+                    .background(avatarColor(contact.identityKey)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = GhostGray, modifier = Modifier.size(24.dp))
+                Text(
+                    text = contact.label.take(1).uppercase(),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = GhostWhite
+                )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             // Info
             Column(modifier = Modifier.weight(1f)) {
                 Text(contact.label, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = GhostWhite)
-                val sessions = contact.sessionCount
-                val lastDate = contact.lastSessionAt?.let { dateFormat.format(it) } ?: ""
-                Text(
-                    "$sessions sessions" + if (lastDate.isNotEmpty()) " · $lastDate" else "",
-                    fontSize = 12.sp,
-                    color = GhostGray
-                )
             }
 
-            // Actions
-            IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = GhostGray, modifier = Modifier.size(18.dp))
+            // Session count badge
+            if (contact.sessionCount > 0) {
+                Text(
+                    text = "${contact.sessionCount}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GhostWhite.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .background(GhostSurfaceLight, RoundedCornerShape(50))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
             }
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = GhostRed, modifier = Modifier.size(18.dp))
+
+            // Lock icon for saved keys
+            if (contact.ratchetState != null) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = GhostGreen.copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
 }
+

@@ -1,9 +1,7 @@
 package com.ghost.chat.core.security
 
-import android.content.BroadcastReceiver
+import android.app.Activity
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -13,7 +11,7 @@ import android.os.Looper
 import android.view.WindowManager
 
 /// Security monitoring — port of iOS SecurityMonitor
-/// Detects: screen capture, audio device changes
+/// Detects: screen capture (API 34+), audio device changes
 class SecurityMonitor(private val context: Context) {
 
     var onSecurityAlert: ((String) -> Unit)? = null
@@ -27,38 +25,55 @@ class SecurityMonitor(private val context: Context) {
     private val audioManager: AudioManager? =
         context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
-    // Screen capture broadcast
-    private var screenCaptureReceiver: BroadcastReceiver? = null
+    // Screen capture (API 34+)
+    private var screenCaptureCallback: Any? = null  // Activity.ScreenCaptureCallback
+    private var activityRef: Activity? = null
 
     fun start() {
         startAudioDeviceMonitoring()
-        startScreenCaptureDetection()
+    }
+
+    /// Register screen capture detection — requires Activity (not just Context)
+    /// Call from MainActivity/Activity after SecurityMonitor is created
+    fun registerScreenCaptureDetection(activity: Activity) {
+        activityRef = activity
+        startScreenCaptureDetection(activity)
     }
 
     fun stop() {
         stopAudioDeviceMonitoring()
         stopScreenCaptureDetection()
         onSecurityAlert = null
+        activityRef = null
     }
 
-    // MARK: - Screen Capture Detection
+    // MARK: - Screen Capture Detection (API 34+)
 
-    private fun startScreenCaptureDetection() {
-        // FLAG_SECURE prevents screenshots/screen recording
-        // Applied in MainActivity — this just monitors for bypass attempts
-
-        // On Android 14+, we can detect screen sharing/recording
+    private fun startScreenCaptureDetection(activity: Activity) {
+        // FLAG_SECURE is applied in MainActivity (primary defense)
+        // On Android 14+ (API 34), we also get real-time callbacks for screen capture
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14 has native screen capture callback
-            // For now, FLAG_SECURE is our primary defense
+            val callback = Activity.ScreenCaptureCallback {
+                fireAlert("screen-capture-detected")
+            }
+            screenCaptureCallback = callback
+            val mainExecutor = java.util.concurrent.Executor { command ->
+                mainHandler.post(command)
+            }
+            activity.registerScreenCaptureCallback(mainExecutor, callback)
         }
     }
 
     private fun stopScreenCaptureDetection() {
-        screenCaptureReceiver?.let {
-            try { context.unregisterReceiver(it) } catch (_: Exception) {}
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val callback = screenCaptureCallback as? Activity.ScreenCaptureCallback
+            if (callback != null) {
+                try {
+                    activityRef?.unregisterScreenCaptureCallback(callback)
+                } catch (_: Exception) {}
+            }
         }
-        screenCaptureReceiver = null
+        screenCaptureCallback = null
     }
 
     // MARK: - Audio Device Monitoring
@@ -120,9 +135,31 @@ class SecurityMonitor(private val context: Context) {
         mainHandler.post { onSecurityAlert?.invoke(alertType) }
     }
 
+    /** Detect rooted/compromised device (su binaries, Magisk, test-keys) */
+    fun isDeviceRooted(): Boolean {
+        val paths = arrayOf(
+            "/system/app/Superuser.apk", "/sbin/su", "/system/bin/su",
+            "/system/xbin/su", "/data/local/xbin/su", "/data/local/bin/su",
+            "/system/sd/xbin/su", "/system/bin/failsafe/su", "/data/local/su",
+            "/su/bin/su", "/system/app/SuperSU.apk"
+        )
+        for (path in paths) {
+            if (java.io.File(path).exists()) return true
+        }
+        // Check for Magisk
+        try {
+            Runtime.getRuntime().exec("su")
+            return true
+        } catch (_: Exception) {}
+        // Check build tags
+        val buildTags = Build.TAGS
+        if (buildTags != null && buildTags.contains("test-keys")) return true
+        return false
+    }
+
     companion object {
         /** Apply FLAG_SECURE to prevent screenshots/screen recording */
-        fun applyFlagSecure(activity: android.app.Activity) {
+        fun applyFlagSecure(activity: Activity) {
             activity.window.setFlags(
                 WindowManager.LayoutParams.FLAG_SECURE,
                 WindowManager.LayoutParams.FLAG_SECURE

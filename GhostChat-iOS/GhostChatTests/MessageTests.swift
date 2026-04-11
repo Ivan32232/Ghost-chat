@@ -1,5 +1,5 @@
 import XCTest
-@testable import GhostChat
+@testable import Ghost_chat
 
 /// Тесты padding и моделей сообщений
 final class MessageTests: XCTestCase {

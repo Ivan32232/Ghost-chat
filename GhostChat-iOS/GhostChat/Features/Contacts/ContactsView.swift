@@ -4,7 +4,19 @@ import SwiftUI
 struct ContactsView: View {
     @StateObject private var viewModel = ContactsViewModel()
     let onStartChat: (Contact) -> Void
+    let onCallContact: ((Contact) -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+
+    init(onStartChat: @escaping (Contact) -> Void, onCallContact: ((Contact) -> Void)? = nil) {
+        self.onStartChat = onStartChat
+        self.onCallContact = onCallContact
+    }
+
+    private var filteredContacts: [Contact] {
+        guard !searchText.isEmpty else { return viewModel.contacts }
+        return viewModel.contacts.filter { $0.label.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -17,6 +29,7 @@ struct ContactsView: View {
             }
             .navigationTitle("contacts.title")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: Text("settings.language.search"))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -32,6 +45,9 @@ struct ContactsView: View {
             .background(Color(white: 0.07))
         }
         .task {
+            viewModel.loadContacts()
+        }
+        .refreshable {
             viewModel.loadContacts()
         }
     }
@@ -61,7 +77,7 @@ struct ContactsView: View {
 
     private var contactList: some View {
         List {
-            ForEach(viewModel.contacts) { contact in
+            ForEach(filteredContacts) { contact in
                 NavigationLink {
                     ContactDetailView(
                         contact: contact,
@@ -69,6 +85,12 @@ struct ContactsView: View {
                         onStartChat: { saved in
                             onStartChat(saved)
                             dismiss()
+                        },
+                        onCallContact: onCallContact.map { callback in
+                            { saved in
+                                callback(saved)
+                                dismiss()
+                            }
                         }
                     )
                 } label: {
@@ -78,7 +100,8 @@ struct ContactsView: View {
             }
             .onDelete { indexSet in
                 for index in indexSet {
-                    viewModel.deleteContact(viewModel.contacts[index])
+                    let contact = filteredContacts[index]
+                    viewModel.deleteContact(contact)
                 }
             }
         }
@@ -92,9 +115,9 @@ struct ContactRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            // Аватар
+            // Аватар с уникальным цветом
             Circle()
-                .fill(Color.white.opacity(0.1))
+                .fill(avatarColor(for: contact))
                 .frame(width: 44, height: 44)
                 .overlay {
                     Text(String(contact.label.prefix(1)).uppercased())
@@ -108,11 +131,6 @@ struct ContactRow: View {
                     .foregroundStyle(.white)
                     .font(.body)
 
-                if let lastSession = contact.lastSessionAt {
-                    Text(lastSession, style: .relative)
-                        .font(.caption)
-                        .foregroundStyle(.gray)
-                }
             }
 
             Spacer()
@@ -136,4 +154,18 @@ struct ContactRow: View {
         }
         .padding(.vertical, 4)
     }
+}
+
+// MARK: - Avatar Color
+
+/// Детерминистичный цвет аватара по identity key
+func avatarColor(for contact: Contact) -> Color {
+    let hash = contact.identityKey.hashValue
+    let colors: [Color] = [
+        .red.opacity(0.4), .orange.opacity(0.4), .yellow.opacity(0.4),
+        .green.opacity(0.4), .mint.opacity(0.4), .teal.opacity(0.4),
+        .cyan.opacity(0.4), .blue.opacity(0.4), .indigo.opacity(0.4),
+        .purple.opacity(0.4), .pink.opacity(0.4)
+    ]
+    return colors[abs(hash) % colors.count]
 }

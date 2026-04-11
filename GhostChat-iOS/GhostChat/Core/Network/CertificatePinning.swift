@@ -2,25 +2,25 @@ import Foundation
 import CommonCrypto
 import Security
 
-/// M1: Real SPKI (Subject Public Key Info) certificate pinning for gbskgs.xyz
+/// M1: Real SPKI (Subject Public Key Info) certificate pinning for ghostchat.one
 /// Extracts the server certificate's public key, hashes it with SHA-256,
 /// and compares against pinned hashes. Rejects connections if no match.
 enum CertificatePinning {
 
-    private static let pinnedHost = "gbskgs.xyz"
+    private static let pinnedHost = "ghostchat.one"
 
     /// SHA-256 hashes of pinned SPKI (base64-encoded)
     /// Update with:
-    ///   openssl s_client -connect gbskgs.xyz:443 </dev/null 2>/dev/null \
+    ///   openssl s_client -connect ghostchat.one:443 </dev/null 2>/dev/null \
     ///     | openssl x509 -pubkey -noout \
     ///     | openssl pkey -pubin -outform der \
     ///     | openssl dgst -sha256 -binary | base64
     ///
     /// Multiple hashes allow leaf rotation without downtime — pin both current and backup.
     private static let pinnedSPKIHashes: Set<String> = [
-        // Let's Encrypt E7 (current leaf, expires ~May 2026)
-        "uv4xkRztclgAjr/9IS7cNxGemBFTB6ekFqIQ+EKcqc0=",
-        // Let's Encrypt ISRG Root X1 (backup — root CA, long-lived)
+        // Let's Encrypt E7 intermediate CA (valid until ~2027, survives leaf rotation)
+        "y7xVm0TVJNahMr2sZydE2jQH8SquXV9yLF9seROHHHU=",
+        // ISRG Root X1 (backup — root CA, long-lived)
         "C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=",
     ]
 

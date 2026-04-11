@@ -92,10 +92,15 @@ export class GhostVoice {
       await this.initializeAudio();
 
       // Добавляем аудио треки к существующему PeerConnection
-      this.localStream.getAudioTracks().forEach(track => {
+      // Reuse existing sender if available (prevents transceiver accumulation)
+      const track = this.localStream.getAudioTracks()[0];
+      if (this.audioSender) {
+        await this.audioSender.replaceTrack(track);
+        logger.log('Audio track replaced on existing sender');
+      } else {
         this.audioSender = this.peerConnection.addTrack(track, this.localStream);
         logger.log('Audio track added to PeerConnection');
-      });
+      }
 
       // Запускаем мониторинг безопасности
       this.startSecurityMonitoring();
@@ -123,10 +128,15 @@ export class GhostVoice {
     try {
       await this.initializeAudio();
 
-      this.localStream.getAudioTracks().forEach(track => {
+      // Reuse existing sender if available (prevents transceiver accumulation)
+      const track = this.localStream.getAudioTracks()[0];
+      if (this.audioSender) {
+        await this.audioSender.replaceTrack(track);
+        logger.log('Audio track replaced (accepting call)');
+      } else {
         this.audioSender = this.peerConnection.addTrack(track, this.localStream);
         logger.log('Audio track added (accepting call)');
-      });
+      }
 
       this.startSecurityMonitoring();
 
@@ -152,15 +162,13 @@ export class GhostVoice {
   handleRemoteTrack(event) {
     if (event.track.kind === 'audio') {
       logger.log('Remote audio track received');
-      this.remoteStream = event.streams[0];
+      // Some browsers don't include streams — create one from the track
+      this.remoteStream = (event.streams && event.streams[0])
+        ? event.streams[0]
+        : new MediaStream([event.track]);
 
       if (this.onRemoteStream) {
         this.onRemoteStream(this.remoteStream);
-      }
-
-      // Если звонок активен, обновляем состояние
-      if (this.isInCall && this.onCallStateChange) {
-        this.onCallStateChange('active');
       }
     }
   }
@@ -196,6 +204,7 @@ export class GhostVoice {
    * Таймер звонка
    */
   startCallTimer() {
+    this.stopCallTimer(); // Prevent interval leak from double calls
     this.callTimerInterval = setInterval(() => {
       if (this.callStartTime && this.onCallTimer) {
         const elapsed = Math.floor((Date.now() - this.callStartTime) / 1000);
@@ -240,21 +249,23 @@ export class GhostVoice {
 
   /**
    * Завершить звонок - безопасная очистка
+   * Keeps audioSender alive for reuse in subsequent calls (prevents transceiver accumulation)
    */
   endCall() {
+    if (!this.isInCall) return; // Prevent double cleanup (destroy() also calls endCall)
     logger.log('Ending call...');
 
     this.stopCallTimer();
     this.stopSecurityMonitoring();
 
-    // Удаляем track из PeerConnection
-    if (this.audioSender && this.peerConnection) {
+    // Mute the sender instead of removing it — keeps transceiver alive for reuse
+    if (this.audioSender) {
       try {
-        this.peerConnection.removeTrack(this.audioSender);
+        this.audioSender.replaceTrack(null);
       } catch (e) {
-        logger.log('Track already removed');
+        logger.log('replaceTrack(null) failed:', e);
       }
-      this.audioSender = null;
+      // Keep audioSender reference for next call's replaceTrack()
     }
 
     // Останавливаем и очищаем локальный stream
@@ -298,7 +309,16 @@ export class GhostVoice {
     }
 
     this.remoteStream = null;
-    this.audioSender = null;
+
+    // Mute the sender instead of removing — keeps transceiver for reuse
+    if (this.audioSender) {
+      try {
+        this.audioSender.replaceTrack(null);
+      } catch (e) {
+        // PeerConnection may already be closed
+      }
+    }
+    // Keep audioSender reference for reuse
     this.isInCall = false;
     this.isMuted = false;
   }
@@ -325,10 +345,20 @@ export class GhostVoice {
   }
 
   /**
-   * Полное уничтожение
+   * Полное уничтожение (PeerConnection is being closed)
    */
   destroy() {
     this.endCall();
+
+    // Full cleanup: actually remove track since PeerConnection is being destroyed
+    if (this.audioSender && this.peerConnection) {
+      try {
+        this.peerConnection.removeTrack(this.audioSender);
+      } catch (e) {
+        // PeerConnection may already be closed
+      }
+    }
+    this.audioSender = null;
 
     this.securityMonitor.destroy();
 

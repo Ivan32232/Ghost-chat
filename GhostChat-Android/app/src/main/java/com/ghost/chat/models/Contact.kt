@@ -12,6 +12,9 @@ data class Contact(
     var previousKey: ByteArray? = null,
     var fallbackKey: ByteArray? = null,
     var pushToken: ByteArray? = null,
+    var notifyToken: ByteArray? = null,
+    var notes: String? = null,
+    var messageTTL: Int? = null,    // Per-contact message TTL in seconds (null = global setting)
     var rotationCounter: Int = 0,
     var sessionCount: Int = 0,
     val createdAt: Date = Date(),

@@ -150,10 +150,12 @@ final class DoubleRatchet {
     /// Called after initial ECDH key exchange
     /// - Parameters:
     ///   - sharedSecret: The ECDH shared secret from initial key exchange
-    init(asResponder sharedSecret: SymmetricKey) {
-        // Generate our first DH ratchet key pair
-        let dhKey = P256.KeyAgreement.PrivateKey()
-        self.dhSending = dhKey
+    ///   - initialKeyPair: The ECDH keypair used during key exchange (MUST reuse, not generate fresh)
+    init(asResponder sharedSecret: SymmetricKey, initialKeyPair: P256.KeyAgreement.PrivateKey) {
+        // Reuse the ECDH keypair — peer already knows this public key from key-exchange
+        // Generating a fresh key here would break protocol: the initiator expects
+        // the responder's first DH ratchet key to match the key-exchange public key
+        self.dhSending = initialKeyPair
         self.dhReceiving = nil
 
         // Derive initial root key from shared secret
@@ -355,11 +357,12 @@ final class DoubleRatchet {
         receiveChainKey = currentCK
         receiveMessageNumber = currentN
 
-        // Enforce max skip limit by removing oldest
+        // Enforce max skip limit — remove by lowest messageNumber (deterministic order)
         while skippedKeys.count > Self.maxSkip {
-            // Remove arbitrary oldest entry
-            if let firstKey = skippedKeys.keys.first {
-                skippedKeys.removeValue(forKey: firstKey)
+            if let oldestKey = skippedKeys.keys.min(by: { $0.messageNumber < $1.messageNumber }) {
+                skippedKeys.removeValue(forKey: oldestKey)
+            } else {
+                break
             }
         }
     }
@@ -491,6 +494,10 @@ final class DoubleRatchet {
         nextSendHeaderKey = nil
         nextReceiveHeaderKey = nil
         dhReceiving = nil
+        // Overwrite root key with zeros — rootKey allows deriving all future keys
+        rootKey = SymmetricKey(data: Data(repeating: 0, count: 32))
+        // Generate throwaway DH key to overwrite sending private key
+        dhSending = P256.KeyAgreement.PrivateKey()
     }
 }
 

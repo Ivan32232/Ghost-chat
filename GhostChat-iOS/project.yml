@@ -9,6 +9,18 @@ options:
   knownRegions:
     - en
     - ru
+    - uk
+    - de
+    - fr
+    - es
+    - it
+    - pt-BR
+    - ja
+    - ko
+    - zh-Hans
+    - hi
+    - tr
+    - ar
 
 packages:
   WebRTC:
@@ -17,12 +29,27 @@ packages:
   SQLCipher:
     url: https://github.com/sqlcipher/SQLCipher.swift.git
     exactVersion: "4.13.0"
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk.git
+    exactVersion: "11.12.0"
 
 settings:
   base:
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "1"
     INFOPLIST_FILE: GhostChat/Resources/Info.plist
+
+schemes:
+  GhostChat:
+    build:
+      targets:
+        GhostChat: all
+        GhostChatTests: [test]
+        GhostChatUITests: [test]
+    test:
+      targets:
+        - GhostChatTests
+        - GhostChatUITests
 
 targets:
   GhostChat:
@@ -33,15 +60,57 @@ targets:
     dependencies:
       - package: WebRTC
       - package: SQLCipher
+      - package: Firebase
+        product: FirebaseCrashlytics
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ivanpokhvalitov.ghostchat
         PRODUCT_NAME: "Ghost chat"
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "3"
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        DEVELOPMENT_TEAM: G2VZKDYV38
         CODE_SIGN_STYLE: Automatic
-    postCompileScripts: []
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "75"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: GhostChat/Resources/GhostChat.entitlements
+        CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION: "YES"
+    postCompileScripts:
+      - name: "Create stub dSYM for WebRTC (suppresses App Store warning)"
+        script: |
+          # WebRTC SPM binary doesn't include debug symbols — create stub dSYM
+          # to satisfy App Store Connect validation. Crash reports from WebRTC
+          # won't be symbolicated, but our own code will be.
+          DSYM_OUT="${DWARF_DSYM_FOLDER_PATH}/WebRTC.framework.dSYM"
+          if [ ! -d "$DSYM_OUT" ]; then
+              WEBRTC_FW=$(find "${TARGET_BUILD_DIR}" -name "WebRTC.framework" -type d 2>/dev/null | head -1)
+              if [ -n "$WEBRTC_FW" ] && [ -f "$WEBRTC_FW/WebRTC" ]; then
+                  # Extract UUID from the binary
+                  UUID=$(dwarfdump --uuid "$WEBRTC_FW/WebRTC" 2>/dev/null | head -1 | awk '{print $2}')
+                  if [ -n "$UUID" ]; then
+                      # Create minimal dSYM directory structure
+                      mkdir -p "$DSYM_OUT/Contents/Resources/DWARF"
+                      cat > "$DSYM_OUT/Contents/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDevelopmentRegion</key><string>English</string>
+              <key>CFBundleIdentifier</key><string>com.apple.xcode.dsym.WebRTC</string>
+              <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+              <key>CFBundlePackageType</key><string>dSYM</string>
+              <key>CFBundleSignature</key><string>????</string>
+              <key>CFBundleVersion</key><string>1</string>
+              <key>dSYM_UUID</key>
+              <dict><key>arm64</key><string>${UUID}</string></dict>
+          </dict>
+          </plist>
+          PLIST
+                      # Copy binary as DWARF stub (no symbols, but UUID matches)
+                      cp "$WEBRTC_FW/WebRTC" "$DSYM_OUT/Contents/Resources/DWARF/WebRTC"
+                  fi
+              fi
+          fi
+        outputFiles:
+          - $(DWARF_DSYM_FOLDER_PATH)/WebRTC.framework.dSYM
 
   GhostChatTests:
     type: bundle.unit-test
@@ -53,3 +122,16 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ivanpokhvalitov.ghostchat.tests
+        BUNDLE_LOADER: "$(BUILT_PRODUCTS_DIR)/Ghost chat.app/Ghost chat"
+        TEST_HOST: "$(BUNDLE_LOADER)"
+
+  GhostChatUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - GhostChatUITests
+    dependencies:
+      - target: GhostChat
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ivanpokhvalitov.ghostchat.uitests

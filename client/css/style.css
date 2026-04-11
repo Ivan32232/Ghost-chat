@@ -1,3 +1,19 @@
+/* Self-hosted JetBrains Mono — no external requests to Google (H1) */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -359,6 +375,7 @@ html, body {
   stroke-linejoin: round;
 }
 
+
 /* Welcome Footer */
 .welcome-footer {
   display: flex;
@@ -704,6 +721,39 @@ html, body {
   margin-top: 4px;
 }
 
+/* Typing Indicator */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px 2px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.typing-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  animation: typing-pulse 1.2s infinite;
+  opacity: 0.3;
+}
+
+.typing-dots span:nth-child(1) { animation-delay: 0s; }
+.typing-dots span:nth-child(2) { animation-delay: 0.4s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.8s; }
+
+@keyframes typing-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
 /* Input Area */
 .input-area {
   display: flex;
@@ -765,6 +815,202 @@ html, body {
 
 .btn-send:active {
   transform: scale(0.9);
+}
+
+/* Attach (file) button */
+.btn-attach {
+  width: 44px;
+  height: 44px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.1s;
+  color: var(--text-dim);
+}
+.btn-attach:hover { background: var(--surface); }
+.btn-attach:active { transform: scale(0.9); }
+.btn-attach svg { fill: currentColor; }
+
+/* Reply preview bar above input */
+.reply-preview {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  animation: fadeIn 0.15s;
+}
+.reply-preview.hidden { display: none; }
+.reply-preview-bar {
+  width: 3px;
+  background: #0A84FF;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.reply-preview-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.reply-preview-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #0A84FF;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.reply-preview-text {
+  font-size: 13px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.reply-cancel {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+.reply-cancel:hover { background: rgba(255,255,255,0.08); }
+.reply-cancel svg { fill: currentColor; }
+
+/* Inline quoted block at top of a message bubble (incoming reply) */
+.message-quote {
+  display: block;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-left: 3px solid rgba(10, 132, 255, 0.85);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0.85;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message.sent .message-quote {
+  background: rgba(10, 132, 255, 0.12);
+  border-left-color: #0A84FF;
+  color: rgba(10, 10, 10, 0.75);
+}
+.message.sent .message-quote-label { color: #0A84FF; }
+.message-quote-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #0A84FF;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+.message-quote-text {
+  display: block;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* File message + progress */
+.file-attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 180px;
+  max-width: 280px;
+}
+.file-attachment-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(10, 132, 255, 0.15);
+  color: #0A84FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.file-attachment-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.file-attachment-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.file-attachment-sub {
+  font-size: 11px;
+  opacity: 0.65;
+}
+.file-progress {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.message.sent .file-progress {
+  background: rgba(10, 10, 10, 0.18);
+}
+.file-progress-fill {
+  height: 100%;
+  background: #0A84FF;
+  width: 0%;
+  transition: width 0.15s ease-out;
+}
+
+/* Highlight pulse when scrolled to via reply-quote click */
+.message.message-highlight {
+  animation: highlightPulse 1.2s ease-out;
+}
+@keyframes highlightPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.0); }
+  30%  { box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.45); }
+  100% { box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.0); }
+}
+
+/* Long-press visual feedback */
+.message.long-pressing {
+  transform: scale(0.97);
+  opacity: 0.85;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+/* Swipe-to-reply hint */
+.message.swiping {
+  transition: transform 0.08s ease-out;
+}
+.message.swipe-snapback {
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* ===== OVERLAYS ===== */
@@ -1000,6 +1246,46 @@ html, body {
   font-size: 14px;
   color: var(--text-dim);
   line-height: 1.4;
+}
+
+/* M4: CSS rules replacing inline style="" attributes — allows removing 'unsafe-inline' from CSP */
+#room-id-display {
+  display: none;
+}
+
+#share-room-btn {
+  display: none;
+  background: var(--accent);
+}
+
+#share-room-btn.visible {
+  display: flex;
+}
+
+#copy-feedback {
+  display: none;
+  color: var(--green);
+}
+
+#copy-feedback.visible {
+  display: block;
+}
+
+#connecting-leave-btn {
+  margin-top: 24px;
+}
+
+/* Message self-destruct exit animation */
+.message-deleting {
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+/* Toast exit animation */
+.toast-fading {
+  opacity: 0;
+  transition: opacity 0.3s;
 }
 
 /* Scrollbar */

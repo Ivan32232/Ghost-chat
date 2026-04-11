@@ -21,7 +21,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<string>55</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchScreen</key>
@@ -48,23 +48,41 @@
 	<array>
 		<string>audio</string>
 		<string>voip</string>
+		<string>remote-notification</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Ghost Chat does not use the camera. This permission is required by the WebRTC framework.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Микрофон необходим для голосовых звонков</string>
+	<string>Microphone is required for voice calls</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Face ID используется для защиты ваших данных</string>
+	<string>Face ID is used to protect your data</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
 		<key>NSExceptionDomains</key>
 		<dict>
-			<key>gbskgs.xyz</key>
+			<key>ghostchat.one</key>
 			<dict>
 				<key>NSExceptionRequiresForwardSecrecy</key>
 				<true/>
 				<key>NSExceptionMinimumTLSVersion</key>
 				<string>TLSv1.2</string>
+			</dict>
+		</dict>
+		<key>NSPinnedDomains</key>
+		<dict>
+			<key>ghostchat.one</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</string>
+					</dict>
+				</array>
 			</dict>
 		</dict>
 	</dict>

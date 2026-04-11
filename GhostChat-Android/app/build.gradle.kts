@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -19,9 +20,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("ghost-chat.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "ghost-chat-release"
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
             keyAlias = "ghost-chat"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "ghost-chat-release"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
         }
     }
 
@@ -71,6 +72,7 @@ dependencies {
     // Core
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     // WebRTC (P2P + audio)
     implementation("io.getstream:stream-webrtc-android:1.3.1")
@@ -91,8 +93,16 @@ dependencies {
     // Security (EncryptedSharedPreferences)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
+    // Firebase Cloud Messaging
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
+
     // JSON (built-in org.json)
     // No extra dependency needed
+
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

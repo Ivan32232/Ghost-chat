@@ -46,7 +46,7 @@ fun SoundPickerScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GhostBlue)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GhostWhite)
             }
             Text(
                 title,
@@ -90,7 +90,7 @@ fun SoundPickerScreen(
                             Text(name, fontSize = 16.sp, color = GhostWhite)
                         }
                         if (id == currentId) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = GhostBlue)
+                            Icon(Icons.Default.Check, contentDescription = null, tint = GhostGreen)
                         }
                     }
                 }

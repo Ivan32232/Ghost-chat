@@ -20,6 +20,7 @@ export class GhostRTC {
     // Voice call support
     this.onTrack = null;              // Callback для входящих audio/video tracks
     this.onRenegotiationNeeded = null; // Callback для renegotiation при добавлении tracks
+    this.onIceRestartNeeded = null;   // Callback для ICE restart (через signaling, НЕ DataChannel)
     this._negotiating = false;         // Флаг для предотвращения race conditions
     this._suppressNegotiation = false; // Manual suppression during call setup
 
@@ -28,7 +29,7 @@ export class GhostRTC {
     this.isLocalhost = window.location.hostname === 'localhost' ||
                        window.location.hostname === '127.0.0.1';
 
-    // Режим приватности: relay-only скрывает реальный IP
+    // TURN relay отключён — direct P2P
     this.privacyMode = false;
 
     // TURN credentials будут загружены асинхронно
@@ -78,12 +79,55 @@ export class GhostRTC {
         ...turnServers
       ];
 
+      // Планируем обновление credentials за 5 минут до истечения TTL
+      this._scheduleTurnRefresh(credentials.ttl || 3600);
+
       return credentials;
     } catch (e) {
       logger.error('Failed to fetch TURN credentials:', e.message);
       // Продолжаем без TURN - будет работать только в локальных сетях
       return null;
     }
+  }
+
+  /**
+   * Периодическое обновление TURN credentials до истечения TTL
+   */
+  _scheduleTurnRefresh(ttlSeconds) {
+    if (this._turnRefreshTimer) clearTimeout(this._turnRefreshTimer);
+
+    // Обновляем за 5 минут до истечения (но не раньше 30 секунд)
+    const refreshIn = Math.max(30, ttlSeconds - 300) * 1000;
+    logger.log(`TURN credentials refresh scheduled in ${Math.round(refreshIn / 60000)} min`);
+
+    this._turnRefreshTimer = setTimeout(async () => {
+      if (!this.peerConnection) return;
+      try {
+        const response = await fetch('/api/turn-credentials');
+        if (!response.ok) return;
+        const credentials = await response.json();
+
+        this.turnCredentials = credentials;
+        const turnServers = credentials.urls.map(url => ({
+          urls: url,
+          username: credentials.username,
+          credential: credentials.credential
+        }));
+
+        // Обновляем ICE servers на живом PeerConnection (для ICE restart)
+        this.config.iceServers = [
+          { urls: 'stun:stun.l.google.com:19302' },
+          ...turnServers
+        ];
+
+        logger.log('TURN credentials refreshed, next TTL:', credentials.ttl);
+        this._scheduleTurnRefresh(credentials.ttl || 3600);
+      } catch (e) {
+        logger.error('TURN credentials refresh failed:', e.message);
+        // Повторим через 5 минут
+        this._scheduleTurnRefresh(300);
+      }
+    }, refreshIn);
   }
 
   /**
@@ -105,11 +149,8 @@ export class GhostRTC {
     const offer = await this.peerConnection.createOffer();
     await this.peerConnection.setLocalDescription(offer);
 
-    // Возвращаем offer сразу, ICE candidates отправятся отдельно
-    return {
-      type: 'offer',
-      sdp: offer
-    };
+    // Возвращаем localDescription (после setLocalDescription браузер может модифицировать SDP)
+    return this.peerConnection.localDescription;
   }
 
   /**
@@ -178,6 +219,7 @@ export class GhostRTC {
 
     // ICE state tracking with delayed disconnect (transient disconnects during renegotiation)
     this._disconnectTimer = null;
+    this._iceRestartAttempted = false;
 
     this.peerConnection.oniceconnectionstatechange = () => {
       if (!this.peerConnection) return;
@@ -191,19 +233,34 @@ export class GhostRTC {
       }
 
       if (state === 'connected' || state === 'completed') {
+        this._iceRestartAttempted = false;
         this._fireConnected();
       } else if (state === 'failed') {
-        if (this.onError) this.onError('ICE connection failed');
-        if (this._connected) {
-          this._connected = false;
-          if (this.onDisconnected) this.onDisconnected();
+        // Попытка ICE restart перед отключением
+        if (this._connected && !this._iceRestartAttempted) {
+          this._iceRestartAttempted = true;
+          logger.log('ICE failed — attempting restart');
+          this._attemptIceRestart();
+        } else {
+          if (this.onError) this.onError('ICE connection failed');
+          if (this._connected) {
+            this._connected = false;
+            if (this.onDisconnected) this.onDisconnected();
+          }
         }
       } else if (state === 'disconnected' && this._connected) {
         // Delay disconnect — ICE may reconnect during renegotiation
         this._disconnectTimer = setTimeout(() => {
           if (this.peerConnection?.iceConnectionState === 'disconnected') {
-            this._connected = false;
-            if (this.onDisconnected) this.onDisconnected();
+            // Попробовать ICE restart
+            if (!this._iceRestartAttempted) {
+              this._iceRestartAttempted = true;
+              logger.log('ICE disconnected — attempting restart');
+              this._attemptIceRestart();
+            } else {
+              this._connected = false;
+              if (this.onDisconnected) this.onDisconnected();
+            }
           }
         }, 5000);
       } else if (state === 'closed' && this._connected) {
@@ -305,11 +362,8 @@ export class GhostRTC {
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
 
-    // Возвращаем answer сразу (trickle ICE)
-    return {
-      type: 'answer',
-      sdp: answer
-    };
+    // Возвращаем localDescription (после setLocalDescription браузер может модифицировать SDP)
+    return this.peerConnection.localDescription;
   }
 
   /**
@@ -392,6 +446,32 @@ export class GhostRTC {
   }
 
   /**
+   * ICE restart — пересогласование ICE при деградации соединения
+   */
+  async _attemptIceRestart() {
+    if (!this.peerConnection) return;
+    try {
+      const offer = await this.peerConnection.createOffer({ iceRestart: true });
+      await this.peerConnection.setLocalDescription(offer);
+
+      // ICE restart offer MUST go through signaling server (not DataChannel!)
+      // DataChannel rides on the same ICE transport that just failed
+      if (this.onIceRestartNeeded) {
+        this.onIceRestartNeeded({
+          type: 'offer',
+          sdp: this.peerConnection.localDescription
+        });
+      }
+    } catch (e) {
+      logger.error('ICE restart failed:', e);
+      if (this._connected) {
+        this._connected = false;
+        if (this.onDisconnected) this.onDisconnected();
+      }
+    }
+  }
+
+  /**
    * Включение/выключение режима приватности
    * В режиме приватности используется только TURN relay
    */
@@ -429,9 +509,15 @@ export class GhostRTC {
     this.onIceCandidate = null;
     this.onTrack = null;
     this.onRenegotiationNeeded = null;
+    this.onIceRestartNeeded = null;
     this._connected = false;
     this._negotiating = false;
     this._suppressNegotiation = false;
+    this._iceRestartAttempted = false;
     this.turnCredentials = null;
+    if (this._turnRefreshTimer) {
+      clearTimeout(this._turnRefreshTimer);
+      this._turnRefreshTimer = null;
+    }
   }
 }

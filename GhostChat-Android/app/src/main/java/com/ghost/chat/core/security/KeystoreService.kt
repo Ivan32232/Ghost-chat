@@ -13,8 +13,8 @@ object KeystoreService {
     private const val PREFS_NAME = "com.ghost.chat.secure"
     private var prefs: SharedPreferences? = null
 
-    fun init(context: Context) {
-        if (prefs != null) return
+    fun init(context: Context, force: Boolean = false) {
+        if (prefs != null && !force) return
         val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
         prefs = EncryptedSharedPreferences.create(
             PREFS_NAME,
@@ -52,6 +52,14 @@ object KeystoreService {
 
     fun loadInt(forKey: String, default: Int = 0): Int {
         return prefs?.getInt(forKey, default) ?: default
+    }
+
+    fun saveLong(value: Long, forKey: String) {
+        prefs?.edit()?.putLong(forKey, value)?.apply()
+    }
+
+    fun loadLong(forKey: String, default: Long = 0L): Long {
+        return prefs?.getLong(forKey, default) ?: default
     }
 
     fun saveBool(value: Boolean, forKey: String) {

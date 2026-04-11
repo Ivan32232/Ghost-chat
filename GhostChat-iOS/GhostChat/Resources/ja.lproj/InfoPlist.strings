@@ -1,0 +1,4 @@
+/* Info.plist localization — Japanese */
+
+"NSMicrophoneUsageDescription" = "音声通話にはマイクが必要です";
+"NSFaceIDUsageDescription" = "データの保護にFace IDを使用します";

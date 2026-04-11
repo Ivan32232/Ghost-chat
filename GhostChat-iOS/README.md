@@ -61,7 +61,7 @@ GhostChat/
 ## Совместимость с сервером
 
 Подключается к тому же серверу (`server/index.js`):
-- WebSocket: `wss://gbskgs.xyz/ws`
+- WebSocket: `wss://ghostchat.one/ws`
 - TURN API: `GET /api/turn-credentials`
 - Шифрование: ECDH P-256 → HKDF → AES-256-GCM (идентично веб-клиенту)
 

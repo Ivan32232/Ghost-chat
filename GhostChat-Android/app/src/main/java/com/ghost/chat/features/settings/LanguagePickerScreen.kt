@@ -39,7 +39,7 @@ fun LanguagePickerScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GhostBlue)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = GhostWhite)
             }
             Text(
                 stringResource(R.string.settings_language),
@@ -84,7 +84,7 @@ private fun LanguageRow(
     ) {
         Text(title, fontSize = 16.sp, color = GhostWhite)
         if (isSelected) {
-            Icon(Icons.Default.Check, contentDescription = null, tint = GhostBlue)
+            Icon(Icons.Default.Check, contentDescription = null, tint = GhostGreen)
         }
     }
 }

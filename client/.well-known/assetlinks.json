@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ghost.chat",
+      "sha256_cert_fingerprints": [
+        "24:DE:53:FE:1A:B0:DD:5D:5F:F5:D9:DE:F1:4B:0B:18:76:95:B2:89:3A:2B:81:B1:3F:A1:46:A6:98:2C:79:0F"
+      ]
+    }
+  }
+]

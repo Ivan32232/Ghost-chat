@@ -11,13 +11,26 @@ services:
       - TRUST_PROXY=1
       - TURN_SECRET=${TURN_SECRET}
       - TURN_DOMAIN=${TURN_DOMAIN}
+      - APNS_KEY_ID=${APNS_KEY_ID}
+      - APNS_TEAM_ID=${APNS_TEAM_ID}
+      - APNS_KEY_PATH=/app/keys/AuthKey.p8
+      - APNS_BUNDLE_ID=${APNS_BUNDLE_ID}
+      - FCM_SA_PATH=/app/keys/firebase-sa.json
+    volumes:
+      - ./keys:/app/keys:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - ghost-network
     expose:
       - "3000"
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: ghost-nginx
     restart: unless-stopped
     ports:
@@ -33,7 +46,7 @@ services:
       - ghost-network
 
   coturn:
-    image: coturn/coturn:latest
+    image: coturn/coturn:4.6.2
     container_name: ghost-turn
     restart: unless-stopped
     network_mode: host

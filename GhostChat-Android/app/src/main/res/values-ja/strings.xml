@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ghost Chat</string>
+
+    <!-- Welcome Screen -->
+    <string name="welcome_subtitle">プライベートメッセンジャー</string>
+    <string name="welcome_new_chat">新しいチャット</string>
+    <string name="welcome_creating">作成中…</string>
+    <string name="welcome_or">または</string>
+    <string name="welcome_enter_code">ルームコード</string>
+    <string name="welcome_join">参加</string>
+    <string name="welcome_joining">参加中…</string>
+    <string name="welcome_privacy_mode">IPを隠す（リレー）</string>
+    <string name="welcome_footer">メッセージはサーバーに保存されません</string>
+
+    <!-- Waiting Screen -->
+    <string name="waiting_title">相手を待っています</string>
+    <string name="waiting_copy">コピー</string>
+    <string name="waiting_share">共有</string>
+    <string name="waiting_share_link">リンクを相手に共有してください</string>
+    <string name="waiting_cancel">キャンセル</string>
+    <string name="waiting_recent_contacts">最近の連絡先</string>
+    <string name="waiting_invite">招待</string>
+    <string name="waiting_invite_confirm_title">招待を送信しますか？</string>
+    <string name="waiting_invite_confirm_message">%1$sにチャットしたいという通知が届きます。</string>
+    <string name="waiting_invite_confirm_send">送信</string>
+
+    <!-- Connecting Screen -->
+    <string name="connecting_title">接続中…</string>
+    <string name="connecting_subtitle">P2P接続を確立しています</string>
+    <string name="connecting_cancel">キャンセル</string>
+
+    <!-- Chat Screen -->
+    <string name="chat_placeholder">メッセージ</string>
+    <string name="chat_verification_title">セキュリティコード</string>
+    <string name="chat_verification_info">別の通信手段で相手とこのコードを照合してください</string>
+    <string name="chat_verify">一致</string>
+    <string name="chat_not_match">不一致</string>
+    <string name="chat_verified">検証済み</string>
+    <string name="chat_typing">入力中…</string>
+    <string name="chat_close">閉じる</string>
+    <string name="chat_copied">コピーしました</string>
+
+    <!-- Call Screen -->
+    <string name="call_calling">発信中…</string>
+    <string name="call_unmute">ミュート解除</string>
+    <string name="call_mute">ミュート</string>
+    <string name="call_speaker">スピーカー</string>
+    <string name="call_earpiece">受話器</string>
+    <string name="call_end">終了</string>
+    <string name="call_incoming">着信</string>
+    <string name="call_accept">応答</string>
+    <string name="call_decline">拒否</string>
+
+    <!-- System Messages -->
+    <string name="system_peer_disconnected">相手が切断しました</string>
+    <string name="system_connection_restored">接続が復旧しました</string>
+    <string name="system_connection_lost">接続が切断されました</string>
+    <string name="system_secure_connection">安全な接続が確立されました</string>
+    <string name="system_tap_shield">シールドをタップしてセキュリティコードを確認</string>
+    <string name="system_key_exchange_error">鍵交換エラー</string>
+    <string name="system_screenshot_taken">⚠️ スクリーンショットを撮影しました</string>
+    <string name="system_decryption_error">復号エラー</string>
+    <string name="system_replay_attack">リプレイ攻撃を検出 — メッセージを拒否しました</string>
+    <string name="system_message_too_old">メッセージを拒否 — 古すぎます</string>
+    <string name="system_counter_too_old">メッセージを拒否 — カウンターが期限切れです</string>
+    <string name="system_send_error">送信エラー</string>
+    <string name="system_calling">発信中…</string>
+    <string name="system_incoming_call">着信中…</string>
+    <string name="system_call_connected">通話が接続されました</string>
+    <string name="system_call_declined">通話が拒否されました</string>
+    <string name="system_call_started">通話が開始されました</string>
+    <string name="system_call_ended">通話が終了しました</string>
+    <string name="system_no_answer">応答なし</string>
+    <string name="system_no_push_token">オフライン通話：プッシュトークンがありません — 相手に通知が届きません。接続を待っています…</string>
+    <string name="system_peer_ended_call">相手が通話を終了しました</string>
+    <string name="system_peer_screenshot">相手がスクリーンショットを撮影しました</string>
+    <string name="system_verified">検証済み！接続は安全です。</string>
+    <string name="system_codes_do_not_match">警告：コードが一致しません！攻撃の可能性があります！</string>
+    <string name="system_end_session">直ちにセッションを終了してください。</string>
+    <string name="system_connection_timeout">接続に失敗しました（タイムアウト）</string>
+    <string name="system_call_error">通話エラー：%1$s</string>
+    <string name="system_error">エラー：%1$s</string>
+    <string name="system_security_warning">⚠️ %1$s</string>
+    <string name="system_pq_upgraded">耐量子暗号化が有効です (ML-KEM768)</string>
+    <string name="system_incompatible_version">プロトコルバージョンが互換性ありません。Ghost Chatを更新してください。</string>
+    <string name="system_known_peer">接続済み：%1$s</string>
+    <string name="system_unexpected_peer">警告：異なる身元鍵が検出されました！なりすましの可能性があります。</string>
+    <string name="system_peer_security_alert">⚠️ 相手：%1$s</string>
+
+    <!-- Security Monitor -->
+    <string name="security_screen_recording_active">画面録画中</string>
+    <string name="security_screen_recording_detected">画面録画が検出されました</string>
+    <string name="security_bluetooth_connected">Bluetoothデバイスが接続されました：%1$s</string>
+    <string name="security_audio_device_removed">オーディオデバイスが切断されました</string>
+
+    <!-- Deep Link -->
+    <string name="deeplink_title">ルームに参加しますか？</string>
+    <string name="deeplink_join">参加</string>
+    <string name="deeplink_cancel">キャンセル</string>
+    <string name="deeplink_message">ルーム %1$s に参加しますか…？</string>
+
+    <!-- Signaling -->
+    <string name="signaling_reconnect_failed">再接続に失敗しました</string>
+
+    <!-- Biometric -->
+    <string name="biometric_reason">Ghost Chatのロックを解除</string>
+    <string name="biometric_enable">生体認証を有効にする</string>
+    <string name="biometric_disable">生体認証を無効にする</string>
+    <string name="biometric_locked">Ghost Chatはロックされています</string>
+    <string name="biometric_unlock">ロック解除</string>
+
+    <!-- Settings -->
+    <string name="settings_title">設定</string>
+    <string name="settings_done">完了</string>
+    <string name="settings_language">言語</string>
+    <string name="settings_language_section">言語</string>
+    <string name="settings_language_current">日本語</string>
+    <string name="settings_security_section">セキュリティ</string>
+    <string name="settings_biometric">生体認証ロック</string>
+    <string name="settings_biometric_desc">バックグラウンドに移行した際に生体認証で保護</string>
+    <string name="settings_privacy_mode">プライバシーモード（リレー）</string>
+    <string name="settings_privacy_mode_desc">IPアドレスを隠す</string>
+    <string name="settings_screenshot_notify">スクリーンショット通知</string>
+    <string name="settings_screenshot_notify_desc">スクリーンショット撮影時に相手に通知</string>
+    <string name="settings_messages_section">メッセージ</string>
+    <string name="settings_auto_delete">自動削除</string>
+    <string name="settings_sounds_section">サウンドと通知</string>
+    <string name="settings_sound">メッセージ音</string>
+    <string name="settings_vibration">バイブレーション</string>
+    <string name="settings_ringtone">着信音</string>
+    <string name="settings_msg_sound">通知音</string>
+    <string name="settings_danger_section">データ</string>
+    <string name="settings_delete_contacts">すべての連絡先を削除</string>
+    <string name="settings_delete_contacts_confirm">すべての連絡先を削除しますか？</string>
+    <string name="settings_destroy_all">すべて破棄</string>
+    <string name="settings_destroy_all_confirm">すべてのデータを破棄しますか？データベースが消去され、すべての設定がリセットされます。</string>
+    <string name="settings_delete">削除</string>
+    <string name="settings_destroy">破棄</string>
+    <string name="settings_cancel">キャンセル</string>
+
+    <!-- Contacts -->
+    <string name="contacts_title">連絡先</string>
+    <string name="contacts_empty">連絡先がありません</string>
+    <string name="contacts_empty_hint">チャットセッション終了後に連絡先が自動保存されます</string>
+    <string name="contacts_name">名前</string>
+    <string name="contacts_edit">名前を編集</string>
+    <string name="contacts_save">保存</string>
+    <string name="contacts_save_title">連絡先を保存しますか？</string>
+    <string name="contacts_name_placeholder">名前</string>
+    <string name="contacts_save_message">今後のセッションで識別できるようにこの連絡先を保存</string>
+    <string name="contacts_skip">スキップ</string>
+    <string name="contacts_start_chat">チャットを開始</string>
+    <string name="contacts_details">詳細</string>
+    <string name="contacts_created">作成日</string>
+    <string name="contacts_last_session">最終セッション</string>
+    <string name="contacts_sessions">セッション数</string>
+    <string name="contacts_key_state">鍵の状態</string>
+    <string name="contacts_key_state_saved">保存済み</string>
+    <string name="contacts_key_state_none">なし</string>
+    <string name="contacts_search">検索</string>
+    <string name="contacts_notes">メモ</string>
+    <string name="contacts_notes_placeholder">この連絡先についてのメモを追加…</string>
+    <string name="contacts_delete">連絡先を削除</string>
+    <string name="contacts_delete_confirm">%1$s を削除しますか？保存された暗号鍵も削除されます。</string>
+    <string name="contacts_ttl">メッセージ自動削除</string>
+    <string name="contacts_ttl_header">メッセージの有効期間</string>
+    <string name="contacts_ttl_footer">選択した時間より古いメッセージはデバイスから自動的に削除されます</string>
+    <string name="contacts_ttl_off">オフ</string>
+    <string name="contacts_ttl_1h">1時間</string>
+    <string name="contacts_ttl_1d">1日</string>
+    <string name="contacts_ttl_7d">7日</string>
+    <string name="contacts_ttl_30d">30日</string>
+
+    <!-- Saved Messages -->
+    <string name="saved_title">保存済みメッセージ</string>
+    <string name="saved_hint">個人メモ帳</string>
+    <string name="saved_placeholder">メモを書く…</string>
+    <string name="saved_disable_confirm">保存済みメッセージを無効にしますか？保存されたすべてのメモが削除されます。</string>
+</resources>

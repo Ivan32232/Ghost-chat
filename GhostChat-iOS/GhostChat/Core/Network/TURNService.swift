@@ -7,6 +7,7 @@ struct TURNCredentials: Decodable {
     let credential: String
     let ttl: Int
     let urls: [String]
+    let pushAuth: String?
 }
 
 final class TURNService: NSObject {

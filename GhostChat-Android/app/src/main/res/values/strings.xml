@@ -22,13 +22,17 @@
     <string name="waiting_recent_contacts">Recent contacts</string>
     <string name="waiting_invite">Invite</string>
     <string name="waiting_invite_confirm_title">Send invite?</string>
-    <string name="waiting_invite_confirm_message">Copy invite link for %1$s? The link will expire from clipboard in 60 seconds.</string>
-    <string name="waiting_invite_confirm_send">Copy link</string>
+    <string name="waiting_invite_confirm_message">%1$s will receive a notification that you want to chat.</string>
+    <string name="waiting_invite_confirm_send">Send</string>
 
     <!-- Connecting Screen -->
     <string name="connecting_title">Connecting…</string>
     <string name="connecting_subtitle">Establishing P2P connection</string>
     <string name="connecting_cancel">Cancel</string>
+    <string name="connecting_step_server">Connecting to server…</string>
+    <string name="connecting_step_peer">Waiting for peer…</string>
+    <string name="connecting_step_keys">Exchanging encryption keys…</string>
+    <string name="connecting_step_secured">Secure connection established</string>
 
     <!-- Chat Screen -->
     <string name="chat_placeholder">Message</string>
@@ -37,7 +41,23 @@
     <string name="chat_verify">Matches</string>
     <string name="chat_not_match">Doesn\'t match</string>
     <string name="chat_verified">Verified</string>
+    <string name="chat_typing">typing…</string>
+
+    <!-- Peer Status -->
+    <string name="status_online">online</string>
+    <string name="status_connecting">connecting…</string>
+    <string name="status_searching">searching…</string>
+    <string name="status_recently_online">recently online</string>
+    <string name="status_offline">offline</string>
     <string name="chat_close">Close</string>
+    <string name="chat_copy">Copy</string>
+    <string name="chat_copied">Copied</string>
+    <string name="chat_edit">Edit</string>
+    <string name="chat_edited">edited</string>
+    <string name="chat_save">Save</string>
+    <string name="chat_delete_for_everyone">Delete for everyone</string>
+    <string name="chat_you">You</string>
+    <string name="chat_leave">Leave</string>
 
     <!-- Call Screen -->
     <string name="call_calling">Calling…</string>
@@ -52,6 +72,7 @@
 
     <!-- System Messages -->
     <string name="system_peer_disconnected">Peer disconnected</string>
+    <string name="system_peer_gone">Peer did not reconnect</string>
     <string name="system_connection_restored">Connection restored</string>
     <string name="system_connection_lost">Connection lost</string>
     <string name="system_secure_connection">Secure connection established</string>
@@ -59,13 +80,21 @@
     <string name="system_key_exchange_error">Key exchange error</string>
     <string name="system_screenshot_taken">⚠️ You took a screenshot</string>
     <string name="system_decryption_error">Decryption error</string>
+    <string name="system_replay_attack">Replay attack detected — message rejected</string>
+    <string name="system_message_too_old">Message rejected — too old</string>
+    <string name="system_counter_too_old">Message rejected — counter expired</string>
     <string name="system_send_error">Send error</string>
     <string name="system_calling">Calling…</string>
     <string name="system_incoming_call">Incoming call…</string>
+    <string name="system_connecting">Connecting…</string>
+    <string name="system_not_connected">Not connected</string>
+    <string name="system_peer_no_files">Peer does not support file transfer</string>
     <string name="system_call_connected">Call connected</string>
     <string name="system_call_declined">Call declined</string>
     <string name="system_call_started">Call started</string>
     <string name="system_call_ended">Call ended</string>
+    <string name="system_no_answer">No answer</string>
+    <string name="system_no_push_token">Offline call: no push token — peer won\'t receive notification. Waiting for connection…</string>
     <string name="system_peer_ended_call">Peer ended the call</string>
     <string name="system_peer_screenshot">Peer took a screenshot</string>
     <string name="system_verified">Verified! Connection is secure.</string>
@@ -80,6 +109,7 @@
     <string name="system_known_peer">Connected: %1$s</string>
     <string name="system_unexpected_peer">WARNING: Different identity key! Possible impersonation.</string>
     <string name="system_peer_security_alert">⚠️ Peer: %1$s</string>
+    <string name="system_waiting_reconnect">Waiting for reconnection…</string>
 
     <!-- Security Monitor -->
     <string name="security_screen_recording_active">Screen recording active</string>
@@ -96,12 +126,31 @@
     <!-- Signaling -->
     <string name="signaling_reconnect_failed">Failed to reconnect</string>
 
-    <!-- Biometric -->
+    <!-- Biometric / PIN -->
     <string name="biometric_reason">Unlock Ghost Chat</string>
     <string name="biometric_enable">Enable biometrics</string>
     <string name="biometric_disable">Disable biometrics</string>
     <string name="biometric_locked">Ghost Chat is locked</string>
     <string name="biometric_unlock">Unlock</string>
+    <string name="pin_enter">Enter PIN code</string>
+    <string name="pin_confirm">Confirm PIN code</string>
+    <string name="pin_digits">digits</string>
+    <string name="pin_length_error">PIN must be %d digits</string>
+    <string name="pin_mismatch">PINs don\'t match</string>
+    <string name="settings_autolock">Auto-lock</string>
+    <string name="autolock_instant">Instant</string>
+    <string name="autolock_15s">15s</string>
+    <string name="autolock_30s">30s</string>
+    <string name="autolock_1m">1m</string>
+    <string name="autolock_5m">5m</string>
+    <string name="settings_set_pin">Set PIN code</string>
+    <string name="settings_change_pin">Change PIN code</string>
+    <string name="settings_remove_pin">Remove PIN code</string>
+    <string name="settings_remove_pin_confirm">Remove PIN code? Biometric lock will also be disabled.</string>
+
+    <!-- Attach -->
+    <string name="attach_photos">Photos</string>
+    <string name="attach_file">File</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
@@ -145,13 +194,50 @@
     <string name="contacts_skip">Skip</string>
     <string name="contacts_start_chat">Start chat</string>
     <string name="contacts_details">DETAILS</string>
-    <string name="contacts_fingerprint">Fingerprint</string>
     <string name="contacts_created">Created</string>
     <string name="contacts_last_session">Last session</string>
     <string name="contacts_sessions">Sessions</string>
     <string name="contacts_key_state">Key state</string>
     <string name="contacts_key_state_saved">Saved</string>
     <string name="contacts_key_state_none">None</string>
+    <string name="contacts_search">Search</string>
+    <string name="contacts_notes">Notes</string>
+    <string name="contacts_notes_placeholder">Add notes about this contact…</string>
     <string name="contacts_delete">Delete contact</string>
     <string name="contacts_delete_confirm">Delete %1$s? This will also remove saved encryption keys.</string>
+    <string name="contacts_no_messages">No messages yet</string>
+    <string name="contacts_delete_history">Delete history</string>
+    <string name="contacts_ttl">Auto-delete messages</string>
+    <string name="contacts_ttl_header">MESSAGE LIFETIME</string>
+    <string name="contacts_ttl_footer">Messages older than the selected time will be automatically deleted from the device</string>
+    <string name="contacts_ttl_off">Off</string>
+    <string name="contacts_ttl_1h">1 hour</string>
+    <string name="contacts_ttl_1d">1 day</string>
+    <string name="contacts_ttl_7d">7 days</string>
+    <string name="contacts_ttl_30d">30 days</string>
+
+    <!-- Saved Messages -->
+    <string name="saved_title">Saved Messages</string>
+    <string name="saved_hint">Your personal notepad</string>
+    <string name="saved_placeholder">Write a note…</string>
+    <string name="saved_disable_confirm">Disable Saved Messages? All saved notes will be deleted.</string>
+
+    <!-- History settings -->
+    <string name="settings_history">CHAT HISTORY</string>
+    <string name="settings_save_history">Save message history</string>
+    <string name="settings_history_footer">When enabled, messages are stored encrypted on device. When disabled, messages disappear after each session.</string>
+    <string name="settings_delete_all_history">Delete all history</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_calls">Incoming calls</string>
+    <string name="notification_channel_calls_desc">Notifications for incoming encrypted calls</string>
+    <string name="notification_channel_invites">Chat invitations</string>
+    <string name="notification_channel_invites_desc">Notifications when a contact invites you to chat</string>
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_messages_desc">Message notifications</string>
+    <string name="notification_incoming_call">Incoming call</string>
+    <string name="notification_chat_invite">Chat invitation</string>
+    <string name="notification_invite_from">%1$s invites you to chat</string>
+    <string name="notification_new_message">New message from %1$s</string>
+    <string name="notification_missed_call">Missed call from %1$s</string>
 </resources>

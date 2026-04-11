@@ -1,0 +1,263 @@
+/* Welcome Screen */
+"welcome.subtitle" = "私密通讯工具";
+"welcome.newChat" = "新建聊天";
+"welcome.creating" = "创建中...";
+"welcome.or" = "或";
+"welcome.roomCode" = "房间代码";
+"welcome.join" = "加入";
+"welcome.joining" = "加入中...";
+"welcome.hideIP" = "隐藏 IP（中继模式）";
+"welcome.footer" = "消息不会存储在服务器上";
+
+/* Waiting Screen */
+"waiting.title" = "等待对方加入";
+"waiting.copy" = "复制";
+"waiting.share" = "分享";
+"waiting.shareMessage" = "加入私密聊天";
+"waiting.cancel" = "取消";
+"waiting.recentContacts" = "最近联系人";
+"waiting.invite" = "邀请";
+"waiting.inviteConfirm.title" = "发送邀请？";
+"waiting.inviteConfirm.message" = "%@ 将收到您想聊天的通知。";
+"waiting.inviteConfirm.send" = "发送";
+
+/* Connecting Screen */
+"connecting.title" = "连接中...";
+"connecting.subtitle" = "正在建立 P2P 连接";
+"connecting.cancel" = "取消";
+"connecting.step.server" = "正在连接服务器...";
+"connecting.step.peer" = "等待对方...";
+"connecting.step.keys" = "正在交换加密密钥...";
+"connecting.step.secured" = "安全连接已建立";
+
+/* Chat Screen */
+"chat.message" = "消息";
+"chat.securityCode" = "安全码";
+"chat.compareCode" = "请通过其他渠道与对方核对此安全码";
+"chat.matches" = "匹配";
+"chat.doesNotMatch" = "不匹配";
+"chat.copy" = "复制";
+"chat.edit" = "编辑";
+"chat.edited" = "已编辑";
+"chat.save" = "保存";
+"chat.deleteForEveryone" = "为所有人删除";
+"chat.you" = "你";
+"chat.leave" = "离开";
+"system.waitingReconnect" = "等待重新连接...";
+
+/* Call Screen */
+"call.calling" = "呼叫中...";
+"call.unmute" = "取消静音";
+"call.mute" = "静音";
+"call.speaker" = "扬声器";
+"call.earpiece" = "听筒";
+"call.end" = "结束";
+
+/* Incoming Call */
+"call.incoming" = "来电";
+"call.accept" = "接听";
+"call.decline" = "拒绝";
+
+/* System Messages */
+"system.peerDisconnected" = "对方已断开连接";
+"system.connectionRestored" = "连接已恢复";
+"system.connectionLost" = "连接已断开";
+"system.secureConnection" = "已建立安全连接";
+"system.tapShield" = "点击盾牌图标验证安全码";
+"system.keyExchangeError" = "密钥交换错误";
+"system.screenshotTaken" = "⚠️ 你截取了屏幕截图";
+"system.decryptionError" = "解密错误";
+"system.replayAttack" = "检测到重放攻击 — 消息已拒绝";
+"system.messageTooOld" = "消息已拒绝 — 过期";
+"system.counterTooOld" = "消息已拒绝 — 计数器过期";
+"system.sendError" = "发送错误";
+"system.calling" = "呼叫中...";
+"system.incomingCall" = "来电中...";
+"system.callConnected" = "通话已接通";
+"system.callDeclined" = "通话已被拒绝";
+"system.callStarted" = "通话已开始";
+"system.callEnded" = "通话已结束";
+"system.noAnswer" = "无人接听";
+"system.noPushToken" = "离线通话：无推送令牌 — 对方不会收到通知。等待连接中...";
+"system.peerEndedCall" = "对方已结束通话";
+"system.peerScreenshot" = "对方截取了屏幕截图";
+"system.verified" = "已验证！连接是安全的。";
+"system.codesDoNotMatch" = "警告：安全码不匹配！可能存在攻击！";
+"system.endSession" = "请立即结束会话。";
+"system.connectionTimeout" = "连接失败（超时）";
+"system.callError" = "通话错误：%@";
+"system.error" = "错误：%@";
+"system.securityWarning" = "⚠️ %@";
+
+/* Post-Quantum */
+"system.pqUpgraded" = "后量子保护已启用（ML-KEM768）";
+
+/* Security Monitor */
+"security.screenRecordingActive" = "屏幕录制进行中";
+"security.screenRecordingDetected" = "检测到屏幕录制";
+"security.bluetoothConnected" = "蓝牙设备已连接：%@";
+"security.audioDeviceRemoved" = "音频设备已断开";
+
+/* Deep Link */
+"deeplink.title" = "加入房间？";
+"deeplink.join" = "加入";
+"deeplink.cancel" = "取消";
+"deeplink.message" = "加入房间 %@...？";
+
+/* Protocol */
+"system.incompatibleVersion" = "协议版本不兼容，请更新 Ghost Chat。";
+
+/* Signaling */
+"signaling.reconnectFailed" = "重新连接失败";
+
+/* Biometric */
+"biometric.reason" = "解锁 Ghost Chat";
+"biometric.enable" = "启用面容 ID";
+"biometric.disable" = "停用面容 ID";
+"biometric.faceid" = "面容 ID";
+"biometric.touchid" = "触控 ID";
+"biometric.locked" = "Ghost Chat 已锁定";
+"biometric.unlock" = "解锁";
+
+/* Settings */
+"settings.title" = "设置";
+"settings.done" = "完成";
+"settings.language" = "语言";
+"settings.language.header" = "语言";
+"settings.language.search" = "搜索";
+
+"settings.security" = "安全";
+"settings.security.footer" = "生物识别在应用切换到后台时保护应用";
+"settings.autolock" = "自动锁定";
+"settings.autolock.background" = "切换到后台时";
+
+"settings.privacy" = "隐私";
+"settings.privacy.relay" = "隐私模式（中继）";
+"settings.privacy.footer" = "所有消息将在设定的时间后自动删除";
+"settings.autodelete" = "自动删除";
+"settings.autodelete.1" = "1 分钟";
+"settings.autodelete.3" = "3 分钟";
+"settings.autodelete.5" = "5 分钟";
+"settings.autodelete.10" = "10 分钟";
+"settings.autodelete.30" = "30 分钟";
+"settings.screenshot.notify" = "截图提醒";
+
+"settings.sounds" = "声音与通知";
+"settings.sound" = "消息提示音";
+"settings.sound.message" = "通知提示音";
+"settings.sound.ringtone" = "来电铃声";
+"settings.vibration" = "振动";
+
+/* Sound Names */
+"sound.none" = "无";
+"sound.tock" = "Tock";
+"sound.tink" = "Tink";
+"sound.pop" = "Pop";
+"sound.received" = "Received";
+"sound.sent" = "Sent";
+"sound.tweet" = "Tweet";
+"sound.anticipate" = "Anticipate";
+"sound.bloom" = "Bloom";
+"sound.calypso" = "Calypso";
+"sound.chooChoo" = "Choo Choo";
+"sound.descent" = "Descent";
+"sound.fanfare" = "Fanfare";
+"sound.ladder" = "Ladder";
+"sound.minuet" = "Minuet";
+"sound.newsFlash" = "News Flash";
+"sound.noir" = "Noir";
+"sound.sherwood" = "Sherwood Forest";
+"sound.spell" = "Spell";
+"sound.suspense" = "Suspense";
+"sound.telegraph" = "Telegraph";
+"sound.tiptoes" = "Tiptoes";
+"sound.typewriters" = "Typewriters";
+"sound.update" = "Update";
+
+"settings.data" = "数据";
+"settings.data.footer" = "这些操作无法撤销";
+"settings.data.deleteContacts" = "删除所有联系人";
+"settings.data.destroyAll" = "销毁所有数据";
+"settings.data.deleteContacts.confirm" = "删除所有联系人？";
+"settings.data.destroyAll.confirm" = "销毁所有数据？这将清除数据库并重置所有设置。";
+"settings.delete" = "删除";
+"settings.destroy" = "销毁";
+"settings.cancel" = "取消";
+
+"settings.about" = "关于";
+"settings.about.version" = "版本";
+"settings.about.protocol" = "协议";
+"settings.about.encryption" = "加密";
+"settings.about.pq" = "后量子";
+
+/* Contacts */
+"contacts.title" = "联系人";
+"contacts.empty" = "暂无联系人";
+"contacts.emptyHint" = "聊天结束后联系人将自动保存";
+"contacts.name" = "姓名";
+"contacts.editName" = "编辑姓名";
+"contacts.save" = "保存";
+"contacts.startChat" = "开始聊天";
+"contacts.details" = "详情";
+
+"contacts.created" = "创建时间";
+"contacts.lastSession" = "上次会话";
+"contacts.sessions" = "会话次数";
+"contacts.keyState" = "密钥状态";
+"contacts.keyState.saved" = "已保存";
+"contacts.keyState.none" = "无";
+"contacts.delete" = "删除联系人";
+"contacts.deleteConfirm" = "删除此联系人？已保存的加密密钥也将被移除。";
+"contacts.savePrompt.title" = "保存联系人？";
+"contacts.savePrompt.name" = "姓名";
+"contacts.savePrompt.message" = "将此对方保存为联系人，以便在今后的会话中识别";
+"contacts.skip" = "跳过";
+
+/* System — Contacts */
+"system.knownPeer" = "已连接：%@";
+"system.unexpectedPeer" = "警告：身份密钥不同！可能存在身份冒充。";
+"system.connectionBlocked" = "连接已阻止。身份验证失败。";
+"security_dtls_missing" = "安全：对方未提供DTLS指纹。连接已阻止。";
+"security_dtls_mismatch" = "安全：DTLS指纹不匹配！可能存在MITM攻击。连接已阻止。";
+
+/* Info.plist */
+"NSMicrophoneUsageDescription" = "语音通话需要使用麦克风";
+"NSFaceIDUsageDescription" = "面容 ID 用于保护您的数据";
+
+/* Contacts — Additional */
+"contacts.call" = "通话";
+"contacts.notes" = "备注";
+"contacts.ttl" = "自动删除消息";
+"contacts.ttl.header" = "消息有效期";
+"contacts.ttl.footer" = "超过选定时间的消息将自动从设备中删除";
+"contacts.ttl.off" = "关闭";
+"contacts.ttl.1h" = "1小时";
+"contacts.ttl.1d" = "1天";
+"contacts.ttl.7d" = "7天";
+"contacts.ttl.30d" = "30天";
+
+/* Saved Messages */
+"saved.title" = "已保存的消息";
+"saved.hint" = "您的个人记事本";
+"saved.placeholder" = "写一条笔记...";
+"saved.disable.confirm" = "停用已保存的消息？所有保存的笔记将被删除。";
+
+/* Files */
+"file.photoVideo" = "照片 / 视频";
+"file.document" = "文件";
+
+/* Typing */
+"chat.typing" = "正在输入...";
+
+/* Chat Invite */
+"invite.banner.title" = "聊天邀请";
+"invite.banner.message" = "%@ 邀请你聊天";
+"invite.join" = "加入";
+"invite.decline" = "拒绝";
+
+/* Push Notifications */
+"push.newMessage.title" = "Ghost Chat";
+"push.newMessage.body" = "来自 %@ 的新消息";
+"push.missedCall.title" = "Ghost Chat";
+"push.missedCall.body" = "未接来电：%@";
+"system.connecting" = "正在连接...";

@@ -1,16 +1,25 @@
 import SwiftUI
-import CryptoKit
 
 /// Детальный экран контакта — имя, отпечаток, ключи, действия
 struct ContactDetailView: View {
     @State var contact: Contact
     @ObservedObject var viewModel: ContactsViewModel
     let onStartChat: (Contact) -> Void
+    let onCallContact: ((Contact) -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     @State private var editedName: String = ""
     @State private var isEditing = false
     @State private var showDeleteConfirmation = false
+    @State private var notesText: String = ""
+
+    init(contact: Contact, viewModel: ContactsViewModel, onStartChat: @escaping (Contact) -> Void, onCallContact: ((Contact) -> Void)? = nil) {
+        self._contact = State(initialValue: contact)
+        self.viewModel = viewModel
+        self.onStartChat = onStartChat
+        self.onCallContact = onCallContact
+        self._notesText = State(initialValue: contact.notes ?? "")
+    }
 
     var body: some View {
         List {
@@ -18,7 +27,7 @@ struct ContactDetailView: View {
             Section {
                 VStack(spacing: 12) {
                     Circle()
-                        .fill(Color.white.opacity(0.1))
+                        .fill(avatarColor(for: contact))
                         .frame(width: 80, height: 80)
                         .overlay {
                             Text(String(contact.label.prefix(1)).uppercased())
@@ -52,6 +61,17 @@ struct ContactDetailView: View {
                     Label("contacts.startChat", systemImage: "bubble.left.and.bubble.right.fill")
                 }
 
+                // Кнопка звонка (доступна если есть push token)
+                if let onCallContact, contact.pushToken != nil {
+                    Button {
+                        onCallContact(contact)
+                        dismiss()
+                    } label: {
+                        Label("contacts.call", systemImage: "phone.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
+
                 Button {
                     if isEditing {
                         saveName()
@@ -65,20 +85,54 @@ struct ContactDetailView: View {
                         systemImage: isEditing ? "checkmark" : "pencil"
                     )
                 }
+
+            }
+            .listRowBackground(Color.white.opacity(0.05))
+
+            // MARK: - Notes
+            Section {
+                TextEditor(text: $notesText)
+                    .frame(minHeight: 60)
+                    .foregroundStyle(.white)
+                    .scrollContentBackground(.hidden)
+                    .onChange(of: notesText) { newValue in
+                        let limited = String(newValue.prefix(999))
+                        if newValue.count > 999 { notesText = limited }
+                        viewModel.updateContactNotes(contact, notes: limited)
+                    }
+            } header: {
+                Text("contacts.notes")
+            }
+            .listRowBackground(Color.white.opacity(0.05))
+
+            // MARK: - Message TTL
+            Section {
+                Picker(selection: Binding(
+                    get: { contact.messageTTL ?? 0 },
+                    set: { newValue in
+                        let ttl: Int? = newValue == 0 ? nil : newValue
+                        contact.messageTTL = ttl
+                        viewModel.updateMessageTTL(contact, ttl: ttl)
+                    }
+                )) {
+                    Text("contacts.ttl.off").tag(0)
+                    Text("contacts.ttl.1h").tag(3600)
+                    Text("contacts.ttl.1d").tag(86400)
+                    Text("contacts.ttl.7d").tag(604800)
+                    Text("contacts.ttl.30d").tag(2592000)
+                } label: {
+                    Label("contacts.ttl", systemImage: "timer")
+                        .foregroundStyle(.white)
+                }
+            } header: {
+                Text("contacts.ttl.header")
+            } footer: {
+                Text("contacts.ttl.footer")
             }
             .listRowBackground(Color.white.opacity(0.05))
 
             // MARK: - Info
             Section {
-                HStack {
-                    Label("contacts.fingerprint", systemImage: "key.fill")
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Text(formatFingerprint(contact.identityKey))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.green)
-                }
-
                 HStack {
                     Label("contacts.created", systemImage: "calendar")
                         .foregroundStyle(.white)
@@ -87,15 +141,6 @@ struct ContactDetailView: View {
                         .foregroundStyle(.gray)
                 }
 
-                if let lastSession = contact.lastSessionAt {
-                    HStack {
-                        Label("contacts.lastSession", systemImage: "clock")
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Text(lastSession, style: .relative)
-                            .foregroundStyle(.gray)
-                    }
-                }
 
                 HStack {
                     Label("contacts.sessions", systemImage: "arrow.triangle.2.circlepath")
@@ -147,9 +192,4 @@ struct ContactDetailView: View {
         isEditing = false
     }
 
-    private func formatFingerprint(_ keyData: Data) -> String {
-        let hash = SHA256.hash(data: keyData)
-        let bytes = Array(hash).prefix(8)
-        return bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
-    }
 }

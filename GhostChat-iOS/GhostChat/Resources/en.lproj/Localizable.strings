@@ -18,13 +18,17 @@
 "waiting.recentContacts" = "Recent contacts";
 "waiting.invite" = "Invite";
 "waiting.inviteConfirm.title" = "Send invite?";
-"waiting.inviteConfirm.message" = "Copy invite link for %@? The link will expire from clipboard in 60 seconds.";
-"waiting.inviteConfirm.send" = "Copy link";
+"waiting.inviteConfirm.message" = "%@ will receive a notification that you want to chat.";
+"waiting.inviteConfirm.send" = "Send";
 
 /* Connecting Screen */
 "connecting.title" = "Connecting...";
 "connecting.subtitle" = "Establishing P2P connection";
 "connecting.cancel" = "Cancel";
+"connecting.step.server" = "Connecting to server...";
+"connecting.step.peer" = "Waiting for peer...";
+"connecting.step.keys" = "Exchanging encryption keys...";
+"connecting.step.secured" = "Secure connection established";
 
 /* Chat Screen */
 "chat.message" = "Message";
@@ -32,6 +36,14 @@
 "chat.compareCode" = "Compare this code with your peer through another channel";
 "chat.matches" = "Matches";
 "chat.doesNotMatch" = "Doesn't match";
+"chat.edit" = "Edit";
+"chat.edited" = "edited";
+"chat.save" = "Save";
+"chat.deleteForEveryone" = "Delete for everyone";
+"chat.you" = "You";
+"chat.leave" = "Leave";
+"system.waitingReconnect" = "Waiting for reconnection...";
+"chat.copy" = "Copy";
 
 /* Call Screen */
 "call.calling" = "Calling...";
@@ -48,6 +60,7 @@
 
 /* System Messages */
 "system.peerDisconnected" = "Peer disconnected";
+"system.peerGone" = "Peer did not reconnect";
 "system.connectionRestored" = "Connection restored";
 "system.connectionLost" = "Connection lost";
 "system.secureConnection" = "Secure connection established";
@@ -55,13 +68,23 @@
 "system.keyExchangeError" = "Key exchange error";
 "system.screenshotTaken" = "⚠️ You took a screenshot";
 "system.decryptionError" = "Decryption error";
+"system.replayAttack" = "Replay attack detected — message rejected";
+"system.messageTooOld" = "Message rejected — too old";
+"system.counterTooOld" = "Message rejected — counter expired";
 "system.sendError" = "Send error";
+"system.fileError" = "File transfer failed";
+"system.peerOffline" = "Peer is offline. Messages will be queued.";
+"system.waitingPeerJoin" = "Waiting for peer to connect...";
+"system.callNoAnswer" = "No answer — peer didn't connect";
 "system.calling" = "Calling...";
 "system.incomingCall" = "Incoming call...";
+"system.connecting" = "Connecting...";
 "system.callConnected" = "Call connected";
 "system.callDeclined" = "Call declined";
 "system.callStarted" = "Call started";
 "system.callEnded" = "Call ended";
+"system.noAnswer" = "No answer";
+"system.noPushToken" = "Offline call: no push token — peer won't receive notification. Waiting for connection...";
 "system.peerEndedCall" = "Peer ended the call";
 "system.peerScreenshot" = "Peer took a screenshot";
 "system.verified" = "Verified! Connection is secure.";
@@ -102,6 +125,22 @@
 "biometric.locked" = "Ghost Chat is locked";
 "biometric.unlock" = "Unlock";
 
+/* PIN Code */
+"pin.set" = "Set PIN Code";
+"pin.change" = "Change PIN Code";
+"pin.remove" = "Remove PIN Code";
+"pin.remove.confirm" = "Remove PIN code? This will also disable biometric lock.";
+"pin.enterCode" = "Enter PIN code";
+"pin.tooManyAttempts" = "Too many wrong attempts. Try again later.";
+"pin.enterCurrent" = "Enter current PIN";
+"pin.enterCurrentHint" = "Enter your current PIN to continue";
+"pin.enterNew" = "Enter new PIN";
+"pin.enterNewHint" = "4-6 digits";
+"pin.confirmNew" = "Confirm PIN";
+"pin.confirmHint" = "Re-enter PIN code";
+"pin.mismatch" = "PINs don't match. Try again.";
+"pin.digits" = "digits";
+
 /* Settings */
 "settings.title" = "Settings";
 "settings.done" = "Done";
@@ -111,8 +150,13 @@
 
 "settings.security" = "SECURITY";
 "settings.security.footer" = "Biometrics protect the app when it moves to background";
+"settings.security.pin.footer" = "Set a PIN code to lock the app. Biometrics are available as a fast unlock when PIN is set.";
 "settings.autolock" = "Auto-lock";
-"settings.autolock.background" = "On background";
+"settings.autolock.instant" = "Instant";
+"settings.autolock.15s" = "15 seconds";
+"settings.autolock.30s" = "30 seconds";
+"settings.autolock.1m" = "1 minute";
+"settings.autolock.5m" = "5 minutes";
 
 "settings.privacy" = "PRIVACY";
 "settings.privacy.relay" = "Privacy mode (relay)";
@@ -124,6 +168,11 @@
 "settings.autodelete.10" = "10 min";
 "settings.autodelete.30" = "30 min";
 "settings.screenshot.notify" = "Screenshot alerts";
+"settings.history" = "CHAT HISTORY";
+"settings.history.save" = "Save message history";
+"settings.history.footer" = "When enabled, messages are stored encrypted on device. When disabled, messages disappear after each session.";
+"settings.history.deleteAll" = "Delete all history";
+"settings.history.deleteAll.warning" = "This action is irreversible. All messages, contacts, and chat history will be permanently destroyed.";
 
 "settings.sounds" = "SOUNDS & NOTIFICATIONS";
 "settings.sound" = "Message sound";
@@ -182,7 +231,7 @@
 "contacts.save" = "Save";
 "contacts.startChat" = "Start chat";
 "contacts.details" = "DETAILS";
-"contacts.fingerprint" = "Fingerprint";
+
 "contacts.created" = "Created";
 "contacts.lastSession" = "Last session";
 "contacts.sessions" = "Sessions";
@@ -199,7 +248,59 @@
 /* System — Contacts */
 "system.knownPeer" = "Connected: %@";
 "system.unexpectedPeer" = "WARNING: Different identity key! Possible impersonation.";
+"system.connectionBlocked" = "Connection blocked. Identity verification failed.";
+"security_dtls_missing" = "SECURITY: Peer did not provide DTLS fingerprint. Connection blocked.";
+"security_dtls_mismatch" = "SECURITY: DTLS fingerprint mismatch! Possible MITM attack. Connection blocked.";
+
+/* Contacts — New */
+"contacts.call" = "Call";
+"contacts.notes" = "Notes";
+"contacts.noMessages" = "No messages yet";
+"contacts.deleteHistory" = "Delete history";
+"contacts.ttl" = "Auto-delete messages";
+"contacts.ttl.header" = "MESSAGE LIFETIME";
+"contacts.ttl.footer" = "Messages older than the selected time will be automatically deleted from the device";
+"contacts.ttl.off" = "Off";
+"contacts.ttl.1h" = "1 hour";
+"contacts.ttl.1d" = "1 day";
+"contacts.ttl.7d" = "7 days";
+"contacts.ttl.30d" = "30 days";
+
+/* Saved Messages */
+"saved.title" = "Saved Messages";
+"saved.hint" = "Your personal notepad";
+"saved.placeholder" = "Write a note...";
+"saved.disable.confirm" = "Disable Saved Messages? All saved notes will be deleted.";
+
+/* Files */
+"file.photoVideo" = "Photo / Video";
+"file.document" = "Document";
+
+/* Typing */
+"chat.typing" = "typing...";
+
+/* Peer Status */
+"status.online" = "online";
+"status.connecting" = "connecting...";
+"status.searching" = "searching...";
+"status.recentlyOnline" = "recently online";
+"status.offline" = "offline";
 
 /* Info.plist */
 "NSMicrophoneUsageDescription" = "Microphone is required for voice calls";
 "NSFaceIDUsageDescription" = "Face ID is used to protect your data";
+
+/* Chat Invite */
+"invite.banner.title" = "Chat Invitation";
+"invite.banner.message" = "%@ invites you to chat";
+"invite.join" = "Join";
+"invite.decline" = "Decline";
+
+/* Push Notifications (APNs loc-key — resolved by iOS from these strings) */
+"push.newMessage.title" = "Ghost Chat";
+"push.newMessage.body" = "New message from %@";
+"push.missedCall.title" = "Ghost Chat";
+"push.missedCall.body" = "Missed call from %@";
+
+/* Notifications — default sender name */
+"notification.yourContact" = "Your contact";

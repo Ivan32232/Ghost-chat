@@ -1,0 +1,263 @@
+/* Welcome Screen */
+"welcome.subtitle" = "Приватний месенджер";
+"welcome.newChat" = "Новий чат";
+"welcome.creating" = "Створення...";
+"welcome.or" = "або";
+"welcome.roomCode" = "Код кімнати";
+"welcome.join" = "Приєднатися";
+"welcome.joining" = "Приєднання...";
+"welcome.hideIP" = "Приховати IP (ретрансляція)";
+"welcome.footer" = "Повідомлення не зберігаються на сервері";
+
+/* Waiting Screen */
+"waiting.title" = "Очікування співрозмовника";
+"waiting.copy" = "Копіювати";
+"waiting.share" = "Поділитися";
+"waiting.shareMessage" = "Приєднуйтесь до приватного чату";
+"waiting.cancel" = "Скасувати";
+"waiting.recentContacts" = "Останні контакти";
+"waiting.invite" = "Запросити";
+"waiting.inviteConfirm.title" = "Надіслати запрошення?";
+"waiting.inviteConfirm.message" = "%@ отримає сповіщення, що ви хочете поговорити.";
+"waiting.inviteConfirm.send" = "Надіслати";
+
+/* Connecting Screen */
+"connecting.title" = "Підключення...";
+"connecting.subtitle" = "Встановлення P2P-з'єднання";
+"connecting.cancel" = "Скасувати";
+"connecting.step.server" = "Підключення до сервера...";
+"connecting.step.peer" = "Очікування співрозмовника...";
+"connecting.step.keys" = "Обмін ключами шифрування...";
+"connecting.step.secured" = "Захищене з'єднання встановлено";
+
+/* Chat Screen */
+"chat.message" = "Повідомлення";
+"chat.securityCode" = "Код безпеки";
+"chat.compareCode" = "Порівняйте цей код зі співрозмовником через інший канал";
+"chat.matches" = "Збігається";
+"chat.doesNotMatch" = "Не збігається";
+"chat.copy" = "Копіювати";
+"chat.edit" = "Редагувати";
+"chat.edited" = "змінено";
+"chat.save" = "Зберегти";
+"chat.deleteForEveryone" = "Видалити для всіх";
+"chat.you" = "Ви";
+"chat.leave" = "Вийти";
+"system.waitingReconnect" = "Очікування перепідключення...";
+
+/* Call Screen */
+"call.calling" = "Виклик...";
+"call.unmute" = "Увімкнути мікрофон";
+"call.mute" = "Вимкнути мікрофон";
+"call.speaker" = "Динамік";
+"call.earpiece" = "Навушник";
+"call.end" = "Завершити";
+
+/* Incoming Call */
+"call.incoming" = "Вхідний виклик";
+"call.accept" = "Прийняти";
+"call.decline" = "Відхилити";
+
+/* System Messages */
+"system.peerDisconnected" = "Співрозмовник від'єднався";
+"system.connectionRestored" = "З'єднання відновлено";
+"system.connectionLost" = "З'єднання втрачено";
+"system.secureConnection" = "Захищене з'єднання встановлено";
+"system.tapShield" = "Натисніть на щит, щоб перевірити коди безпеки";
+"system.keyExchangeError" = "Помилка обміну ключами";
+"system.screenshotTaken" = "⚠️ Ви зробили знімок екрана";
+"system.decryptionError" = "Помилка розшифрування";
+"system.replayAttack" = "Виявлено replay-атаку — повідомлення відхилено";
+"system.messageTooOld" = "Повідомлення відхилено — застаре";
+"system.counterTooOld" = "Повідомлення відхилено — лічильник минув";
+"system.sendError" = "Помилка надсилання";
+"system.calling" = "Виклик...";
+"system.incomingCall" = "Вхідний виклик...";
+"system.callConnected" = "Виклик підключено";
+"system.callDeclined" = "Виклик відхилено";
+"system.callStarted" = "Виклик розпочато";
+"system.callEnded" = "Виклик завершено";
+"system.noAnswer" = "Немає відповіді";
+"system.noPushToken" = "Офлайн дзвінок: немає push токена — співрозмовник не отримає сповіщення. Очікування підключення...";
+"system.peerEndedCall" = "Співрозмовник завершив виклик";
+"system.peerScreenshot" = "Співрозмовник зробив знімок екрана";
+"system.verified" = "Підтверджено! З'єднання захищене.";
+"system.codesDoNotMatch" = "УВАГА: Коди НЕ збігаються! Можлива атака!";
+"system.endSession" = "Негайно завершіть сеанс.";
+"system.connectionTimeout" = "Не вдалося підключитися (тайм-аут)";
+"system.callError" = "Помилка виклику: %@";
+"system.error" = "Помилка: %@";
+"system.securityWarning" = "⚠️ %@";
+
+/* Post-Quantum */
+"system.pqUpgraded" = "Постквантовий захист активний (ML-KEM768)";
+
+/* Security Monitor */
+"security.screenRecordingActive" = "Запис екрана активний";
+"security.screenRecordingDetected" = "Виявлено запис екрана";
+"security.bluetoothConnected" = "Підключено Bluetooth-пристрій: %@";
+"security.audioDeviceRemoved" = "Аудіопристрій від'єднано";
+
+/* Deep Link */
+"deeplink.title" = "Приєднатися до кімнати?";
+"deeplink.join" = "Приєднатися";
+"deeplink.cancel" = "Скасувати";
+"deeplink.message" = "Приєднатися до кімнати %@...?";
+
+/* Protocol */
+"system.incompatibleVersion" = "Несумісна версія протоколу. Будь ласка, оновіть Ghost Chat.";
+
+/* Signaling */
+"signaling.reconnectFailed" = "Не вдалося перепідключитися";
+
+/* Biometric */
+"biometric.reason" = "Розблокувати Ghost Chat";
+"biometric.enable" = "Увімкнути Face ID";
+"biometric.disable" = "Вимкнути Face ID";
+"biometric.faceid" = "Face ID";
+"biometric.touchid" = "Touch ID";
+"biometric.locked" = "Ghost Chat заблоковано";
+"biometric.unlock" = "Розблокувати";
+
+/* Settings */
+"settings.title" = "Налаштування";
+"settings.done" = "Готово";
+"settings.language" = "Мова";
+"settings.language.header" = "МОВА";
+"settings.language.search" = "Пошук";
+
+"settings.security" = "БЕЗПЕКА";
+"settings.security.footer" = "Біометрія захищає додаток при згортанні";
+"settings.autolock" = "Автоблокування";
+"settings.autolock.background" = "При згортанні";
+
+"settings.privacy" = "КОНФІДЕНЦІЙНІСТЬ";
+"settings.privacy.relay" = "Режим конфіденційності (ретрансляція)";
+"settings.privacy.footer" = "Усі повідомлення автоматично видаляються після встановленого таймера";
+"settings.autodelete" = "Автовидалення";
+"settings.autodelete.1" = "1 хв";
+"settings.autodelete.3" = "3 хв";
+"settings.autodelete.5" = "5 хв";
+"settings.autodelete.10" = "10 хв";
+"settings.autodelete.30" = "30 хв";
+"settings.screenshot.notify" = "Сповіщення про знімки екрана";
+
+"settings.sounds" = "ЗВУКИ ТА СПОВІЩЕННЯ";
+"settings.sound" = "Звук повідомлення";
+"settings.sound.message" = "Звук сповіщення";
+"settings.sound.ringtone" = "Рингтон";
+"settings.vibration" = "Вібрація";
+
+/* Sound Names */
+"sound.none" = "Немає";
+"sound.tock" = "Tock";
+"sound.tink" = "Tink";
+"sound.pop" = "Pop";
+"sound.received" = "Received";
+"sound.sent" = "Sent";
+"sound.tweet" = "Tweet";
+"sound.anticipate" = "Anticipate";
+"sound.bloom" = "Bloom";
+"sound.calypso" = "Calypso";
+"sound.chooChoo" = "Choo Choo";
+"sound.descent" = "Descent";
+"sound.fanfare" = "Fanfare";
+"sound.ladder" = "Ladder";
+"sound.minuet" = "Minuet";
+"sound.newsFlash" = "News Flash";
+"sound.noir" = "Noir";
+"sound.sherwood" = "Sherwood Forest";
+"sound.spell" = "Spell";
+"sound.suspense" = "Suspense";
+"sound.telegraph" = "Telegraph";
+"sound.tiptoes" = "Tiptoes";
+"sound.typewriters" = "Typewriters";
+"sound.update" = "Update";
+
+"settings.data" = "ДАНІ";
+"settings.data.footer" = "Ці дії не можна скасувати";
+"settings.data.deleteContacts" = "Видалити всі контакти";
+"settings.data.destroyAll" = "Знищити все";
+"settings.data.deleteContacts.confirm" = "Видалити всі контакти?";
+"settings.data.destroyAll.confirm" = "Знищити всі дані? Це видалить базу даних і скине всі налаштування.";
+"settings.delete" = "Видалити";
+"settings.destroy" = "Знищити";
+"settings.cancel" = "Скасувати";
+
+"settings.about" = "ПРО ДОДАТОК";
+"settings.about.version" = "Версія";
+"settings.about.protocol" = "Протокол";
+"settings.about.encryption" = "Шифрування";
+"settings.about.pq" = "Постквантове";
+
+/* Contacts */
+"contacts.title" = "Контакти";
+"contacts.empty" = "Немає контактів";
+"contacts.emptyHint" = "Контакти зберігаються автоматично після сеансів чату";
+"contacts.name" = "Ім'я";
+"contacts.editName" = "Змінити ім'я";
+"contacts.save" = "Зберегти";
+"contacts.startChat" = "Почати чат";
+"contacts.details" = "ДЕТАЛІ";
+
+"contacts.created" = "Створено";
+"contacts.lastSession" = "Останній сеанс";
+"contacts.sessions" = "Сеанси";
+"contacts.keyState" = "Стан ключа";
+"contacts.keyState.saved" = "Збережено";
+"contacts.keyState.none" = "Немає";
+"contacts.delete" = "Видалити контакт";
+"contacts.deleteConfirm" = "Видалити цей контакт? Це також видалить збережені ключі шифрування.";
+"contacts.savePrompt.title" = "Зберегти контакт?";
+"contacts.savePrompt.name" = "Ім'я";
+"contacts.savePrompt.message" = "Зберегти цього співрозмовника як контакт, щоб впізнавати його в майбутніх сеансах";
+"contacts.skip" = "Пропустити";
+
+/* System — Contacts */
+"system.knownPeer" = "Підключено: %@";
+"system.unexpectedPeer" = "УВАГА: Інший ключ ідентифікації! Можлива підміна особи.";
+"system.connectionBlocked" = "З'єднання заблоковано. Перевірка ідентифікації не пройдена.";
+"security_dtls_missing" = "БЕЗПЕКА: Пір не надав відбиток DTLS. З'єднання заблоковано.";
+"security_dtls_mismatch" = "БЕЗПЕКА: Відбиток DTLS не збігається! Можлива атака MITM. З'єднання заблоковано.";
+
+/* Info.plist */
+"NSMicrophoneUsageDescription" = "Мікрофон потрібен для голосових викликів";
+"NSFaceIDUsageDescription" = "Face ID використовується для захисту ваших даних";
+
+/* Contacts — Additional */
+"contacts.call" = "Зателефонувати";
+"contacts.notes" = "Нотатки";
+"contacts.ttl" = "Автовидалення повідомлень";
+"contacts.ttl.header" = "ЧАС ЖИТТЯ ПОВІДОМЛЕНЬ";
+"contacts.ttl.footer" = "Повідомлення старші за обраний час будуть автоматично видалені з пристрою";
+"contacts.ttl.off" = "Вимк";
+"contacts.ttl.1h" = "1 година";
+"contacts.ttl.1d" = "1 день";
+"contacts.ttl.7d" = "7 днів";
+"contacts.ttl.30d" = "30 днів";
+
+/* Saved Messages */
+"saved.title" = "Збережені повідомлення";
+"saved.hint" = "Ваш особистий блокнот";
+"saved.placeholder" = "Написати нотатку...";
+"saved.disable.confirm" = "Вимкнути збережені повідомлення? Усі збережені нотатки будуть видалені.";
+
+/* Files */
+"file.photoVideo" = "Фото / Відео";
+"file.document" = "Документ";
+
+/* Typing */
+"chat.typing" = "друкує...";
+
+/* Chat Invite */
+"invite.banner.title" = "Запрошення до чату";
+"invite.banner.message" = "%@ запрошує вас до чату";
+"invite.join" = "Приєднатися";
+"invite.decline" = "Відхилити";
+
+/* Push Notifications */
+"push.newMessage.title" = "Ghost Chat";
+"push.newMessage.body" = "Нове повідомлення від %@";
+"push.missedCall.title" = "Ghost Chat";
+"push.missedCall.body" = "Пропущений дзвінок від %@";
+"system.connecting" = "Підключення...";

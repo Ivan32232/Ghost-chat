@@ -11,7 +11,10 @@ struct Contact: Identifiable, Codable, Equatable {
     var previousKey: Data?
     var fallbackKey: Data?
     var pushToken: Data?
+    var notifyToken: Data?          // Regular APNs token for chat invites
     var rotationCounter: Int
+    var notes: String?              // User-added notes about this contact
+    var messageTTL: Int?            // Per-contact message TTL in seconds (nil = global setting)
     var sessionCount: Int           // Number of sessions with this contact
     let createdAt: Date
     var lastSessionAt: Date?
@@ -29,6 +32,9 @@ struct Contact: Identifiable, Codable, Equatable {
         previousKey: Data? = nil,
         fallbackKey: Data? = nil,
         pushToken: Data? = nil,
+        notifyToken: Data? = nil,
+        notes: String? = nil,
+        messageTTL: Int? = nil,
         rotationCounter: Int = 0,
         sessionCount: Int = 0,
         createdAt: Date = Date(),
@@ -42,6 +48,9 @@ struct Contact: Identifiable, Codable, Equatable {
         self.previousKey = previousKey
         self.fallbackKey = fallbackKey
         self.pushToken = pushToken
+        self.notifyToken = notifyToken
+        self.notes = notes
+        self.messageTTL = messageTTL
         self.rotationCounter = rotationCounter
         self.sessionCount = sessionCount
         self.createdAt = createdAt

@@ -1,0 +1,4 @@
+/* Info.plist localization — Arabic */
+
+"NSMicrophoneUsageDescription" = "الميكروفون مطلوب للمكالمات الصوتية";
+"NSFaceIDUsageDescription" = "يُستخدم Face ID لحماية بياناتك";

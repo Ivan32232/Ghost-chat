@@ -23,6 +23,18 @@ final class LocalizationManager: ObservableObject {
     static let availableLanguages: [Language] = [
         Language(code: "en", flag: "🇺🇸", nameNative: "English", nameEn: "English"),
         Language(code: "ru", flag: "🇷🇺", nameNative: "Русский", nameEn: "Russian"),
+        Language(code: "uk", flag: "🇺🇦", nameNative: "Українська", nameEn: "Ukrainian"),
+        Language(code: "es", flag: "🇪🇸", nameNative: "Español", nameEn: "Spanish"),
+        Language(code: "fr", flag: "🇫🇷", nameNative: "Français", nameEn: "French"),
+        Language(code: "de", flag: "🇩🇪", nameNative: "Deutsch", nameEn: "German"),
+        Language(code: "pt-BR", flag: "🇧🇷", nameNative: "Português", nameEn: "Portuguese"),
+        Language(code: "zh-Hans", flag: "🇨🇳", nameNative: "简体中文", nameEn: "Chinese"),
+        Language(code: "ja", flag: "🇯🇵", nameNative: "日本語", nameEn: "Japanese"),
+        Language(code: "ko", flag: "🇰🇷", nameNative: "한국어", nameEn: "Korean"),
+        Language(code: "tr", flag: "🇹🇷", nameNative: "Türkçe", nameEn: "Turkish"),
+        Language(code: "ar", flag: "🇸🇦", nameNative: "العربية", nameEn: "Arabic"),
+        Language(code: "hi", flag: "🇮🇳", nameNative: "हिन्दी", nameEn: "Hindi"),
+        Language(code: "it", flag: "🇮🇹", nameNative: "Italiano", nameEn: "Italian"),
     ]
 
     // MARK: - Published State
@@ -69,6 +81,11 @@ final class LocalizationManager: ObservableObject {
 
     var currentFlag: String {
         Self.availableLanguages.first { $0.code == currentLanguage }?.flag ?? "🌐"
+    }
+
+    /// Layout direction для RTL языков (арабский)
+    var layoutDirection: LayoutDirection {
+        currentLanguage == "ar" ? .rightToLeft : .leftToRight
     }
 }
 

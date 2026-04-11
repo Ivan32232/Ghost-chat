@@ -238,11 +238,10 @@ class DoubleRatchet private constructor() {
             return dr
         }
 
-        /** Initialize as responder (guest/Bob) */
-        fun initAsResponder(sharedSecret: ByteArray): DoubleRatchet {
+        /** Initialize as responder (guest/Bob) — MUST reuse the keypair from key-exchange */
+        fun initAsResponder(sharedSecret: ByteArray, initialKeyPair: KeyPair): DoubleRatchet {
             val dr = DoubleRatchet()
-            val keyPair = generateKeyPair()
-            dr.dhSending = keyPair
+            dr.dhSending = initialKeyPair
             dr.dhReceiving = null
 
             dr.rootKey = kdfRootInitial(sharedSecret)
@@ -477,10 +476,10 @@ class DoubleRatchet private constructor() {
         receiveChainKey = currentCK
         receiveMessageNumber = currentN
 
-        // Enforce max skip limit
+        // Enforce max skip limit — remove by lowest messageNumber (deterministic)
         while (skippedKeys.size > MAX_SKIP) {
-            val firstKey = skippedKeys.keys.firstOrNull() ?: break
-            skippedKeys.remove(firstKey)
+            val oldestKey = skippedKeys.keys.minByOrNull { it.messageNumber } ?: break
+            skippedKeys.remove(oldestKey)
         }
     }
 
@@ -523,14 +522,32 @@ class DoubleRatchet private constructor() {
 
     /** Securely destroy all key material */
     fun destroy() {
+        // Zero all skipped message keys before clearing
+        for (key in skippedKeys.values) key.fill(0)
         skippedKeys.clear()
+        // Zero chain keys before nulling (best-effort JVM heap wipe)
+        sendChainKey?.fill(0)
         sendChainKey = null
+        receiveChainKey?.fill(0)
         receiveChainKey = null
+        sendHeaderKey?.fill(0)
         sendHeaderKey = null
+        receiveHeaderKey?.fill(0)
         receiveHeaderKey = null
+        nextSendHeaderKey?.fill(0)
         nextSendHeaderKey = null
+        nextReceiveHeaderKey?.fill(0)
         nextReceiveHeaderKey = null
         dhReceiving = null
+        // Zero root key (32 bytes of secret material)
+        if (::rootKey.isInitialized) {
+            rootKey.fill(0)
+        }
+        // Overwrite DH sending keypair (private key stays in JVM memory until GC,
+        // but replacing the reference ensures it's not reachable from this object)
+        if (::dhSending.isInitialized) {
+            dhSending = generateKeyPair()
+        }
     }
 }
 

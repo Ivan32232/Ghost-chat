@@ -1,0 +1,263 @@
+/* Welcome Screen */
+"welcome.subtitle" = "Gizli mesajlaşma";
+"welcome.newChat" = "Yeni sohbet";
+"welcome.creating" = "Oluşturuluyor...";
+"welcome.or" = "veya";
+"welcome.roomCode" = "Oda kodu";
+"welcome.join" = "Katıl";
+"welcome.joining" = "Katılınıyor...";
+"welcome.hideIP" = "IP'yi gizle (aktarma)";
+"welcome.footer" = "Mesajlar sunucuda saklanmaz";
+
+/* Waiting Screen */
+"waiting.title" = "Karşı taraf bekleniyor";
+"waiting.copy" = "Kopyala";
+"waiting.share" = "Paylaş";
+"waiting.shareMessage" = "Gizli sohbete katıl";
+"waiting.cancel" = "İptal";
+"waiting.recentContacts" = "Son kişiler";
+"waiting.invite" = "Davet et";
+"waiting.inviteConfirm.title" = "Davet gönderilsin mi?";
+"waiting.inviteConfirm.message" = "%@ sohbet etmek istediğinize dair bir bildirim alacak.";
+"waiting.inviteConfirm.send" = "Gönder";
+
+/* Connecting Screen */
+"connecting.title" = "Bağlanıyor...";
+"connecting.subtitle" = "P2P bağlantısı kuruluyor";
+"connecting.cancel" = "İptal";
+"connecting.step.server" = "Sunucuya bağlanılıyor...";
+"connecting.step.peer" = "Karşı taraf bekleniyor...";
+"connecting.step.keys" = "Şifreleme anahtarları değiştiriliyor...";
+"connecting.step.secured" = "Güvenli bağlantı kuruldu";
+
+/* Chat Screen */
+"chat.message" = "Mesaj";
+"chat.securityCode" = "Güvenlik kodu";
+"chat.compareCode" = "Bu kodu başka bir kanal üzerinden karşı tarafla karşılaştırın";
+"chat.matches" = "Eşleşiyor";
+"chat.doesNotMatch" = "Eşleşmiyor";
+"chat.copy" = "Kopyala";
+"chat.edit" = "Düzenle";
+"chat.edited" = "düzenlendi";
+"chat.save" = "Kaydet";
+"chat.deleteForEveryone" = "Herkes için sil";
+"chat.you" = "Sen";
+"chat.leave" = "Çıkış";
+"system.waitingReconnect" = "Yeniden bağlanma bekleniyor...";
+
+/* Call Screen */
+"call.calling" = "Aranıyor...";
+"call.unmute" = "Sesi aç";
+"call.mute" = "Sessize al";
+"call.speaker" = "Hoparlör";
+"call.earpiece" = "Kulaklık";
+"call.end" = "Sonlandır";
+
+/* Incoming Call */
+"call.incoming" = "Gelen arama";
+"call.accept" = "Kabul et";
+"call.decline" = "Reddet";
+
+/* System Messages */
+"system.peerDisconnected" = "Karşı taraf bağlantıyı kesti";
+"system.connectionRestored" = "Bağlantı yeniden kuruldu";
+"system.connectionLost" = "Bağlantı kesildi";
+"system.secureConnection" = "Güvenli bağlantı kuruldu";
+"system.tapShield" = "Güvenlik kodlarını doğrulamak için kalkana dokunun";
+"system.keyExchangeError" = "Anahtar değişimi hatası";
+"system.screenshotTaken" = "⚠️ Ekran görüntüsü aldınız";
+"system.decryptionError" = "Şifre çözme hatası";
+"system.replayAttack" = "Tekrar saldırısı tespit edildi — mesaj reddedildi";
+"system.messageTooOld" = "Mesaj reddedildi — çok eski";
+"system.counterTooOld" = "Mesaj reddedildi — sayaç süresi dolmuş";
+"system.sendError" = "Gönderme hatası";
+"system.calling" = "Aranıyor...";
+"system.incomingCall" = "Gelen arama...";
+"system.callConnected" = "Arama bağlandı";
+"system.callDeclined" = "Arama reddedildi";
+"system.callStarted" = "Arama başladı";
+"system.callEnded" = "Arama sona erdi";
+"system.noAnswer" = "Cevap yok";
+"system.noPushToken" = "Cevrimdisi arama: push tokeni yok — karsi taraf bildirim almayacak. Baglanti bekleniyor...";
+"system.peerEndedCall" = "Karşı taraf aramayı sonlandırdı";
+"system.peerScreenshot" = "Karşı taraf ekran görüntüsü aldı";
+"system.verified" = "Doğrulandı! Bağlantı güvenli.";
+"system.codesDoNotMatch" = "UYARI: Kodlar eşleşmiyor! Olası saldırı!";
+"system.endSession" = "Oturumu derhal sonlandırın.";
+"system.connectionTimeout" = "Bağlantı başarısız oldu (zaman aşımı)";
+"system.callError" = "Arama hatası: %@";
+"system.error" = "Hata: %@";
+"system.securityWarning" = "⚠️ %@";
+
+/* Post-Quantum */
+"system.pqUpgraded" = "Kuantum sonrası koruma etkin (ML-KEM768)";
+
+/* Security Monitor */
+"security.screenRecordingActive" = "Ekran kaydı etkin";
+"security.screenRecordingDetected" = "Ekran kaydı algılandı";
+"security.bluetoothConnected" = "Bluetooth cihazı bağlandı: %@";
+"security.audioDeviceRemoved" = "Ses cihazı bağlantısı kesildi";
+
+/* Deep Link */
+"deeplink.title" = "Odaya katılınız mı?";
+"deeplink.join" = "Katıl";
+"deeplink.cancel" = "İptal";
+"deeplink.message" = "%@... odasına katılınız mı?";
+
+/* Protocol */
+"system.incompatibleVersion" = "Uyumsuz protokol sürümü. Lütfen Ghost Chat'i güncelleyin.";
+
+/* Signaling */
+"signaling.reconnectFailed" = "Yeniden bağlanma başarısız oldu";
+
+/* Biometric */
+"biometric.reason" = "Ghost Chat kilidini aç";
+"biometric.enable" = "Face ID'yi etkinleştir";
+"biometric.disable" = "Face ID'yi devre dışı bırak";
+"biometric.faceid" = "Face ID";
+"biometric.touchid" = "Touch ID";
+"biometric.locked" = "Ghost Chat kilitli";
+"biometric.unlock" = "Kilidi aç";
+
+/* Settings */
+"settings.title" = "Ayarlar";
+"settings.done" = "Tamam";
+"settings.language" = "Dil";
+"settings.language.header" = "DİL";
+"settings.language.search" = "Ara";
+
+"settings.security" = "GÜVENLİK";
+"settings.security.footer" = "Uygulama arka plana geçtiğinde biyometrik kimlik doğrulama ile korunur";
+"settings.autolock" = "Otomatik kilitleme";
+"settings.autolock.background" = "Arka plana geçtiğinde";
+
+"settings.privacy" = "GİZLİLİK";
+"settings.privacy.relay" = "Gizlilik modu (aktarma)";
+"settings.privacy.footer" = "Tüm mesajlar belirlenen süre sonrasında otomatik olarak silinir";
+"settings.autodelete" = "Otomatik silme";
+"settings.autodelete.1" = "1 dk";
+"settings.autodelete.3" = "3 dk";
+"settings.autodelete.5" = "5 dk";
+"settings.autodelete.10" = "10 dk";
+"settings.autodelete.30" = "30 dk";
+"settings.screenshot.notify" = "Ekran görüntüsü uyarıları";
+
+"settings.sounds" = "SES VE BİLDİRİMLER";
+"settings.sound" = "Mesaj sesi";
+"settings.sound.message" = "Bildirim sesi";
+"settings.sound.ringtone" = "Zil sesi";
+"settings.vibration" = "Titreşim";
+
+/* Sound Names */
+"sound.none" = "Yok";
+"sound.tock" = "Tock";
+"sound.tink" = "Tink";
+"sound.pop" = "Pop";
+"sound.received" = "Received";
+"sound.sent" = "Sent";
+"sound.tweet" = "Tweet";
+"sound.anticipate" = "Anticipate";
+"sound.bloom" = "Bloom";
+"sound.calypso" = "Calypso";
+"sound.chooChoo" = "Choo Choo";
+"sound.descent" = "Descent";
+"sound.fanfare" = "Fanfare";
+"sound.ladder" = "Ladder";
+"sound.minuet" = "Minuet";
+"sound.newsFlash" = "News Flash";
+"sound.noir" = "Noir";
+"sound.sherwood" = "Sherwood Forest";
+"sound.spell" = "Spell";
+"sound.suspense" = "Suspense";
+"sound.telegraph" = "Telegraph";
+"sound.tiptoes" = "Tiptoes";
+"sound.typewriters" = "Typewriters";
+"sound.update" = "Update";
+
+"settings.data" = "VERİ";
+"settings.data.footer" = "Bu işlemler geri alınamaz";
+"settings.data.deleteContacts" = "Tüm kişileri sil";
+"settings.data.destroyAll" = "Her şeyi yok et";
+"settings.data.deleteContacts.confirm" = "Tüm kişiler silinsin mi?";
+"settings.data.destroyAll.confirm" = "Tüm veriler yok edilsin mi? Veritabanı silinecek ve tüm ayarlar sıfırlanacaktır.";
+"settings.delete" = "Sil";
+"settings.destroy" = "Yok et";
+"settings.cancel" = "İptal";
+
+"settings.about" = "HAKKINDA";
+"settings.about.version" = "Sürüm";
+"settings.about.protocol" = "Protokol";
+"settings.about.encryption" = "Şifreleme";
+"settings.about.pq" = "Kuantum sonrası";
+
+/* Contacts */
+"contacts.title" = "Kişiler";
+"contacts.empty" = "Kişi yok";
+"contacts.emptyHint" = "Sohbet oturumlarından sonra kişiler otomatik olarak kaydedilir";
+"contacts.name" = "Ad";
+"contacts.editName" = "Adı düzenle";
+"contacts.save" = "Kaydet";
+"contacts.startChat" = "Sohbet başlat";
+"contacts.details" = "DETAYLAR";
+
+"contacts.created" = "Oluşturulma";
+"contacts.lastSession" = "Son oturum";
+"contacts.sessions" = "Oturumlar";
+"contacts.keyState" = "Anahtar durumu";
+"contacts.keyState.saved" = "Kaydedildi";
+"contacts.keyState.none" = "Yok";
+"contacts.delete" = "Kişiyi sil";
+"contacts.deleteConfirm" = "Bu kişi silinsin mi? Kayıtlı şifreleme anahtarları da silinecektir.";
+"contacts.savePrompt.title" = "Kişi kaydedilsin mi?";
+"contacts.savePrompt.name" = "Ad";
+"contacts.savePrompt.message" = "Bu kişiyi kaydedin, gelecek oturumlarda tanıyabilirsiniz";
+"contacts.skip" = "Atla";
+
+/* System — Contacts */
+"system.knownPeer" = "Bağlandı: %@";
+"system.unexpectedPeer" = "UYARI: Farklı kimlik anahtarı! Olası kimlik taklidi.";
+"system.connectionBlocked" = "Bağlantı engellendi. Kimlik doğrulama başarısız.";
+"security_dtls_missing" = "GÜVENLİK: Eş DTLS parmak izi sağlamadı. Bağlantı engellendi.";
+"security_dtls_mismatch" = "GÜVENLİK: DTLS parmak izi uyuşmuyor! Olası MITM saldırısı. Bağlantı engellendi.";
+
+/* Info.plist */
+"NSMicrophoneUsageDescription" = "Sesli aramalar için mikrofon gereklidir";
+"NSFaceIDUsageDescription" = "Verilerinizi korumak için Face ID kullanılır";
+
+/* Contacts — Additional */
+"contacts.call" = "Ara";
+"contacts.notes" = "Notlar";
+"contacts.ttl" = "Mesajları otomatik sil";
+"contacts.ttl.header" = "MESAJ ÖMRÜ";
+"contacts.ttl.footer" = "Seçilen süreden eski mesajlar cihazdan otomatik olarak silinecektir";
+"contacts.ttl.off" = "Kapalı";
+"contacts.ttl.1h" = "1 saat";
+"contacts.ttl.1d" = "1 gün";
+"contacts.ttl.7d" = "7 gün";
+"contacts.ttl.30d" = "30 gün";
+
+/* Saved Messages */
+"saved.title" = "Kayıtlı Mesajlar";
+"saved.hint" = "Kişisel not defteriniz";
+"saved.placeholder" = "Bir not yazın...";
+"saved.disable.confirm" = "Kayıtlı mesajlar devre dışı bırakılsın mı? Tüm kayıtlı notlar silinecek.";
+
+/* Files */
+"file.photoVideo" = "Fotoğraf / Video";
+"file.document" = "Belge";
+
+/* Typing */
+"chat.typing" = "yazıyor...";
+
+/* Chat Invite */
+"invite.banner.title" = "Sohbet Daveti";
+"invite.banner.message" = "%@ sizi sohbete davet ediyor";
+"invite.join" = "Katıl";
+"invite.decline" = "Reddet";
+
+/* Push Notifications */
+"push.newMessage.title" = "Ghost Chat";
+"push.newMessage.body" = "%@ kişisinden yeni mesaj";
+"push.missedCall.title" = "Ghost Chat";
+"push.missedCall.body" = "%@ kişisinden cevapsız arama";
+"system.connecting" = "Bağlanıyor...";

@@ -1,8 +1,11 @@
 import Foundation
+import os.log
 
 /// WebSocket клиент для signaling сервера — порт connectWebSocket() + handleSignalingMessage()
 /// Протокол полностью совместим с server/index.js
 final class SignalingClient: NSObject {
+
+    private let logger = Logger(subsystem: "com.ivanpokhvalitov.ghostchat", category: "SignalingClient")
 
     // MARK: - Properties
 
@@ -13,6 +16,12 @@ final class SignalingClient: NSObject {
     private var isReconnecting = false
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 10
+    private var pendingRejoin: (roomId: String, isHost: Bool)?
+    private var reconnectTimeoutWork: DispatchWorkItem?
+
+    /// Message queue — messages sent before WS opens get queued and flushed on open
+    private var pendingMessages: [[String: Any]] = []
+    private var isOpen = false
 
     // MARK: - Callbacks
 
@@ -36,6 +45,7 @@ final class SignalingClient: NSObject {
     // MARK: - Connection
 
     func connect() {
+        ghostLog("[SignalingClient] connect called, server=\(self.serverURL.absoluteString)")
         let session = URLSession(
             configuration: .default,
             delegate: self,
@@ -49,6 +59,7 @@ final class SignalingClient: NSObject {
         components.path = "/ws"
 
         let wsURL = components.url!
+        ghostLog("[SignalingClient] connecting to \(wsURL.absoluteString)")
         webSocket = session.webSocketTask(with: wsURL)
         webSocket?.resume()
 
@@ -57,7 +68,13 @@ final class SignalingClient: NSObject {
     }
 
     func disconnect() {
+        ghostLog("[SignalingClient] disconnect called")
         isReconnecting = false
+        isOpen = false
+        reconnectTimeoutWork?.cancel()
+        reconnectTimeoutWork = nil
+        pendingMessages.removeAll()
+        pendingRejoin = nil
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
         urlSession?.invalidateAndCancel()
@@ -70,11 +87,18 @@ final class SignalingClient: NSObject {
         guard let data = try? JSONSerialization.data(withJSONObject: message),
               let text = String(data: data, encoding: .utf8) else { return }
 
+        let msgType = message["type"] as? String ?? "unknown"
+        guard isOpen else {
+            // Queue messages until WebSocket is open
+            ghostLog("[SignalingClient] WS not open, queuing message type=\(msgType)")
+            pendingMessages.append(message)
+            return
+        }
+
+        ghostLog("[SignalingClient] sending message type=\(msgType)")
         webSocket?.send(.string(text)) { error in
             if let error {
-                #if DEBUG
-                print("[SignalingClient] Send error: \(error)")
-                #endif
+                ghostLog("[SignalingClient] send error: \(error.localizedDescription)")
             }
         }
     }
@@ -92,6 +116,8 @@ final class SignalingClient: NSObject {
     }
 
     func sendSignal(_ data: [String: Any]) {
+        let signalType = data["type"] as? String ?? "unknown"
+        ghostLog("[SignalingClient] sendSignal signalType=\(signalType)")
         send(["type": "signal", "data": data])
     }
 
@@ -121,9 +147,8 @@ final class SignalingClient: NSObject {
                 self.listenForMessages()
 
             case .failure(let error):
-                #if DEBUG
-                print("[SignalingClient] Receive error: \(error)")
-                #endif
+                ghostLog("[SignalingClient] receive FAILED: \(error.localizedDescription)")
+                self.isOpen = false
                 self.onDisconnected?()
             }
         }
@@ -133,6 +158,8 @@ final class SignalingClient: NSObject {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = json["type"] as? String else { return }
+
+        ghostLog("[SignalingClient] received message type=\(type)")
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -176,6 +203,7 @@ final class SignalingClient: NSObject {
 
     /// Автопереподключение с exponential backoff — порт scheduleReconnect()
     func scheduleReconnect(roomId: String, isHost: Bool) {
+        ghostLog("[SignalingClient] scheduleReconnect isHost=\(isHost), alreadyReconnecting=\(isReconnecting)")
         guard !isReconnecting else { return }
         isReconnecting = true
         reconnectAttempts = 0
@@ -187,8 +215,11 @@ final class SignalingClient: NSObject {
         guard isReconnecting else { return }
 
         reconnectAttempts += 1
+        ghostLog("[SignalingClient] attemptReconnect #\(reconnectAttempts)/\(maxReconnectAttempts), isHost=\(isHost)")
         if reconnectAttempts > maxReconnectAttempts {
+            ghostLog("[SignalingClient] reconnect giving up after \(maxReconnectAttempts) attempts")
             isReconnecting = false
+            pendingRejoin = nil
             onError?(String(localized: "signaling.reconnectFailed"))
             return
         }
@@ -199,7 +230,9 @@ final class SignalingClient: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, self.isReconnecting else { return }
 
+            let wasReconnecting = self.isReconnecting
             self.disconnect()
+            self.isReconnecting = wasReconnecting
 
             let session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
             self.urlSession = session
@@ -210,27 +243,28 @@ final class SignalingClient: NSObject {
 
             let ws = session.webSocketTask(with: components.url!)
             self.webSocket = ws
-            ws.resume()
 
-            // Слушаем сообщения
+            // Store pending rejoin — will fire in didOpenWithProtocol delegate
+            self.pendingRejoin = (roomId: roomId, isHost: isHost)
+
+            ws.resume()
             self.listenForMessages()
 
-            // Отправляем rejoin
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self else { return }
-                if ws.state == .running {
-                    self.reconnectAttempts = 0
-                    self.isReconnecting = false
-                    self.rejoinRoom(roomId, role: isHost ? "host" : "guest")
-                } else {
-                    self.attemptReconnect(roomId: roomId, isHost: isHost)
-                }
+            // Timeout: if not connected in 10s, retry (cancellable on success)
+            self.reconnectTimeoutWork?.cancel()
+            let timeoutWork = DispatchWorkItem { [weak self] in
+                guard let self, self.isReconnecting, self.pendingRejoin != nil else { return }
+                // Connection didn't open in time — retry
+                self.pendingRejoin = nil
+                self.attemptReconnect(roomId: roomId, isHost: isHost)
             }
+            self.reconnectTimeoutWork = timeoutWork
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeoutWork)
         }
     }
 
     var isConnected: Bool {
-        webSocket?.state == .running
+        isOpen
     }
 }
 
@@ -243,6 +277,32 @@ extension SignalingClient: URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol protocol: String?
     ) {
+        ghostLog("[SignalingClient] WebSocket opened")
+        isOpen = true
+
+        // Cancel pending reconnect timeout — connection succeeded
+        reconnectTimeoutWork?.cancel()
+        reconnectTimeoutWork = nil
+
+        // Flush queued messages
+        let queued = pendingMessages
+        pendingMessages.removeAll()
+        if !queued.isEmpty {
+            ghostLog("[SignalingClient] flushing \(queued.count) queued messages")
+        }
+        for msg in queued {
+            send(msg)
+        }
+
+        // Handle reconnection: send rejoin on successful open
+        if let rejoin = pendingRejoin {
+            ghostLog("[SignalingClient] reconnected, rejoining room")
+            pendingRejoin = nil
+            reconnectAttempts = 0
+            isReconnecting = false
+            rejoinRoom(rejoin.roomId, role: rejoin.isHost ? "host" : "guest")
+        }
+
         onConnected?()
     }
 
@@ -252,6 +312,8 @@ extension SignalingClient: URLSessionWebSocketDelegate {
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?
     ) {
+        ghostLog("[SignalingClient] WebSocket closed, code=\(closeCode.rawValue)")
+        isOpen = false
         onDisconnected?()
     }
 

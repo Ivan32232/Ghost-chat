@@ -1,5 +1,5 @@
 import XCTest
-@testable import GhostChat
+@testable import Ghost_chat
 
 /// Тесты крипто-модуля
 /// Проверяют совместимость с веб-клиентом (crypto.js)

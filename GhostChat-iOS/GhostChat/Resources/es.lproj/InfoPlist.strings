@@ -1,0 +1,4 @@
+/* Info.plist localization — Spanish */
+
+"NSMicrophoneUsageDescription" = "El micrófono es necesario para las llamadas de voz";
+"NSFaceIDUsageDescription" = "Face ID se usa para proteger tus datos";

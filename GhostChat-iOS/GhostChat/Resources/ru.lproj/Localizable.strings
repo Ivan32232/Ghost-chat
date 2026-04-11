@@ -18,13 +18,17 @@
 "waiting.recentContacts" = "Недавние контакты";
 "waiting.invite" = "Пригласить";
 "waiting.inviteConfirm.title" = "Отправить приглашение?";
-"waiting.inviteConfirm.message" = "Скопировать ссылку для %@? Ссылка исчезнет из буфера через 60 секунд.";
-"waiting.inviteConfirm.send" = "Скопировать";
+"waiting.inviteConfirm.message" = "%@ получит уведомление, что вы хотите поговорить.";
+"waiting.inviteConfirm.send" = "Отправить";
 
 /* Connecting Screen */
 "connecting.title" = "Подключение...";
 "connecting.subtitle" = "Устанавливаем P2P соединение";
 "connecting.cancel" = "Отмена";
+"connecting.step.server" = "Подключение к серверу...";
+"connecting.step.peer" = "Ожидание собеседника...";
+"connecting.step.keys" = "Обмен ключами шифрования...";
+"connecting.step.secured" = "Защищённое соединение установлено";
 
 /* Chat Screen */
 "chat.message" = "Сообщение";
@@ -32,6 +36,14 @@
 "chat.compareCode" = "Сравните этот код с собеседником через другой канал связи";
 "chat.matches" = "Совпадает";
 "chat.doesNotMatch" = "Не совпадает";
+"chat.copy" = "Копировать";
+"chat.edit" = "Редактировать";
+"chat.edited" = "изменено";
+"chat.save" = "Сохранить";
+"chat.deleteForEveryone" = "Удалить для всех";
+"chat.you" = "Вы";
+"chat.leave" = "Выйти";
+"system.waitingReconnect" = "Ожидание переподключения...";
 
 /* Call Screen */
 "call.calling" = "Звоним...";
@@ -48,6 +60,7 @@
 
 /* System Messages */
 "system.peerDisconnected" = "Собеседник отключился";
+"system.peerGone" = "Собеседник не вернулся";
 "system.connectionRestored" = "Соединение восстановлено";
 "system.connectionLost" = "Соединение потеряно";
 "system.secureConnection" = "Защищённое соединение установлено";
@@ -55,13 +68,23 @@
 "system.keyExchangeError" = "Ошибка обмена ключами";
 "system.screenshotTaken" = "⚠️ Вы сделали скриншот";
 "system.decryptionError" = "Ошибка расшифровки";
+"system.replayAttack" = "Обнаружена replay-атака — сообщение отклонено";
+"system.messageTooOld" = "Сообщение отклонено — слишком старое";
+"system.counterTooOld" = "Сообщение отклонено — счётчик устарел";
 "system.sendError" = "Ошибка отправки";
+"system.fileError" = "Ошибка передачи файла";
+"system.peerOffline" = "Собеседник не в сети. Сообщения будут отправлены при подключении.";
+"system.waitingPeerJoin" = "Ожидание подключения собеседника...";
+"system.callNoAnswer" = "Нет ответа — собеседник не подключился";
 "system.calling" = "Звоним...";
 "system.incomingCall" = "Входящий звонок...";
+"system.connecting" = "Подключение...";
 "system.callConnected" = "Звонок подключён";
 "system.callDeclined" = "Звонок отклонён";
 "system.callStarted" = "Звонок начат";
 "system.callEnded" = "Звонок завершён";
+"system.noAnswer" = "Нет ответа";
+"system.noPushToken" = "Офлайн звонок: нет push токена — собеседник не получит уведомление. Ожидание подключения...";
 "system.peerEndedCall" = "Собеседник завершил звонок";
 "system.peerScreenshot" = "Собеседник сделал скриншот";
 "system.verified" = "Подтверждено! Соединение безопасно.";
@@ -102,6 +125,22 @@
 "biometric.locked" = "Ghost Chat заблокирован";
 "biometric.unlock" = "Разблокировать";
 
+/* PIN Code */
+"pin.set" = "Установить PIN-код";
+"pin.change" = "Изменить PIN-код";
+"pin.remove" = "Удалить PIN-код";
+"pin.remove.confirm" = "Удалить PIN-код? Биометрическая блокировка тоже будет отключена.";
+"pin.enterCode" = "Введите PIN-код";
+"pin.tooManyAttempts" = "Слишком много неверных попыток. Попробуйте позже.";
+"pin.enterCurrent" = "Введите текущий PIN";
+"pin.enterCurrentHint" = "Введите текущий PIN для продолжения";
+"pin.enterNew" = "Введите новый PIN";
+"pin.enterNewHint" = "4-6 цифр";
+"pin.confirmNew" = "Подтвердите PIN";
+"pin.confirmHint" = "Введите PIN-код повторно";
+"pin.mismatch" = "PIN-коды не совпадают. Попробуйте снова.";
+"pin.digits" = "цифр";
+
 /* Settings */
 "settings.title" = "Настройки";
 "settings.done" = "Готово";
@@ -111,8 +150,13 @@
 
 "settings.security" = "БЕЗОПАСНОСТЬ";
 "settings.security.footer" = "Биометрия защищает приложение при сворачивании";
+"settings.security.pin.footer" = "Установите PIN-код для блокировки приложения. Биометрия доступна как быстрая разблокировка при установленном PIN.";
 "settings.autolock" = "Автоблокировка";
-"settings.autolock.background" = "При сворачивании";
+"settings.autolock.instant" = "Мгновенно";
+"settings.autolock.15s" = "15 секунд";
+"settings.autolock.30s" = "30 секунд";
+"settings.autolock.1m" = "1 минута";
+"settings.autolock.5m" = "5 минут";
 
 "settings.privacy" = "ПРИВАТНОСТЬ";
 "settings.privacy.relay" = "Режим приватности (relay)";
@@ -124,6 +168,11 @@
 "settings.autodelete.10" = "10 мин";
 "settings.autodelete.30" = "30 мин";
 "settings.screenshot.notify" = "Уведомления о скриншотах";
+"settings.history" = "ИСТОРИЯ ЧАТОВ";
+"settings.history.save" = "Сохранять историю сообщений";
+"settings.history.footer" = "При включении сообщения хранятся в зашифрованном виде на устройстве. При выключении — исчезают после каждой сессии.";
+"settings.history.deleteAll" = "Удалить всю историю";
+"settings.history.deleteAll.warning" = "Это действие необратимо. Все сообщения, контакты и история чатов будут уничтожены навсегда.";
 
 "settings.sounds" = "ЗВУКИ И УВЕДОМЛЕНИЯ";
 "settings.sound" = "Звук сообщений";
@@ -182,7 +231,7 @@
 "contacts.save" = "Сохранить";
 "contacts.startChat" = "Начать чат";
 "contacts.details" = "ДЕТАЛИ";
-"contacts.fingerprint" = "Отпечаток";
+
 "contacts.created" = "Создан";
 "contacts.lastSession" = "Последняя сессия";
 "contacts.sessions" = "Сессии";
@@ -199,7 +248,59 @@
 /* System — Contacts */
 "system.knownPeer" = "Подключён: %@";
 "system.unexpectedPeer" = "ВНИМАНИЕ: Другой ключ идентификации! Возможна подмена.";
+"system.connectionBlocked" = "Соединение заблокировано. Проверка идентификации не пройдена.";
+"security_dtls_missing" = "БЕЗОПАСНОСТЬ: Пир не предоставил DTLS fingerprint. Соединение заблокировано.";
+"security_dtls_mismatch" = "БЕЗОПАСНОСТЬ: DTLS fingerprint не совпадает! Возможна атака MITM. Соединение заблокировано.";
+
+/* Contacts — New */
+"contacts.call" = "Позвонить";
+"contacts.notes" = "Заметки";
+"contacts.noMessages" = "Нет сообщений";
+"contacts.deleteHistory" = "Удалить историю";
+"contacts.ttl" = "Автоудаление сообщений";
+"contacts.ttl.header" = "ВРЕМЯ ЖИЗНИ СООБЩЕНИЙ";
+"contacts.ttl.footer" = "Сообщения старше выбранного времени будут автоматически удалены с устройства";
+"contacts.ttl.off" = "Выкл";
+"contacts.ttl.1h" = "1 час";
+"contacts.ttl.1d" = "1 день";
+"contacts.ttl.7d" = "7 дней";
+"contacts.ttl.30d" = "30 дней";
+
+/* Saved Messages */
+"saved.title" = "Избранное";
+"saved.hint" = "Ваш личный блокнот";
+"saved.placeholder" = "Напишите заметку...";
+"saved.disable.confirm" = "Отключить Избранное? Все сохранённые заметки будут удалены.";
+
+/* Files */
+"file.photoVideo" = "Фото / Видео";
+"file.document" = "Документ";
+
+/* Typing */
+"chat.typing" = "печатает...";
+
+/* Peer Status */
+"status.online" = "в сети";
+"status.connecting" = "подключается...";
+"status.searching" = "ищем...";
+"status.recentlyOnline" = "был(а) недавно";
+"status.offline" = "не в сети";
 
 /* Info.plist */
 "NSMicrophoneUsageDescription" = "Микрофон необходим для голосовых звонков";
 "NSFaceIDUsageDescription" = "Face ID используется для защиты ваших данных";
+
+/* Chat Invite */
+"invite.banner.title" = "Приглашение в чат";
+"invite.banner.message" = "%@ приглашает вас в чат";
+"invite.join" = "Присоединиться";
+"invite.decline" = "Отклонить";
+
+/* Push Notifications (APNs loc-key) */
+"push.newMessage.title" = "Ghost Chat";
+"push.newMessage.body" = "Новое сообщение от %@";
+"push.missedCall.title" = "Ghost Chat";
+"push.missedCall.body" = "Пропущенный звонок от %@";
+
+/* Notifications — default sender name */
+"notification.yourContact" = "Ваш контакт";

@@ -21,16 +21,15 @@ fi
 
 # Flush existing rules
 echo -e "${YELLOW}Flushing existing rules...${NC}"
-iptables -F
-iptables -X
-iptables -t nat -F
-iptables -t nat -X
+iptables -F INPUT
+# Don't flush FORWARD/NAT — Docker manages those chains
 
 # Default policies
 echo -e "${YELLOW}Setting default policies...${NC}"
 iptables -P INPUT DROP
-iptables -P FORWARD DROP
 iptables -P OUTPUT ACCEPT
+
+# === BASIC RULES ===
 
 # Allow loopback
 iptables -A INPUT -i lo -j ACCEPT
@@ -38,50 +37,64 @@ iptables -A INPUT -i lo -j ACCEPT
 # Allow established connections
 iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-# SSH (port 22) - IMPORTANT: Don't lock yourself out!
-# Consider changing to a non-standard port for security
-iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+# Drop invalid packets early
+iptables -A INPUT -m state --state INVALID -j DROP
 
-# HTTP/HTTPS
-iptables -A INPUT -p tcp --dport 80 -j ACCEPT
-iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+# === GLOBAL RATE LIMITS (must come BEFORE port-specific ACCEPT rules) ===
 
-# TURN server ports
-iptables -A INPUT -p tcp --dport 3478 -j ACCEPT
-iptables -A INPUT -p udp --dport 3478 -j ACCEPT
-iptables -A INPUT -p tcp --dport 5349 -j ACCEPT
-iptables -A INPUT -p udp --dport 5349 -j ACCEPT
-
-# TURN relay ports (UDP only for media)
-iptables -A INPUT -p udp --dport 49152:65535 -j ACCEPT
-
-# Rate limiting for TURN to prevent abuse
-iptables -A INPUT -p udp --dport 3478 -m hashlimit \
-  --hashlimit-above 50/sec --hashlimit-burst 100 \
-  --hashlimit-mode srcip --hashlimit-name turn_limit \
+# SYN flood protection
+iptables -A INPUT -p tcp --syn -m hashlimit \
+  --hashlimit-above 30/sec --hashlimit-burst 60 \
+  --hashlimit-mode srcip --hashlimit-name syn_flood \
   -j DROP
 
-# Rate limiting for HTTP/HTTPS
+# === SSH (rate limit + accept) ===
+iptables -A INPUT -p tcp --dport 22 -m hashlimit \
+  --hashlimit-above 4/min --hashlimit-burst 6 \
+  --hashlimit-mode srcip --hashlimit-name ssh_limit \
+  -j DROP
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+
+# === PORT-SPECIFIC RATE LIMITS + ACCEPT ===
+# IMPORTANT: Rate limit rules MUST come before their corresponding ACCEPT rules,
+# otherwise traffic is accepted before the rate limit can trigger.
+
+# HTTP rate limit + accept
 iptables -A INPUT -p tcp --dport 80 -m hashlimit \
   --hashlimit-above 25/sec --hashlimit-burst 50 \
   --hashlimit-mode srcip --hashlimit-name http_limit \
   -j DROP
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 
+# HTTPS rate limit + accept
 iptables -A INPUT -p tcp --dport 443 -m hashlimit \
   --hashlimit-above 25/sec --hashlimit-burst 50 \
   --hashlimit-mode srcip --hashlimit-name https_limit \
   -j DROP
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
-# Drop invalid packets
-iptables -A INPUT -m state --state INVALID -j DROP
+# TURN UDP rate limit + accept
+iptables -A INPUT -p udp --dport 3478 -m hashlimit \
+  --hashlimit-above 50/sec --hashlimit-burst 100 \
+  --hashlimit-mode srcip --hashlimit-name turn_limit \
+  -j DROP
+iptables -A INPUT -p tcp --dport 3478 -j ACCEPT
+iptables -A INPUT -p udp --dport 3478 -j ACCEPT
 
-# Log dropped packets (optional - can be noisy)
-# iptables -A INPUT -j LOG --log-prefix "DROPPED: " --log-level 4
+# TURN TLS rate limit + accept
+iptables -A INPUT -p tcp --dport 5349 -m hashlimit \
+  --hashlimit-above 25/sec --hashlimit-burst 50 \
+  --hashlimit-mode srcip --hashlimit-name turns_limit \
+  -j DROP
+iptables -A INPUT -p tcp --dport 5349 -j ACCEPT
+iptables -A INPUT -p udp --dport 5349 -j ACCEPT
+
+# TURN relay ports (UDP only for WebRTC media)
+iptables -A INPUT -p udp --dport 49152:65535 -j ACCEPT
 
 # Save rules
 echo -e "${YELLOW}Saving rules...${NC}"
 
-# For Debian/Ubuntu
 if command -v netfilter-persistent &> /dev/null; then
   netfilter-persistent save
 elif [ -d /etc/iptables ]; then
@@ -93,7 +106,7 @@ fi
 echo -e "${GREEN}=== Firewall Setup Complete ===${NC}"
 echo ""
 echo "Current rules:"
-iptables -L -n --line-numbers
+iptables -L INPUT -n --line-numbers -v
 
 echo ""
 echo -e "${YELLOW}IMPORTANT: Make sure you can still access SSH before closing this session!${NC}"

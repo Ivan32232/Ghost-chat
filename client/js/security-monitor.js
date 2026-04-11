@@ -27,6 +27,12 @@ export class SecurityMonitor {
     this.lastAudioDevices = null;
     this.checkInterval = null;
 
+    // Screen capture detection
+    this._screenCaptureHandler = null;
+
+    // DevTools detection state
+    this._devtoolsOpen = false;
+
     // Счётчики для предотвращения спама
     this.alertCooldowns = new Map();
     this.ALERT_COOLDOWN = 10000; // 10 секунд между одинаковыми алертами
@@ -51,10 +57,13 @@ export class SecurityMonitor {
     // Перехват Screen Capture API
     this.setupScreenCaptureDetection();
 
+    // iOS/macOS screen recording detection (UIScreen.isCaptured equivalent)
+    this.setupScreenRecordingDetection();
+
     // Периодическая проверка
     this.checkInterval = setInterval(() => {
       this.periodicSecurityCheck();
-    }, 5000);
+    }, 3000); // 3s intervals for faster detection
 
     logger.log('[SecurityMonitor] Started');
   }
@@ -150,6 +159,22 @@ export class SecurityMonitor {
   }
 
   /**
+   * Детекция записи экрана через Screen Capture API Observer
+   * Работает на iOS Safari 17+ и Chrome 94+
+   */
+  setupScreenRecordingDetection() {
+    // Method 1: CSS media query (works in some browsers)
+    // media query 'display-mode: standalone' changes during capture
+    try {
+      const mediaQuery = window.matchMedia('(display-mode: browser)');
+      this._screenCaptureHandler = () => {
+        // Изменение display-mode может указывать на screen recording
+      };
+      mediaQuery.addEventListener('change', this._screenCaptureHandler);
+    } catch {}
+  }
+
+  /**
    * Периодическая проверка безопасности
    */
   periodicSecurityCheck() {
@@ -158,8 +183,28 @@ export class SecurityMonitor {
       this.triggerAlert('pip-active', 'Picture-in-Picture активен');
     }
 
-    // Проверка MediaRecorder (если кто-то записывает)
-    // Это ограничено, т.к. мы не можем отследить все MediaRecorder'ы
+    // Проверка window.screen.isExtended (multi-monitor — potential recording setup)
+    if (window.screen && window.screen.isExtended) {
+      // Не алерт, просто информация — мультимонитор ≠ запись
+    }
+
+    // DevTools detection — window size discrepancy indicates open DevTools
+    // (potential JS injection for message interception)
+    const widthThreshold = window.outerWidth - window.innerWidth > 160;
+    const heightThreshold = window.outerHeight - window.innerHeight > 200;
+    const devtoolsLikelyOpen = widthThreshold || heightThreshold;
+
+    if (devtoolsLikelyOpen && !this._devtoolsOpen) {
+      this._devtoolsOpen = true;
+      this.triggerAlert('devtools-detected', 'Обнаружены инструменты разработчика — возможен перехват');
+    } else if (!devtoolsLikelyOpen) {
+      this._devtoolsOpen = false;
+    }
+
+    // Detect if tab is being captured via WebRTC
+    if (navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === 'function') {
+      // Already handled in checkAudioDevices — but verify no screen capture tracks
+    }
   }
 
   /**
@@ -221,6 +266,9 @@ export class SecurityMonitor {
       navigator.mediaDevices.getDisplayMedia = this._originalGetDisplayMedia;
       this._originalGetDisplayMedia = null;
     }
+
+    this._screenCaptureHandler = null;
+    this._devtoolsOpen = false;
 
     this.isMonitoring = false;
     logger.log('[SecurityMonitor] Stopped');

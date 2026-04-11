@@ -2,19 +2,27 @@ package com.ghost.chat.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Ghost Chat dark theme colors
-val GhostBlack = Color(0xFF000000)
-val GhostSurface = Color(0xFF1C1C1E)
-val GhostSurfaceLight = Color(0xFF2C2C2E)
-val GhostGray = Color(0xFF8E8E93)
-val GhostGrayLight = Color(0xFF48484A)
-val GhostWhite = Color(0xFFFFFFFF)
-val GhostGreen = Color(0xFF34C759)
-val GhostBlue = Color(0xFF0A84FF)
-val GhostRed = Color(0xFFFF3B30)
+// Ghost Chat dark theme colors — matching web (ghostchat.one) design tokens
+val GhostBlack = Color(0xFF0A0A0A)       // --bg
+val GhostSurface = Color(0xFF161616)      // --surface
+val GhostSurfaceLight = Color(0xFF222222) // --surface-2
+val GhostGray = Color(0xFF777777)         // --text-dim
+val GhostGrayLight = Color(0xFF2E2E2E)    // --border
+val GhostWhite = Color(0xFFF0F0F0)        // --text
+val GhostTextSecondary = Color(0xFFD4D4D4) // --text-secondary
+val GhostAccent = Color(0xFFE0E0E0)       // --accent (buttons, send)
+val GhostGreen = Color(0xFF30D158)        // --green
+val GhostBlue = Color(0xFF0A84FF)         // legacy — used sparingly
+val GhostRed = Color(0xFFFF453A)          // --red
 val GhostYellow = Color(0xFFFFD60A)
-val GhostOrange = Color(0xFFFF9500)
+val GhostOrange = Color(0xFFFF9F0A)       // --orange
 val GhostPurple = Color(0xFFBF5AF2)
+val GhostCyan = Color(0xFF5AC8FA)
+
+// Message bubble colors (matching web style)
+val GhostSentBubble = Color(0xFFD0D0D0)     // light gray sent bubble
+val GhostSentText = Color(0xFF0A0A0A)        // dark text on sent bubble
+val GhostReceivedBubble = Color(0xFF222222)  // --surface-2 received bubble
 
 // Accent color options (matching iOS)
 val AccentColors = mapOf(

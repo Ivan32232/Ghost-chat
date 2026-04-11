@@ -1,9 +1,17 @@
 package com.ghost.chat.core.webrtc
 
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import org.webrtc.*
 
 /// Voice calls — port of GhostVoice.swift / voice.js
@@ -30,6 +38,34 @@ class GhostVoice(
     private var callStartTime: Long = 0
     private var callTimerRunnable: Runnable? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    // Proximity sensor — экран гаснет при поднесении к уху
+    private var proximityWakeLock: PowerManager.WakeLock? = null
+
+    // Audio focus change listener — восстановление после прерываний
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        android.util.Log.d("GhostChat", "[GhostVoice] audioFocusChange: focusChange=$focusChange, isInCall=$isInCall")
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                android.util.Log.d("GhostChat", "[GhostVoice] audioFocusChange: LOSS_TRANSIENT — no action")
+                // Временная потеря — ничего не делаем, звук восстановится
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                android.util.Log.d("GhostChat", "[GhostVoice] audioFocusChange: GAIN — reconfiguring audio")
+                // Фокус восстановлен — пересоздаём аудио конфигурацию
+                if (isInCall) {
+                    configureAudioSession(speaker = isSpeakerOn)
+                    audioTrack?.setEnabled(!isMuted)
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                android.util.Log.d("GhostChat", "[GhostVoice] audioFocusChange: LOSS — call continues")
+                // Полная потеря — ничего не делаем, звонок продолжается
+            }
+        }
+    }
 
     // MARK: - Callbacks
 
@@ -41,48 +77,121 @@ class GhostVoice(
     // MARK: - Audio Session
 
     private fun configureAudioSession(speaker: Boolean = false) {
+        android.util.Log.d("GhostChat", "[GhostVoice] configureAudioSession ENTER, speaker=$speaker")
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         audioManager.isSpeakerphoneOn = speaker
 
-        // Request audio focus
-        @Suppress("DEPRECATION")
-        audioManager.requestAudioFocus(
-            null,
-            AudioManager.STREAM_VOICE_CALL,
-            AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
-        )
+        // Request audio focus with listener for focus changes
+        val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .setOnAudioFocusChangeListener(audioFocusChangeListener)
+            .build()
+        audioFocusRequest = focusRequest
+        val focusResult = audioManager.requestAudioFocus(focusRequest)
+        android.util.Log.d("GhostChat", "[GhostVoice] configureAudioSession EXIT: mode=IN_COMMUNICATION, speaker=$speaker, focusResult=$focusResult")
+    }
+
+    // MARK: - Proximity Sensor
+
+    private fun enableProximitySensor() {
+        android.util.Log.d("GhostChat", "[GhostVoice] enableProximitySensor called")
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (proximityWakeLock == null) {
+            proximityWakeLock = powerManager.newWakeLock(
+                PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK,
+                "GhostChat:ProximityWakeLock"
+            )
+        }
+        proximityWakeLock?.let {
+            if (!it.isHeld) {
+                it.acquire(4 * 60 * 60 * 1000L) // 4 hours max
+                android.util.Log.d("GhostChat", "[GhostVoice] proximityWakeLock acquired")
+            }
+        }
+    }
+
+    private fun disableProximitySensor() {
+        android.util.Log.d("GhostChat", "[GhostVoice] disableProximitySensor called, isHeld=${proximityWakeLock?.isHeld}")
+        proximityWakeLock?.let {
+            if (it.isHeld) it.release(PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY)
+        }
+        proximityWakeLock = null
     }
 
     // MARK: - Start Call
 
-    fun startCall() {
-        if (isInCall) return
+    /**
+     * Start outgoing call. Returns `true` if sender was reused (manual renegotiation needed).
+     */
+    fun startCall(): Boolean {
+        android.util.Log.d("GhostChat", "[GhostVoice] startCall: isInCall=$isInCall, audioTrack=${audioTrack != null}, audioSender=${audioSender != null}")
+
+        // Audio reset between calls — clean up stale state from previous call
+        if (isInCall) {
+            android.util.Log.d("GhostChat", "[GhostVoice] startCall — already in call, ending previous call first")
+            endCall()
+        }
+
+        // Reset AudioManager mode before starting new call
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.mode = AudioManager.MODE_NORMAL
+            audioManager.isSpeakerphoneOn = false
+            android.util.Log.d("GhostChat", "[GhostVoice] startCall — audio mode reset to NORMAL before configuring")
+        } catch (e: Exception) {
+            android.util.Log.e("GhostChat", "[GhostVoice] startCall — audio reset failed: ${e.message}")
+        }
 
         configureAudioSession(speaker = false)  // Earpiece by default
+        enableProximitySensor()
 
-        // Create audio track
+        // ALWAYS create brand new audio track
         val constraints = MediaConstraints().apply {
             optional.add(MediaConstraints.KeyValuePair("echoCancellation", "true"))
             optional.add(MediaConstraints.KeyValuePair("noiseSuppression", "true"))
             optional.add(MediaConstraints.KeyValuePair("autoGainControl", "false"))
         }
         audioSource = factory.createAudioSource(constraints)
-        audioTrack = factory.createAudioTrack("ghost-audio-0", audioSource)
+        audioTrack = factory.createAudioTrack("ghost-audio-${System.nanoTime()}", audioSource)
 
         val track = audioTrack ?: throw VoiceError.AudioInitFailed()
 
-        // Add to PeerConnection
-        audioSender = peerConnection.addTrack(track, listOf("ghost-audio-stream"))
+        // Reuse existing sender (preserves transceiver) or create new one
+        var didReuseSender = false
+        val existingSender = audioSender
+        if (existingSender != null) {
+            existingSender.setTrack(track, false)
+            didReuseSender = true
+            android.util.Log.d("GhostChat", "[GhostVoice] startCall — reused existing sender (MANUAL renegotiation needed)")
+        } else {
+            audioSender = peerConnection.addTrack(track, listOf("ghost-audio-stream"))
+            android.util.Log.d("GhostChat", "[GhostVoice] startCall — created new audioSender (first call)")
+        }
 
         isInCall = true
         onCallStateChange?.invoke(CallState.CALLING)
+        return didReuseSender
     }
 
-    fun acceptCall() {
-        if (isInCall) return
+    /// Initialize audio without adding to PeerConnection
+    /// For callee: initializeAudio → setRemoteDescription → addAudioTrack → createAnswer
+    /// Creates fresh track, keeps existing sender if available for reuse
+    fun initializeAudio() {
+        android.util.Log.d("GhostChat", "[GhostVoice] initializeAudio ENTER, hasTrack=${audioTrack != null}, hasSender=${audioSender != null}")
+        // Detach old track from sender (don't remove sender — preserves transceiver)
+        audioTrack?.setEnabled(false)
+        audioSender?.setTrack(null, false)
+        audioTrack = null
+        audioSource = null
 
         configureAudioSession(speaker = false)
+        enableProximitySensor()
 
         val constraints = MediaConstraints().apply {
             optional.add(MediaConstraints.KeyValuePair("echoCancellation", "true"))
@@ -90,23 +199,65 @@ class GhostVoice(
             optional.add(MediaConstraints.KeyValuePair("autoGainControl", "false"))
         }
         audioSource = factory.createAudioSource(constraints)
-        audioTrack = factory.createAudioTrack("ghost-audio-0", audioSource)
+        audioTrack = factory.createAudioTrack("ghost-audio-${System.nanoTime()}", audioSource)
 
-        val track = audioTrack ?: throw VoiceError.AudioInitFailed()
-        audioSender = peerConnection.addTrack(track, listOf("ghost-audio-stream"))
+        if (audioTrack == null) {
+            android.util.Log.e("GhostChat", "[GhostVoice] initializeAudio FAILED: track is null")
+            throw VoiceError.AudioInitFailed()
+        }
+        android.util.Log.d("GhostChat", "[GhostVoice] initializeAudio EXIT: track created, id=${audioTrack?.id()}")
+    }
+
+    /// Add audio track to PeerConnection (after setRemoteDescription)
+    /// Reuses existing sender if available (preserves transceiver, avoids SDP conflicts)
+    fun addAudioTrack() {
+        val track = audioTrack ?: return
+        val existingSender = audioSender
+        if (existingSender != null) {
+            existingSender.setTrack(track, false)
+            android.util.Log.d("GhostChat", "[GhostVoice] addAudioTrack — reused existing sender (transceiver preserved)")
+        } else {
+            audioSender = peerConnection.addTrack(track, listOf("ghost-audio-stream"))
+            android.util.Log.d("GhostChat", "[GhostVoice] addAudioTrack — created new sender (first call)")
+        }
+    }
+
+    /// Mark call as active (callee after accepting)
+    fun markCallActive() {
+        android.util.Log.d("GhostChat", "[GhostVoice] markCallActive ENTER, wasInCall=$isInCall")
+        isInCall = true
+        callStartTime = System.currentTimeMillis()
+        startCallTimer()
+        onCallStateChange?.invoke(CallState.ACTIVE)
+        android.util.Log.d("GhostChat", "[GhostVoice] markCallActive EXIT: state=ACTIVE")
+    }
+
+    /// Legacy acceptCall — when no pending offer exists
+    fun acceptCall() {
+        android.util.Log.d("GhostChat", "[GhostVoice] acceptCall ENTER, isInCall=$isInCall")
+        if (isInCall) {
+            android.util.Log.d("GhostChat", "[GhostVoice] acceptCall: already in call, skipping")
+            return
+        }
+
+        initializeAudio()
+        addAudioTrack()
 
         isInCall = true
         callStartTime = System.currentTimeMillis()
         startCallTimer()
         onCallStateChange?.invoke(CallState.ACTIVE)
+        android.util.Log.d("GhostChat", "[GhostVoice] acceptCall EXIT: state=ACTIVE")
     }
 
     // MARK: - Call Active
 
     fun callAccepted() {
+        android.util.Log.d("GhostChat", "[GhostVoice] callAccepted ENTER")
         callStartTime = System.currentTimeMillis()
         startCallTimer()
         onCallStateChange?.invoke(CallState.ACTIVE)
+        android.util.Log.d("GhostChat", "[GhostVoice] callAccepted EXIT: state=ACTIVE")
     }
 
     // MARK: - Mute
@@ -114,25 +265,40 @@ class GhostVoice(
     fun toggleMute(): Boolean {
         isMuted = !isMuted
         audioTrack?.setEnabled(!isMuted)
+        android.util.Log.d("GhostChat", "[GhostVoice] toggleMute: isMuted=$isMuted, trackEnabled=${!isMuted}")
         return isMuted
     }
 
     fun setMuted(muted: Boolean) {
         isMuted = muted
         audioTrack?.setEnabled(!muted)
+        android.util.Log.d("GhostChat", "[GhostVoice] setMuted: isMuted=$muted")
     }
 
     // MARK: - Speaker / Earpiece
 
     fun toggleSpeaker(): Boolean {
         isSpeakerOn = !isSpeakerOn
-        configureAudioSession(speaker = isSpeakerOn)
+        android.util.Log.d("GhostChat", "[GhostVoice] toggleSpeaker: isSpeakerOn=$isSpeakerOn")
+        switchSpeakerOutput(isSpeakerOn)
         return isSpeakerOn
     }
 
     fun setSpeaker(enabled: Boolean) {
         isSpeakerOn = enabled
-        configureAudioSession(speaker = enabled)
+        android.util.Log.d("GhostChat", "[GhostVoice] setSpeaker: isSpeakerOn=$enabled")
+        switchSpeakerOutput(enabled)
+    }
+
+    /// Lightweight speaker toggle — only changes output route, no audio focus re-request
+    private fun switchSpeakerOutput(speaker: Boolean) {
+        if (!isInCall) return
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.isSpeakerphoneOn = speaker
+        } catch (e: Exception) {
+            // Prevent crash if audio system is unavailable
+        }
     }
 
     // MARK: - Timer
@@ -156,29 +322,37 @@ class GhostVoice(
     // MARK: - End Call
 
     fun endCall() {
+        android.util.Log.d("GhostChat", "[GhostVoice] endCall ENTER, isInCall=$isInCall, hasTrack=${audioTrack != null}, hasSender=${audioSender != null}")
         callTimerRunnable?.let { mainHandler.removeCallbacks(it) }
         callTimerRunnable = null
 
-        // Remove track from PeerConnection
-        audioSender?.let { sender ->
-            peerConnection.removeTrack(sender)
-        }
-        audioSender = null
+        disableProximitySensor()
 
-        // Stop audio track
+        // DON'T removeTrack — that puts transceiver in "stopped" state permanently.
+        // Instead: disable track + set sender.track = nil. Sender stays alive for reuse.
         audioTrack?.setEnabled(false)
-        audioTrack?.dispose()
+        audioSender?.setTrack(null, false)
+        android.util.Log.d("GhostChat", "[GhostVoice] endCall: detached track from sender (transceiver preserved)")
+        // Keep audioSender reference — reuse on next startCall
+
+        // Dispose old track/source after delay (WebRTC may still reference internally)
+        val trackToDispose = audioTrack
+        val sourceToDispose = audioSource
         audioTrack = null
-
-        audioSource?.dispose()
         audioSource = null
+        mainHandler.postDelayed({
+            trackToDispose?.dispose()
+            sourceToDispose?.dispose()
+        }, 500)
 
-        // Release audio
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        audioManager.mode = AudioManager.MODE_NORMAL
-        audioManager.isSpeakerphoneOn = false
-        @Suppress("DEPRECATION")
-        audioManager.abandonAudioFocus(null)
+        // DON'T abandon audio focus between calls — WebRTC AudioDeviceModule
+        // won't restart properly after abandonAudioFocusRequest on some devices.
+        // Keep audio session active for future calls in same P2P session.
+        mainHandler.postDelayed({
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.mode = AudioManager.MODE_NORMAL
+            audioManager.isSpeakerphoneOn = false
+        }, 300)
 
         isInCall = false
         isMuted = false
@@ -186,6 +360,7 @@ class GhostVoice(
         callStartTime = 0
 
         onCallStateChange?.invoke(CallState.ENDED)
+        android.util.Log.d("GhostChat", "[GhostVoice] endCall EXIT: state=ENDED")
     }
 
     // MARK: - Status
@@ -196,7 +371,27 @@ class GhostVoice(
     // MARK: - Cleanup
 
     fun destroy() {
-        endCall()
+        callTimerRunnable?.let { mainHandler.removeCallbacks(it) }
+        callTimerRunnable = null
+        disableProximitySensor()
+
+        // On destroy, actually remove track+sender (voice object is being discarded)
+        audioSender?.let { sender ->
+            peerConnection.removeTrack(sender)
+            android.util.Log.d("GhostChat", "[GhostVoice] destroy: removed sender from PeerConnection")
+        }
+        audioSender = null
+        audioTrack?.setEnabled(false)
+        audioTrack?.dispose()
+        audioTrack = null
+        audioSource?.dispose()
+        audioSource = null
+
+        isInCall = false
+        isMuted = false
+        isSpeakerOn = false
+        callStartTime = 0
+
         onCallStateChange = null
         onCallTimer = null
     }

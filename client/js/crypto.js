@@ -105,14 +105,17 @@ class DoubleRatchet {
   /**
    * Initialize as responder (guest/Bob)
    * @param {ArrayBuffer} sharedSecret — 32-byte ECDH-derived root secret
+   * @param {CryptoKeyPair} initialKeyPair — initial ECDH key pair (MUST reuse, not generate new)
+   *
+   * CRITICAL: The responder must reuse the initial ECDH key pair as the first DH ratchet key.
+   * The initiator computes DH(theirNewRatchetKey, ourInitialPublicKey), so we need
+   * ourInitialPrivateKey to derive the same shared secret in _dhRatchetReceive.
    */
-  async initAsResponder(sharedSecret) {
-    // Generate our first DH ratchet key pair
-    this.dhSending = await crypto.subtle.generateKey(
-      { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']
-    );
+  async initAsResponder(sharedSecret, initialKeyPair) {
+    // Reuse initial ECDH key pair as first DH ratchet key (matches iOS DoubleRatchet)
+    this.dhSending = initialKeyPair;
     this.dhSendingRaw = new Uint8Array(
-      await crypto.subtle.exportKey('raw', this.dhSending.publicKey)
+      await crypto.subtle.exportKey('raw', initialKeyPair.publicKey)
     );
     this.dhReceiving = null;
     this.dhReceivingRaw = null;
@@ -166,9 +169,10 @@ class DoubleRatchet {
     ciphertext.set(bodyIV);
     ciphertext.set(new Uint8Array(bodyCiphertext), 12);
 
-    // Always plaintext headers (0x00 prefix)
+    // Always plaintext headers (0x00 prefix) — matches iOS DoubleRatchet
     // Header encryption disabled: avoids chicken-and-egg where responder
-    // has no header key to decrypt initiator's first messages
+    // has no header key to decrypt initiator's first messages.
+    // Headers are already protected by the encrypted DataChannel (DTLS-SRTP).
     const encryptedHeader = new Uint8Array(1 + header.byteLength);
     encryptedHeader[0] = 0x00;
     encryptedHeader.set(new Uint8Array(header), 1);
@@ -339,10 +343,16 @@ class DoubleRatchet {
     this.receiveChainKey = currentCK;
     this.receiveMessageNumber = currentN;
 
-    // Enforce max skip limit
+    // Enforce max skip limit — remove by lowest messageNumber (deterministic)
     while (this.skippedKeys.size > DoubleRatchet.MAX_SKIP) {
-      const firstKey = this.skippedKeys.keys().next().value;
-      this.skippedKeys.delete(firstKey);
+      let oldestKey = null;
+      let oldestN = Infinity;
+      for (const key of this.skippedKeys.keys()) {
+        const n = parseInt(key.split(':')[1], 10);
+        if (n < oldestN) { oldestN = n; oldestKey = key; }
+      }
+      if (oldestKey) this.skippedKeys.delete(oldestKey);
+      else break;
     }
   }
 
@@ -475,10 +485,12 @@ class DoubleRatchet {
     if (a.byteLength !== b.byteLength) return false;
     const av = new Uint8Array(a);
     const bv = new Uint8Array(b);
+    // Constant-time comparison — prevents timing side-channel (L4)
+    let diff = 0;
     for (let i = 0; i < av.length; i++) {
-      if (av[i] !== bv[i]) return false;
+      diff |= av[i] ^ bv[i];
     }
-    return true;
+    return diff === 0;
   }
 
   static _arrayToBase64(arr) {
@@ -491,7 +503,22 @@ class DoubleRatchet {
   }
 
   destroy() {
+    // L3: Zero-fill ArrayBuffer keys before releasing references
+    const wipe = (buf) => {
+      if (buf instanceof ArrayBuffer) new Uint8Array(buf).fill(0);
+      else if (buf instanceof Uint8Array) buf.fill(0);
+    };
+    this.skippedKeys.forEach(mk => wipe(mk));
     this.skippedKeys.clear();
+    wipe(this.rootKey);
+    wipe(this.sendChainKey);
+    wipe(this.receiveChainKey);
+    wipe(this.sendHeaderKey);
+    wipe(this.receiveHeaderKey);
+    wipe(this.nextSendHeaderKey);
+    wipe(this.nextReceiveHeaderKey);
+    if (this.dhSendingRaw) this.dhSendingRaw.fill(0);
+    if (this.dhReceivingRaw) this.dhReceivingRaw.fill(0);
     this.dhSending = null;
     this.dhSendingRaw = null;
     this.dhReceiving = null;
@@ -528,7 +555,7 @@ export class GhostCrypto {
     this.messageCounter = 0;
     this.peerMessageCounter = 0;
     this.receivedNonces = new Map();
-    this.NONCE_EXPIRY_MS = 5 * 60 * 1000;
+    this.NONCE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
     this.COUNTER_WINDOW = 100;
 
     // Serialization queue — prevents concurrent encrypt/decrypt corrupting ratchet state
@@ -537,12 +564,30 @@ export class GhostCrypto {
     // Send chain readiness (guest waits for first received message to init send chain)
     this._sendChainReady = null;
     this._sendChainReadyResolve = null;
+
+    // Last decrypted message metadata (initialized to null before first decrypt)
+    this.lastDecryptedId = null;
+    this.lastDecryptedReply = null;
   }
 
   /**
    * Генерация пары ключей ECDH
    */
   async generateKeyPair() {
+    // Verify Web Crypto CSPRNG availability before key generation
+    if (!crypto?.subtle?.generateKey || !crypto?.getRandomValues) {
+      throw new Error('Web Crypto API not available — secure key generation impossible');
+    }
+
+    // Entropy health check — verify CSPRNG produces non-degenerate output
+    const entropyTest = new Uint8Array(32);
+    crypto.getRandomValues(entropyTest);
+    let zeros = 0;
+    for (let i = 0; i < 32; i++) if (entropyTest[i] === 0) zeros++;
+    if (zeros > 16) {
+      throw new Error('CSPRNG entropy check failed — aborting');
+    }
+
     this.keyPair = await crypto.subtle.generateKey(
       { name: 'ECDH', namedCurve: 'P-256' },
       true,
@@ -565,6 +610,34 @@ export class GhostCrypto {
    */
   async importPeerPublicKey(base64Key) {
     const keyData = this.base64ToArrayBuffer(base64Key);
+    const keyBytes = new Uint8Array(keyData);
+
+    // P-256 uncompressed point validation:
+    // Must be exactly 65 bytes, starting with 0x04 (uncompressed)
+    if (keyBytes.byteLength !== 65) {
+      throw new Error('Invalid peer public key: expected 65 bytes for P-256 uncompressed point');
+    }
+    if (keyBytes[0] !== 0x04) {
+      throw new Error('Invalid peer public key: must be uncompressed point (0x04 prefix)');
+    }
+
+    // Reject identity point (all zeros) and low-order points
+    let allZero = true;
+    for (let i = 1; i < 65; i++) {
+      if (keyBytes[i] !== 0) { allZero = false; break; }
+    }
+    if (allZero) {
+      throw new Error('Invalid peer public key: identity point rejected');
+    }
+
+    // Reject if peer key equals our own key (reflection attack)
+    if (this.keyPair) {
+      const ourKeyRaw = new Uint8Array(await crypto.subtle.exportKey('raw', this.keyPair.publicKey));
+      if (DoubleRatchet._arraysEqual(keyBytes, ourKeyRaw)) {
+        throw new Error('Peer public key matches our own key — possible reflection attack');
+      }
+    }
+
     this.peerPublicKeyRaw = new Uint8Array(keyData);
     this.peerPublicKey = await crypto.subtle.importKey(
       'raw', keyData,
@@ -606,7 +679,7 @@ export class GhostCrypto {
     if (asHost) {
       await this.ratchet.initAsInitiator(rootSecret, this.peerPublicKey, this.peerPublicKeyRaw);
     } else {
-      await this.ratchet.initAsResponder(rootSecret);
+      await this.ratchet.initAsResponder(rootSecret, this.keyPair);
       // Guest: send chain will be initialized after first received message triggers DH ratchet
       this._sendChainReady = new Promise(resolve => {
         this._sendChainReadyResolve = resolve;
@@ -626,7 +699,7 @@ export class GhostCrypto {
    * Шифрование сообщения (Double Ratchet v2) — serialized
    * Returns base64(4-byte headerLen BE + encryptedHeader + ciphertext)
    */
-  async encrypt(plaintext) {
+  async encrypt(plaintext, options = {}) {
     // Wait for send chain initialization (guest only, before first received message)
     if (this._sendChainReady) {
       await Promise.race([
@@ -636,22 +709,25 @@ export class GhostCrypto {
         )
       ]);
     }
-    return this._enqueue(() => this._encryptImpl(plaintext));
+    return this._enqueue(() => this._encryptImpl(plaintext, options));
   }
 
-  async _encryptImpl(plaintext) {
+  async _encryptImpl(plaintext, options = {}) {
     if (!this.ratchet) {
       throw new Error('Double Ratchet not initialized');
     }
 
     this.messageCounter++;
 
-    // Build message with metadata {m, t, c}
-    const meta = JSON.stringify({
+    // Build message with metadata {m, t, c, id}
+    const metaObj = {
       m: plaintext,
       t: Date.now(),
       c: this.messageCounter
-    });
+    };
+    if (options.id) metaObj.id = options.id;
+    if (options.r) metaObj.r = options.r;
+    const meta = JSON.stringify(metaObj);
 
     // Padding
     const padded = this.padMessage(meta);
@@ -757,28 +833,35 @@ export class GhostCrypto {
     try {
       const parsed = JSON.parse(unpaddedText);
 
-      // Timestamp validation (5 min max age)
-      if (typeof parsed.t === 'number') {
-        const messageAge = Date.now() - parsed.t;
-        if (messageAge > 5 * 60 * 1000) {
-          throw new Error('Message too old, possible replay attack');
-        }
+      // Timestamp validation (5 min tolerance for clock skew, mandatory)
+      if (typeof parsed.t !== 'number' || parsed.t <= 0) {
+        throw new Error('Message too old, possible replay attack');
+      }
+      const now = Date.now();
+      const messageAge = now - parsed.t;
+      if (messageAge > 5 * 60 * 1000 || messageAge < -5 * 60 * 1000) {
+        throw new Error('Message too old, possible replay attack');
       }
 
-      // Counter validation
-      if (typeof parsed.c === 'number') {
-        if (parsed.c <= this.peerMessageCounter - this.COUNTER_WINDOW) {
-          throw new Error('Message counter too old, possible replay attack');
-        }
-        if (parsed.c > this.peerMessageCounter) {
-          this.peerMessageCounter = parsed.c;
-        }
+      // Counter validation (mandatory — reject messages without counter)
+      if (typeof parsed.c !== 'number' || parsed.c < 0) {
+        throw new Error('Message counter too old, possible replay attack');
+      }
+      const windowStart = Math.max(0, this.peerMessageCounter - this.COUNTER_WINDOW);
+      if (parsed.c <= windowStart && this.peerMessageCounter > 0) {
+        throw new Error('Message counter too old, possible replay attack');
+      }
+      if (parsed.c > this.peerMessageCounter) {
+        this.peerMessageCounter = parsed.c;
       }
 
       // Save nonce
       this.receivedNonces.set(nonceString, Date.now());
 
       if (typeof parsed.m === 'string') {
+        // Return object with metadata for caller
+        this.lastDecryptedId = parsed.id || null;
+        this.lastDecryptedReply = parsed.r || null;
         return parsed.m;
       }
     } catch (e) {
@@ -788,6 +871,8 @@ export class GhostCrypto {
       // Not JSON — return as-is
     }
 
+    this.lastDecryptedId = null;
+    this.lastDecryptedReply = null;
     return unpaddedText;
   }
 
@@ -820,8 +905,12 @@ export class GhostCrypto {
    * Удаление padding
    */
   unpadMessage(paddedMessage) {
-    const originalLength = parseInt(paddedMessage.substring(0, 4), 10);
-    if (isNaN(originalLength) || originalLength < 0 || originalLength > paddedMessage.length - 4) {
+    const prefix = paddedMessage.substring(0, 4);
+    if (!/^\d{4}$/.test(prefix)) {
+      throw new Error('Invalid padded message format');
+    }
+    const originalLength = parseInt(prefix, 10);
+    if (originalLength < 0 || originalLength > paddedMessage.length - 4) {
       throw new Error('Invalid padded message format');
     }
     const base64Message = paddedMessage.substring(4, 4 + originalLength);
@@ -899,6 +988,8 @@ export class GhostCrypto {
       this.ratchet = null;
     }
 
+    // L3: Zero-fill raw key material before releasing
+    if (this.peerPublicKeyRaw) this.peerPublicKeyRaw.fill(0);
     this.keyPair = null;
     this.peerPublicKey = null;
     this.peerPublicKeyRaw = null;

@@ -7,8 +7,17 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Required on Android 14+ to let an incoming-call notification wake the screen
+         over the lock screen. System auto-grants for apps with CATEGORY_CALL usage. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Helps the heads-up incoming-call notification light up the display -->
+    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+    <uses-permission android:name="android.permission.SHOW_WHEN_LOCKED" />
 
     <application
         android:name=".GhostChatApp"
@@ -24,7 +33,8 @@
             android:exported="true"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="locale|layoutDirection">
+            android:configChanges="locale|layoutDirection"
+            android:launchMode="singleTop">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -39,16 +49,46 @@
                 <data android:scheme="ghostchat" />
             </intent-filter>
 
-            <!-- Deep link: https://gbskgs.xyz/?room=ROOM_ID -->
+            <!-- Deep link: https://ghostchat.one/?room=ROOM_ID -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="gbskgs.xyz"
+                    android:host="ghostchat.one"
                     android:pathPattern="/.*" />
             </intent-filter>
         </activity>
+
+        <!-- ConnectionService for system call UI (CallKit analog) -->
+        <service
+            android:name=".core.call.GhostConnectionService"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+
+        <!-- FileProvider for sharing transferred files -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Firebase Cloud Messaging -->
+        <service
+            android:name=".core.notification.GhostFirebaseService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

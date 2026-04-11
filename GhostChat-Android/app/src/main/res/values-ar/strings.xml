@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ghost Chat</string>
+
+    <!-- Welcome Screen -->
+    <string name="welcome_subtitle">مراسلة خاصة</string>
+    <string name="welcome_new_chat">محادثة جديدة</string>
+    <string name="welcome_creating">جارٍ الإنشاء…</string>
+    <string name="welcome_or">أو</string>
+    <string name="welcome_enter_code">رمز الغرفة</string>
+    <string name="welcome_join">انضمام</string>
+    <string name="welcome_joining">جارٍ الانضمام…</string>
+    <string name="welcome_privacy_mode">إخفاء IP (ترحيل)</string>
+    <string name="welcome_footer">لا يتم تخزين الرسائل على الخادم</string>
+
+    <!-- Waiting Screen -->
+    <string name="waiting_title">بانتظار الطرف الآخر</string>
+    <string name="waiting_copy">نسخ</string>
+    <string name="waiting_share">مشاركة</string>
+    <string name="waiting_share_link">شارك الرابط مع الطرف الآخر</string>
+    <string name="waiting_cancel">إلغاء</string>
+    <string name="waiting_recent_contacts">جهات الاتصال الأخيرة</string>
+    <string name="waiting_invite">دعوة</string>
+    <string name="waiting_invite_confirm_title">إرسال الدعوة؟</string>
+    <string name="waiting_invite_confirm_message">سيتلقى %1$s إشعاراً بأنك تريد المحادثة.</string>
+    <string name="waiting_invite_confirm_send">إرسال</string>
+
+    <!-- Connecting Screen -->
+    <string name="connecting_title">جارٍ الاتصال…</string>
+    <string name="connecting_subtitle">جارٍ إنشاء اتصال P2P</string>
+    <string name="connecting_cancel">إلغاء</string>
+
+    <!-- Chat Screen -->
+    <string name="chat_placeholder">رسالة</string>
+    <string name="chat_verification_title">رمز الأمان</string>
+    <string name="chat_verification_info">قارن هذا الرمز مع الطرف الآخر عبر قناة أخرى</string>
+    <string name="chat_verify">متطابق</string>
+    <string name="chat_not_match">غير متطابق</string>
+    <string name="chat_verified">تم التحقق</string>
+    <string name="chat_typing">يكتب…</string>
+    <string name="chat_close">إغلاق</string>
+    <string name="chat_copied">تم النسخ</string>
+
+    <!-- Call Screen -->
+    <string name="call_calling">جارٍ الاتصال…</string>
+    <string name="call_unmute">إلغاء كتم الصوت</string>
+    <string name="call_mute">كتم الصوت</string>
+    <string name="call_speaker">مكبر الصوت</string>
+    <string name="call_earpiece">سماعة الأذن</string>
+    <string name="call_end">إنهاء</string>
+    <string name="call_incoming">مكالمة واردة</string>
+    <string name="call_accept">قبول</string>
+    <string name="call_decline">رفض</string>
+
+    <!-- System Messages -->
+    <string name="system_peer_disconnected">انقطع اتصال الطرف الآخر</string>
+    <string name="system_connection_restored">تم استعادة الاتصال</string>
+    <string name="system_connection_lost">انقطع الاتصال</string>
+    <string name="system_secure_connection">تم إنشاء اتصال آمن</string>
+    <string name="system_tap_shield">اضغط على الدرع للتحقق من رموز الأمان</string>
+    <string name="system_key_exchange_error">خطأ في تبادل المفاتيح</string>
+    <string name="system_screenshot_taken">⚠️ لقد التقطت لقطة شاشة</string>
+    <string name="system_decryption_error">خطأ في فك التشفير</string>
+    <string name="system_replay_attack">تم اكتشاف هجوم إعادة — تم رفض الرسالة</string>
+    <string name="system_message_too_old">تم رفض الرسالة — قديمة جداً</string>
+    <string name="system_counter_too_old">تم رفض الرسالة — انتهى العداد</string>
+    <string name="system_send_error">خطأ في الإرسال</string>
+    <string name="system_calling">جارٍ الاتصال…</string>
+    <string name="system_incoming_call">مكالمة واردة…</string>
+    <string name="system_call_connected">تم توصيل المكالمة</string>
+    <string name="system_call_declined">تم رفض المكالمة</string>
+    <string name="system_call_started">بدأت المكالمة</string>
+    <string name="system_call_ended">انتهت المكالمة</string>
+    <string name="system_no_answer">لا إجابة</string>
+    <string name="system_no_push_token">مكالمة غير متصلة: لا يوجد رمز إشعار — لن يتلقى الطرف الآخر إشعارًا. في انتظار الاتصال…</string>
+    <string name="system_peer_ended_call">أنهى الطرف الآخر المكالمة</string>
+    <string name="system_peer_screenshot">التقط الطرف الآخر لقطة شاشة</string>
+    <string name="system_verified">تم التحقق! الاتصال آمن.</string>
+    <string name="system_codes_do_not_match">تحذير: الرموز لا تتطابق! هجوم محتمل!</string>
+    <string name="system_end_session">أنهِ الجلسة فوراً.</string>
+    <string name="system_connection_timeout">فشل الاتصال (انتهت المهلة)</string>
+    <string name="system_call_error">خطأ في المكالمة: %1$s</string>
+    <string name="system_error">خطأ: %1$s</string>
+    <string name="system_security_warning">⚠️ %1$s</string>
+    <string name="system_pq_upgraded">الحماية ما بعد الكمية مفعّلة (ML-KEM768)</string>
+    <string name="system_incompatible_version">إصدار البروتوكول غير متوافق. يرجى تحديث Ghost Chat.</string>
+    <string name="system_known_peer">متصل: %1$s</string>
+    <string name="system_unexpected_peer">تحذير: مفتاح هوية مختلف! انتحال هوية محتمل.</string>
+    <string name="system_peer_security_alert">⚠️ الطرف الآخر: %1$s</string>
+
+    <!-- Security Monitor -->
+    <string name="security_screen_recording_active">تسجيل الشاشة نشط</string>
+    <string name="security_screen_recording_detected">تم اكتشاف تسجيل الشاشة</string>
+    <string name="security_bluetooth_connected">تم توصيل جهاز بلوتوث: %1$s</string>
+    <string name="security_audio_device_removed">تم فصل جهاز الصوت</string>
+
+    <!-- Deep Link -->
+    <string name="deeplink_title">الانضمام إلى الغرفة؟</string>
+    <string name="deeplink_join">انضمام</string>
+    <string name="deeplink_cancel">إلغاء</string>
+    <string name="deeplink_message">الانضمام إلى الغرفة %1$s…؟</string>
+
+    <!-- Signaling -->
+    <string name="signaling_reconnect_failed">فشلت إعادة الاتصال</string>
+
+    <!-- Biometric -->
+    <string name="biometric_reason">فتح قفل Ghost Chat</string>
+    <string name="biometric_enable">تفعيل القياسات الحيوية</string>
+    <string name="biometric_disable">تعطيل القياسات الحيوية</string>
+    <string name="biometric_locked">Ghost Chat مقفل</string>
+    <string name="biometric_unlock">فتح القفل</string>
+
+    <!-- Settings -->
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_done">تم</string>
+    <string name="settings_language">اللغة</string>
+    <string name="settings_language_section">اللغة</string>
+    <string name="settings_language_current">العربية</string>
+    <string name="settings_security_section">الأمان</string>
+    <string name="settings_biometric">القفل البيومتري</string>
+    <string name="settings_biometric_desc">حماية التطبيق بالقياسات الحيوية عند الانتقال إلى الخلفية</string>
+    <string name="settings_privacy_mode">وضع الخصوصية (ترحيل)</string>
+    <string name="settings_privacy_mode_desc">إخفاء عنوان IP الخاص بك</string>
+    <string name="settings_screenshot_notify">تنبيهات لقطة الشاشة</string>
+    <string name="settings_screenshot_notify_desc">إشعار الطرف الآخر عند التقاط لقطات شاشة</string>
+    <string name="settings_messages_section">الرسائل</string>
+    <string name="settings_auto_delete">الحذف التلقائي</string>
+    <string name="settings_sounds_section">الأصوات والإشعارات</string>
+    <string name="settings_sound">صوت الرسالة</string>
+    <string name="settings_vibration">الاهتزاز</string>
+    <string name="settings_ringtone">نغمة الرنين</string>
+    <string name="settings_msg_sound">صوت الإشعار</string>
+    <string name="settings_danger_section">البيانات</string>
+    <string name="settings_delete_contacts">حذف جميع جهات الاتصال</string>
+    <string name="settings_delete_contacts_confirm">حذف جميع جهات الاتصال؟</string>
+    <string name="settings_destroy_all">تدمير الكل</string>
+    <string name="settings_destroy_all_confirm">تدمير جميع البيانات؟ سيتم مسح قاعدة البيانات وإعادة تعيين جميع الإعدادات.</string>
+    <string name="settings_delete">حذف</string>
+    <string name="settings_destroy">تدمير</string>
+    <string name="settings_cancel">إلغاء</string>
+
+    <!-- Contacts -->
+    <string name="contacts_title">جهات الاتصال</string>
+    <string name="contacts_empty">لا توجد جهات اتصال</string>
+    <string name="contacts_empty_hint">يتم حفظ جهات الاتصال تلقائياً بعد جلسات المحادثة</string>
+    <string name="contacts_name">الاسم</string>
+    <string name="contacts_edit">تعديل الاسم</string>
+    <string name="contacts_save">حفظ</string>
+    <string name="contacts_save_title">حفظ جهة الاتصال؟</string>
+    <string name="contacts_name_placeholder">الاسم</string>
+    <string name="contacts_save_message">احفظ جهة الاتصال هذه للتعرف عليها في الجلسات المستقبلية</string>
+    <string name="contacts_skip">تخطي</string>
+    <string name="contacts_start_chat">بدء المحادثة</string>
+    <string name="contacts_details">التفاصيل</string>
+    <string name="contacts_created">تاريخ الإنشاء</string>
+    <string name="contacts_last_session">آخر جلسة</string>
+    <string name="contacts_sessions">الجلسات</string>
+    <string name="contacts_key_state">حالة المفتاح</string>
+    <string name="contacts_key_state_saved">محفوظ</string>
+    <string name="contacts_key_state_none">لا يوجد</string>
+    <string name="contacts_search">بحث</string>
+    <string name="contacts_notes">ملاحظات</string>
+    <string name="contacts_notes_placeholder">إضافة ملاحظات حول جهة الاتصال هذه…</string>
+    <string name="contacts_delete">حذف جهة الاتصال</string>
+    <string name="contacts_delete_confirm">حذف %1$s؟ سيتم أيضاً إزالة مفاتيح التشفير المحفوظة.</string>
+    <string name="contacts_ttl">حذف الرسائل تلقائياً</string>
+    <string name="contacts_ttl_header">عمر الرسائل</string>
+    <string name="contacts_ttl_footer">سيتم حذف الرسائل الأقدم من الوقت المحدد تلقائياً من الجهاز</string>
+    <string name="contacts_ttl_off">إيقاف</string>
+    <string name="contacts_ttl_1h">ساعة</string>
+    <string name="contacts_ttl_1d">يوم</string>
+    <string name="contacts_ttl_7d">7 أيام</string>
+    <string name="contacts_ttl_30d">30 يوم</string>
+
+    <!-- Saved Messages -->
+    <string name="saved_title">الرسائل المحفوظة</string>
+    <string name="saved_hint">مفكرتك الشخصية</string>
+    <string name="saved_placeholder">اكتب ملاحظة…</string>
+    <string name="saved_disable_confirm">تعطيل الرسائل المحفوظة؟ سيتم حذف جميع الملاحظات المحفوظة.</string>
+</resources>

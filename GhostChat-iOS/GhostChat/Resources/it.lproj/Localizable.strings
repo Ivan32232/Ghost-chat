@@ -1,0 +1,263 @@
+/* Welcome Screen */
+"welcome.subtitle" = "Messaggistica privata";
+"welcome.newChat" = "Nuova chat";
+"welcome.creating" = "Creazione in corso...";
+"welcome.or" = "oppure";
+"welcome.roomCode" = "Codice stanza";
+"welcome.join" = "Entra";
+"welcome.joining" = "Accesso in corso...";
+"welcome.hideIP" = "Nascondi IP (relay)";
+"welcome.footer" = "I messaggi non vengono salvati sul server";
+
+/* Waiting Screen */
+"waiting.title" = "In attesa del contatto";
+"waiting.copy" = "Copia";
+"waiting.share" = "Condividi";
+"waiting.shareMessage" = "Entra in una chat privata";
+"waiting.cancel" = "Annulla";
+"waiting.recentContacts" = "Contatti recenti";
+"waiting.invite" = "Invita";
+"waiting.inviteConfirm.title" = "Inviare l'invito?";
+"waiting.inviteConfirm.message" = "%@ riceverà una notifica che vuoi chattare.";
+"waiting.inviteConfirm.send" = "Invia";
+
+/* Connecting Screen */
+"connecting.title" = "Connessione in corso...";
+"connecting.subtitle" = "Stabilendo la connessione P2P";
+"connecting.cancel" = "Annulla";
+"connecting.step.server" = "Connessione al server...";
+"connecting.step.peer" = "In attesa dell'interlocutore...";
+"connecting.step.keys" = "Scambio delle chiavi di crittografia...";
+"connecting.step.secured" = "Connessione sicura stabilita";
+
+/* Chat Screen */
+"chat.message" = "Messaggio";
+"chat.securityCode" = "Codice di sicurezza";
+"chat.compareCode" = "Confronta questo codice con il tuo contatto tramite un altro canale";
+"chat.matches" = "Corrisponde";
+"chat.doesNotMatch" = "Non corrisponde";
+"chat.copy" = "Copiare";
+"chat.edit" = "Modifica";
+"chat.edited" = "modificato";
+"chat.save" = "Salva";
+"chat.deleteForEveryone" = "Elimina per tutti";
+"chat.you" = "Tu";
+"chat.leave" = "Esci";
+"system.waitingReconnect" = "In attesa di riconnessione...";
+
+/* Call Screen */
+"call.calling" = "Chiamata in corso...";
+"call.unmute" = "Riattiva audio";
+"call.mute" = "Disattiva audio";
+"call.speaker" = "Altoparlante";
+"call.earpiece" = "Auricolare";
+"call.end" = "Fine";
+
+/* Incoming Call */
+"call.incoming" = "Chiamata in arrivo";
+"call.accept" = "Accetta";
+"call.decline" = "Rifiuta";
+
+/* System Messages */
+"system.peerDisconnected" = "Il contatto si è disconnesso";
+"system.connectionRestored" = "Connessione ripristinata";
+"system.connectionLost" = "Connessione persa";
+"system.secureConnection" = "Connessione sicura stabilita";
+"system.tapShield" = "Tocca lo scudo per verificare i codici di sicurezza";
+"system.keyExchangeError" = "Errore nello scambio delle chiavi";
+"system.screenshotTaken" = "⚠️ Hai fatto uno screenshot";
+"system.decryptionError" = "Errore di decrittazione";
+"system.replayAttack" = "Attacco replay rilevato — messaggio rifiutato";
+"system.messageTooOld" = "Messaggio rifiutato — troppo vecchio";
+"system.counterTooOld" = "Messaggio rifiutato — contatore scaduto";
+"system.sendError" = "Errore di invio";
+"system.calling" = "Chiamata in corso...";
+"system.incomingCall" = "Chiamata in arrivo...";
+"system.callConnected" = "Chiamata connessa";
+"system.callDeclined" = "Chiamata rifiutata";
+"system.callStarted" = "Chiamata iniziata";
+"system.callEnded" = "Chiamata terminata";
+"system.noAnswer" = "Nessuna risposta";
+"system.noPushToken" = "Chiamata offline: nessun token push — il contatto non riceverà la notifica. In attesa di connessione...";
+"system.peerEndedCall" = "Il contatto ha terminato la chiamata";
+"system.peerScreenshot" = "Il contatto ha fatto uno screenshot";
+"system.verified" = "Verificato! La connessione è sicura.";
+"system.codesDoNotMatch" = "ATTENZIONE: I codici NON corrispondono! Possibile attacco!";
+"system.endSession" = "Termina la sessione immediatamente.";
+"system.connectionTimeout" = "Connessione fallita (timeout)";
+"system.callError" = "Errore chiamata: %@";
+"system.error" = "Errore: %@";
+"system.securityWarning" = "⚠️ %@";
+
+/* Post-Quantum */
+"system.pqUpgraded" = "Protezione post-quantistica attiva (ML-KEM768)";
+
+/* Security Monitor */
+"security.screenRecordingActive" = "Registrazione schermo attiva";
+"security.screenRecordingDetected" = "Registrazione schermo rilevata";
+"security.bluetoothConnected" = "Dispositivo Bluetooth connesso: %@";
+"security.audioDeviceRemoved" = "Dispositivo audio disconnesso";
+
+/* Deep Link */
+"deeplink.title" = "Entrare nella stanza?";
+"deeplink.join" = "Entra";
+"deeplink.cancel" = "Annulla";
+"deeplink.message" = "Entrare nella stanza %@...?";
+
+/* Protocol */
+"system.incompatibleVersion" = "Versione del protocollo incompatibile. Aggiorna Ghost Chat.";
+
+/* Signaling */
+"signaling.reconnectFailed" = "Riconnessione fallita";
+
+/* Biometric */
+"biometric.reason" = "Sblocca Ghost Chat";
+"biometric.enable" = "Attiva Face ID";
+"biometric.disable" = "Disattiva Face ID";
+"biometric.faceid" = "Face ID";
+"biometric.touchid" = "Touch ID";
+"biometric.locked" = "Ghost Chat è bloccato";
+"biometric.unlock" = "Sblocca";
+
+/* Settings */
+"settings.title" = "Impostazioni";
+"settings.done" = "Fatto";
+"settings.language" = "Lingua";
+"settings.language.header" = "LINGUA";
+"settings.language.search" = "Cerca";
+
+"settings.security" = "SICUREZZA";
+"settings.security.footer" = "L'autenticazione biometrica protegge l'app in background";
+"settings.autolock" = "Blocco automatico";
+"settings.autolock.background" = "In background";
+
+"settings.privacy" = "PRIVACY";
+"settings.privacy.relay" = "Modalità privacy (relay)";
+"settings.privacy.footer" = "Tutti i messaggi vengono eliminati automaticamente dopo il timer impostato";
+"settings.autodelete" = "Eliminazione automatica";
+"settings.autodelete.1" = "1 min";
+"settings.autodelete.3" = "3 min";
+"settings.autodelete.5" = "5 min";
+"settings.autodelete.10" = "10 min";
+"settings.autodelete.30" = "30 min";
+"settings.screenshot.notify" = "Avvisi screenshot";
+
+"settings.sounds" = "SUONI E NOTIFICHE";
+"settings.sound" = "Suono messaggio";
+"settings.sound.message" = "Suono di notifica";
+"settings.sound.ringtone" = "Suoneria";
+"settings.vibration" = "Vibrazione";
+
+/* Sound Names */
+"sound.none" = "Nessuno";
+"sound.tock" = "Tock";
+"sound.tink" = "Tink";
+"sound.pop" = "Pop";
+"sound.received" = "Received";
+"sound.sent" = "Sent";
+"sound.tweet" = "Tweet";
+"sound.anticipate" = "Anticipate";
+"sound.bloom" = "Bloom";
+"sound.calypso" = "Calypso";
+"sound.chooChoo" = "Choo Choo";
+"sound.descent" = "Descent";
+"sound.fanfare" = "Fanfare";
+"sound.ladder" = "Ladder";
+"sound.minuet" = "Minuet";
+"sound.newsFlash" = "News Flash";
+"sound.noir" = "Noir";
+"sound.sherwood" = "Sherwood Forest";
+"sound.spell" = "Spell";
+"sound.suspense" = "Suspense";
+"sound.telegraph" = "Telegraph";
+"sound.tiptoes" = "Tiptoes";
+"sound.typewriters" = "Typewriters";
+"sound.update" = "Update";
+
+"settings.data" = "DATI";
+"settings.data.footer" = "Queste azioni non possono essere annullate";
+"settings.data.deleteContacts" = "Elimina tutti i contatti";
+"settings.data.destroyAll" = "Distruggi tutto";
+"settings.data.deleteContacts.confirm" = "Eliminare tutti i contatti?";
+"settings.data.destroyAll.confirm" = "Distruggere tutti i dati? Il database verrà cancellato e tutte le impostazioni verranno ripristinate.";
+"settings.delete" = "Elimina";
+"settings.destroy" = "Distruggi";
+"settings.cancel" = "Annulla";
+
+"settings.about" = "INFO";
+"settings.about.version" = "Versione";
+"settings.about.protocol" = "Protocollo";
+"settings.about.encryption" = "Crittografia";
+"settings.about.pq" = "Post-quantistico";
+
+/* Contacts */
+"contacts.title" = "Contatti";
+"contacts.empty" = "Nessun contatto";
+"contacts.emptyHint" = "I contatti vengono salvati automaticamente dopo le sessioni di chat";
+"contacts.name" = "Nome";
+"contacts.editName" = "Modifica nome";
+"contacts.save" = "Salva";
+"contacts.startChat" = "Avvia chat";
+"contacts.details" = "DETTAGLI";
+
+"contacts.created" = "Creato";
+"contacts.lastSession" = "Ultima sessione";
+"contacts.sessions" = "Sessioni";
+"contacts.keyState" = "Stato chiave";
+"contacts.keyState.saved" = "Salvata";
+"contacts.keyState.none" = "Nessuna";
+"contacts.delete" = "Elimina contatto";
+"contacts.deleteConfirm" = "Eliminare questo contatto? Verranno rimosse anche le chiavi di crittografia salvate.";
+"contacts.savePrompt.title" = "Salvare il contatto?";
+"contacts.savePrompt.name" = "Nome";
+"contacts.savePrompt.message" = "Salva questo contatto per riconoscerlo nelle sessioni future";
+"contacts.skip" = "Salta";
+
+/* System — Contacts */
+"system.knownPeer" = "Connesso: %@";
+"system.unexpectedPeer" = "ATTENZIONE: Chiave di identità diversa! Possibile impersonificazione.";
+"system.connectionBlocked" = "Connessione bloccata. Verifica dell'identità fallita.";
+"security_dtls_missing" = "SICUREZZA: Il peer non ha fornito l'impronta DTLS. Connessione bloccata.";
+"security_dtls_mismatch" = "SICUREZZA: Impronta DTLS non corrispondente! Possibile attacco MITM. Connessione bloccata.";
+
+/* Info.plist */
+"NSMicrophoneUsageDescription" = "Il microfono è necessario per le chiamate vocali";
+"NSFaceIDUsageDescription" = "Face ID viene utilizzato per proteggere i tuoi dati";
+
+/* Contacts — Additional */
+"contacts.call" = "Chiama";
+"contacts.notes" = "Note";
+"contacts.ttl" = "Eliminazione automatica messaggi";
+"contacts.ttl.header" = "DURATA DEI MESSAGGI";
+"contacts.ttl.footer" = "I messaggi più vecchi del tempo selezionato verranno eliminati automaticamente dal dispositivo";
+"contacts.ttl.off" = "Disattivato";
+"contacts.ttl.1h" = "1 ora";
+"contacts.ttl.1d" = "1 giorno";
+"contacts.ttl.7d" = "7 giorni";
+"contacts.ttl.30d" = "30 giorni";
+
+/* Saved Messages */
+"saved.title" = "Messaggi salvati";
+"saved.hint" = "Il tuo blocco note personale";
+"saved.placeholder" = "Scrivi una nota...";
+"saved.disable.confirm" = "Disattivare i messaggi salvati? Tutte le note salvate verranno eliminate.";
+
+/* Files */
+"file.photoVideo" = "Foto / Video";
+"file.document" = "Documento";
+
+/* Typing */
+"chat.typing" = "sta scrivendo...";
+
+/* Chat Invite */
+"invite.banner.title" = "Invito alla chat";
+"invite.banner.message" = "%@ ti invita a chattare";
+"invite.join" = "Unisciti";
+"invite.decline" = "Rifiuta";
+
+/* Push Notifications */
+"push.newMessage.title" = "Ghost Chat";
+"push.newMessage.body" = "Nuovo messaggio da %@";
+"push.missedCall.title" = "Ghost Chat";
+"push.missedCall.body" = "Chiamata persa da %@";
+"system.connecting" = "Connessione...";

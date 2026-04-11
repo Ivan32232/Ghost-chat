@@ -1,0 +1,5 @@
+/* Info.plist localization — English */
+
+"NSCameraUsageDescription" = "Ghost Chat does not use the camera. This permission is required by the WebRTC framework.";
+"NSMicrophoneUsageDescription" = "Microphone is required for voice calls";
+"NSFaceIDUsageDescription" = "Face ID is used to protect your data";

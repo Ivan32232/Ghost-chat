@@ -9,6 +9,9 @@ struct SettingsView: View {
 
     @State private var showDeleteConfirmation = false
     @State private var showDestroyConfirmation = false
+    @State private var showDeleteHistoryConfirmation = false
+    @State private var showDeleteSavedConfirmation = false
+    @State private var showRemovePinConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -34,8 +37,44 @@ struct SettingsView: View {
 
                 // MARK: - Безопасность
                 Section {
-                    // Face ID / Touch ID
-                    if BiometricAuthService.isAvailable {
+                    // PIN Code
+                    if !biometricAuth.isPinSet {
+                        NavigationLink {
+                            SetPinView(auth: biometricAuth, mode: .create)
+                        } label: {
+                            Label {
+                                Text("pin.set")
+                            } icon: {
+                                Image(systemName: "lock.rectangle")
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    } else {
+                        NavigationLink {
+                            SetPinView(auth: biometricAuth, mode: .change)
+                        } label: {
+                            Label {
+                                Text("pin.change")
+                            } icon: {
+                                Image(systemName: "lock.rectangle")
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+
+                        Button(role: .destructive) {
+                            showRemovePinConfirmation = true
+                        } label: {
+                            Label {
+                                Text("pin.remove")
+                            } icon: {
+                                Image(systemName: "lock.open")
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+
+                    // Face ID / Touch ID — only when PIN is set
+                    if biometricAuth.isPinSet && BiometricAuthService.isAvailable {
                         Toggle(isOn: Binding(
                             get: { biometricAuth.isEnabled },
                             set: { biometricAuth.setEnabled($0) }
@@ -51,41 +90,30 @@ struct SettingsView: View {
                     }
 
                     // Автоблокировка
-                    if biometricAuth.isEnabled {
-                        HStack {
+                    if biometricAuth.isPinSet || biometricAuth.isEnabled {
+                        Picker(selection: $biometricAuth.autoLockSeconds) {
+                            Text("settings.autolock.instant").tag(0)
+                            Text("settings.autolock.15s").tag(15)
+                            Text("settings.autolock.30s").tag(30)
+                            Text("settings.autolock.1m").tag(60)
+                            Text("settings.autolock.5m").tag(300)
+                        } label: {
                             Label {
                                 Text("settings.autolock")
                             } icon: {
                                 Image(systemName: "lock.fill")
                                     .foregroundStyle(.orange)
                             }
-                            Spacer()
-                            Text("settings.autolock.background")
-                                .foregroundStyle(.gray)
-                                .font(.subheadline)
                         }
                     }
                 } header: {
                     Text("settings.security")
                 } footer: {
-                    if BiometricAuthService.isAvailable {
-                        Text("settings.security.footer")
-                    }
+                    Text("settings.security.pin.footer")
                 }
 
                 // MARK: - Приватность
                 Section {
-                    // Режим приватности (relay)
-                    Toggle(isOn: $viewModel.privacyMode) {
-                        Label {
-                            Text("settings.privacy.relay")
-                        } icon: {
-                            Image(systemName: "shield.checkered")
-                                .foregroundStyle(.green)
-                        }
-                    }
-                    .tint(.green)
-
                     // Таймер автоудаления
                     Picker(selection: $viewModel.autoDeleteMinutes) {
                         Text("settings.autodelete.1").tag(1)
@@ -116,6 +144,59 @@ struct SettingsView: View {
                     Text("settings.privacy")
                 } footer: {
                     Text("settings.privacy.footer")
+                }
+
+                // MARK: - История чатов
+                Section {
+                    Toggle(isOn: $viewModel.saveMessageHistory) {
+                        Label {
+                            Text("settings.history.save")
+                        } icon: {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    .tint(.green)
+
+                    // Saved Messages (Избранное)
+                    Toggle(isOn: Binding(
+                        get: { viewModel.savedMessagesEnabled },
+                        set: { newValue in
+                            if newValue {
+                                viewModel.savedMessagesEnabled = true
+                                dismiss()
+                                viewModel.openSavedMessages()
+                            } else {
+                                // Can't just disable — must delete messages first
+                                showDeleteSavedConfirmation = true
+                            }
+                        }
+                    )) {
+                        Label {
+                            Text("saved.title")
+                        } icon: {
+                            Image(systemName: "bookmark.fill")
+                                .foregroundStyle(.purple)
+                        }
+                    }
+                    .tint(.green)
+
+                    if viewModel.saveMessageHistory {
+                        Button(role: .destructive) {
+                            showDeleteHistoryConfirmation = true
+                        } label: {
+                            Label {
+                                Text("settings.history.deleteAll")
+                            } icon: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("settings.history")
+                } footer: {
+                    Text("settings.history.footer")
                 }
 
                 // MARK: - Звуки и уведомления
@@ -275,7 +356,7 @@ struct SettingsView: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(Color(white: 0.07))
+            .background(Color(white: 0.04)) // #0a0a0a
             .navigationTitle("settings.title")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -290,15 +371,50 @@ struct SettingsView: View {
             }
             .alert("settings.data.deleteContacts.confirm", isPresented: $showDeleteConfirmation) {
                 Button("settings.delete", role: .destructive) {
-                    try? DatabaseService.shared.deleteAll()
+                    try? ContactStore().deleteAll()
+                    try? MessageStore().deleteAll()
+                    dismiss()
+                    viewModel.performHardReset()
                 }
                 Button("settings.cancel", role: .cancel) {}
+            }
+            .alert("settings.history.deleteAll", isPresented: $showDeleteHistoryConfirmation) {
+                Button("settings.destroy", role: .destructive) {
+                    // Clean up files before hard reset
+                    biometricAuth.removePin()
+                    IdentityKeyService.shared.destroy()
+                    let filesDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("files")
+                    if let dir = filesDir { try? FileManager.default.removeItem(at: dir) }
+                    let logFile = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("ghost_debug.log")
+                    if let log = logFile { try? FileManager.default.removeItem(at: log) }
+                    dismiss()
+                    // performHardReset handles DB close → destroy → recreate
+                    viewModel.performHardReset()
+                }
+                Button("settings.cancel", role: .cancel) {}
+            } message: {
+                Text("settings.history.deleteAll.warning")
             }
             .alert("settings.data.destroyAll.confirm", isPresented: $showDestroyConfirmation) {
                 Button("settings.destroy", role: .destructive) {
                     IdentityKeyService.shared.destroy()
                     DatabaseService.destroy()
-                    biometricAuth.setEnabled(false)
+                    biometricAuth.removePin()
+                    dismiss()
+                    viewModel.performHardReset()
+                }
+                Button("settings.cancel", role: .cancel) {}
+            }
+            .alert("saved.disable.confirm", isPresented: $showDeleteSavedConfirmation) {
+                Button("settings.delete", role: .destructive) {
+                    try? MessageStore().deleteForContact(ChatViewModel.savedMessagesContactId)
+                    viewModel.savedMessagesEnabled = false
+                }
+                Button("settings.cancel", role: .cancel) {}
+            }
+            .alert("pin.remove.confirm", isPresented: $showRemovePinConfirmation) {
+                Button("pin.remove", role: .destructive) {
+                    biometricAuth.removePin()
                 }
                 Button("settings.cancel", role: .cancel) {}
             }

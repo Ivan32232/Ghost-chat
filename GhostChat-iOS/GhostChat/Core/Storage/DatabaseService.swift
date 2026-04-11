@@ -18,6 +18,7 @@ final class DatabaseService {
 
     /// Open or create the encrypted database
     func setup() throws {
+        guard db == nil else { return }
         let dbPath = try Self.databasePath()
         let key = try Self.getOrCreateEncryptionKey()
 
@@ -45,6 +46,18 @@ final class DatabaseService {
             db = nil
             throw DatabaseError.keyVerificationFailed(verifyRC)
         }
+
+        // Secure delete: overwrite deleted data with zeros (not just mark as free)
+        sqlite3_exec(dbPointer, "PRAGMA secure_delete = ON;", nil, nil, nil)
+
+        // Enable foreign key constraints (required for ON DELETE CASCADE)
+        sqlite3_exec(dbPointer, "PRAGMA foreign_keys = ON;", nil, nil, nil)
+
+        // NSFileProtection: encrypt DB file at rest, inaccessible when device is locked
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: dbPath
+        )
 
         // Run migrations
         try runMigrations()
@@ -132,6 +145,74 @@ final class DatabaseService {
                 INSERT INTO _migrations (version, appliedAt) VALUES (2, \(Date().timeIntervalSince1970));
             """)
         }
+
+        // v3: Contact notes field
+        if currentVersion < 3 {
+            try execute("ALTER TABLE contacts ADD COLUMN notes TEXT;")
+            try execute("""
+                INSERT INTO _migrations (version, appliedAt) VALUES (3, \(Date().timeIntervalSince1970));
+            """)
+        }
+
+        // v4: Regular APNs push token for chat invites
+        if currentVersion < 4 {
+            try execute("ALTER TABLE contacts ADD COLUMN notifyToken BLOB;")
+            try execute("""
+                INSERT INTO _migrations (version, appliedAt) VALUES (4, \(Date().timeIntervalSince1970));
+            """)
+        }
+
+        // v5: Persistent message history (Ghost Threads)
+        if currentVersion < 5 {
+            try execute("""
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY,
+                    contactId TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    type INTEGER NOT NULL DEFAULT 0,
+                    isDelivered INTEGER NOT NULL DEFAULT 0,
+                    isPending INTEGER NOT NULL DEFAULT 0,
+                    createdAt REAL NOT NULL,
+                    FOREIGN KEY (contactId) REFERENCES contacts(id) ON DELETE CASCADE
+                );
+            """)
+            try execute("CREATE INDEX IF NOT EXISTS idx_messages_contactId ON messages(contactId);")
+            try execute("CREATE INDEX IF NOT EXISTS idx_messages_createdAt ON messages(createdAt);")
+            try execute("""
+                INSERT INTO _migrations (version, appliedAt) VALUES (5, \(Date().timeIntervalSince1970));
+            """)
+        }
+
+        // v6: File attachment columns for media messages
+        if currentVersion < 6 {
+            try execute("ALTER TABLE messages ADD COLUMN fileName TEXT;")
+            try execute("ALTER TABLE messages ADD COLUMN fileSize INTEGER;")
+            try execute("ALTER TABLE messages ADD COLUMN fileMimeType TEXT;")
+            try execute("ALTER TABLE messages ADD COLUMN fileLocalPath TEXT;")
+            try execute("ALTER TABLE messages ADD COLUMN fileId TEXT;")
+            try execute("""
+                INSERT INTO _migrations (version, appliedAt) VALUES (6, \(Date().timeIntervalSince1970));
+            """)
+        }
+
+        // v7: Per-contact message TTL (seconds, NULL = use global setting)
+        if currentVersion < 7 {
+            try execute("ALTER TABLE contacts ADD COLUMN messageTTL INTEGER;")
+            try execute("""
+                INSERT INTO _migrations (version, appliedAt) VALUES (7, \(Date().timeIntervalSince1970));
+            """)
+        }
+
+        // v8: Reply, edit, sender message ID (Telegram-like features)
+        if currentVersion < 8 {
+            try execute("ALTER TABLE messages ADD COLUMN replyToId TEXT;")
+            try execute("ALTER TABLE messages ADD COLUMN replyToText TEXT;")
+            try execute("ALTER TABLE messages ADD COLUMN isEdited INTEGER NOT NULL DEFAULT 0;")
+            try execute("ALTER TABLE messages ADD COLUMN senderMessageId TEXT;")
+            try execute("""
+                INSERT INTO _migrations (version, appliedAt) VALUES (8, \(Date().timeIntervalSince1970));
+            """)
+        }
     }
 
     private func getCurrentMigrationVersion() throws -> Int {
@@ -154,19 +235,23 @@ final class DatabaseService {
 
     @discardableResult
     func execute(_ sql: String) throws -> Int32 {
-        guard let db else { throw DatabaseError.notOpen }
+        try queue.sync {
+            guard let db else { throw DatabaseError.notOpen }
 
-        var errorMessage: UnsafeMutablePointer<CChar>?
-        let rc = sqlite3_exec(db, sql, nil, nil, &errorMessage)
-        if rc != SQLITE_OK {
-            let msg = errorMessage.map { String(cString: $0) } ?? "Unknown error"
-            sqlite3_free(errorMessage)
-            throw DatabaseError.executeFailed(rc, msg)
+            var errorMessage: UnsafeMutablePointer<CChar>?
+            let rc = sqlite3_exec(db, sql, nil, nil, &errorMessage)
+            if rc != SQLITE_OK {
+                let msg = errorMessage.map { String(cString: $0) } ?? "Unknown error"
+                sqlite3_free(errorMessage)
+                throw DatabaseError.executeFailed(rc, msg)
+            }
+            return rc
         }
-        return rc
     }
 
     /// Prepare a statement for parameterized queries
+    /// Caller MUST call sqlite3_finalize on the returned statement
+    /// and MUST hold the queue via executeWithStatement() for thread safety
     func prepare(_ sql: String) throws -> OpaquePointer {
         guard let db else { throw DatabaseError.notOpen }
 
@@ -176,6 +261,26 @@ final class DatabaseService {
             throw DatabaseError.prepareFailed(rc)
         }
         return stmt
+    }
+
+    /// Thread-safe execution with prepared statement
+    func executeSync<T>(_ block: () throws -> T) rethrows -> T {
+        try queue.sync { try block() }
+    }
+
+    /// Execute SQL without acquiring the queue lock.
+    /// Must only be called from within executeSync() blocks.
+    @discardableResult
+    func executeSQL(_ sql: String) throws -> Int32 {
+        guard let db else { throw DatabaseError.notOpen }
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        let rc = sqlite3_exec(db, sql, nil, nil, &errorMessage)
+        if rc != SQLITE_OK {
+            let msg = errorMessage.map { String(cString: $0) } ?? "Unknown error"
+            sqlite3_free(errorMessage)
+            throw DatabaseError.executeFailed(rc, msg)
+        }
+        return rc
     }
 
     // MARK: - Paths & Keys
@@ -207,14 +312,21 @@ final class DatabaseService {
 
     /// Delete ALL data — panic button
     func deleteAll() throws {
+        try execute("DELETE FROM messages;")
         try execute("DELETE FROM contacts;")
         try execute("DELETE FROM skippedKeys;")
     }
 
     /// Delete DB file entirely and wipe encryption key + identity key from Keychain
     static func destroy() {
+        // Close the database first to release file handles and flush WAL/journal
+        shared.close()
         if let path = try? databasePath() {
-            try? FileManager.default.removeItem(atPath: path)
+            _ = try? FileManager.default.removeItem(atPath: path)
+            // Also remove WAL and journal files if they exist
+            _ = try? FileManager.default.removeItem(atPath: path + "-wal")
+            _ = try? FileManager.default.removeItem(atPath: path + "-shm")
+            _ = try? FileManager.default.removeItem(atPath: path + "-journal")
         }
         KeychainService.delete(forKey: keychainKey)
         IdentityKeyService.shared.destroy()

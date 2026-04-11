@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["WDWX83YJFP.com.ivanpokhvalitov.ghostchat"],
+        "appIDs": ["G2VZKDYV38.com.ivanpokhvalitov.ghostchat"],
         "paths": ["/?room=*", "/*"],
         "components": [
           {

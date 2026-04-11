@@ -6,8 +6,8 @@
 set -e
 
 # Configuration
-DOMAIN="kordar.ai"
-EMAIL="admin@kordar.ai"
+DOMAIN="ghostchat.one"
+EMAIL="admin@ghostchat.one"
 
 # Colors for output
 RED='\033[0;31m'
@@ -60,11 +60,11 @@ chmod 600 ./ssl/*.pem
 
 # Create renewal hook
 echo -e "${YELLOW}Setting up auto-renewal...${NC}"
-cat > /etc/letsencrypt/renewal-hooks/deploy/ghost-chat.sh << 'EOF'
+cat > /etc/letsencrypt/renewal-hooks/deploy/ghost-chat.sh << EOF
 #!/bin/bash
-cd /path/to/ghost-chat/deploy
-cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem ./ssl/
-cp /etc/letsencrypt/live/$DOMAIN/privkey.pem ./ssl/
+cd /opt/ghost-chat/deploy
+cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ./ssl/
+cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ./ssl/
 docker-compose restart nginx
 EOF
 chmod +x /etc/letsencrypt/renewal-hooks/deploy/ghost-chat.sh

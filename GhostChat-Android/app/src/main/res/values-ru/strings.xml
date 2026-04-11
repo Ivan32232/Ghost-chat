@@ -22,13 +22,17 @@
     <string name="waiting_recent_contacts">Недавние контакты</string>
     <string name="waiting_invite">Пригласить</string>
     <string name="waiting_invite_confirm_title">Отправить приглашение?</string>
-    <string name="waiting_invite_confirm_message">Скопировать ссылку для %1$s? Ссылка исчезнет из буфера через 60 секунд.</string>
-    <string name="waiting_invite_confirm_send">Скопировать</string>
+    <string name="waiting_invite_confirm_message">%1$s получит уведомление, что вы хотите поговорить.</string>
+    <string name="waiting_invite_confirm_send">Отправить</string>
 
     <!-- Connecting Screen -->
     <string name="connecting_title">Подключение…</string>
     <string name="connecting_subtitle">Устанавливаем P2P соединение</string>
     <string name="connecting_cancel">Отмена</string>
+    <string name="connecting_step_server">Подключение к серверу…</string>
+    <string name="connecting_step_peer">Ожидание собеседника…</string>
+    <string name="connecting_step_keys">Обмен ключами шифрования…</string>
+    <string name="connecting_step_secured">Защищённое соединение установлено</string>
 
     <!-- Chat Screen -->
     <string name="chat_placeholder">Сообщение</string>
@@ -37,7 +41,23 @@
     <string name="chat_verify">Совпадает</string>
     <string name="chat_not_match">Не совпадает</string>
     <string name="chat_verified">Подтверждено</string>
+    <string name="chat_typing">печатает…</string>
+
+    <!-- Peer Status -->
+    <string name="status_online">в сети</string>
+    <string name="status_connecting">подключается…</string>
+    <string name="status_searching">ищем…</string>
+    <string name="status_recently_online">был(а) недавно</string>
+    <string name="status_offline">не в сети</string>
     <string name="chat_close">Закрыть</string>
+    <string name="chat_copy">Копировать</string>
+    <string name="chat_copied">Скопировано</string>
+    <string name="chat_edit">Редактировать</string>
+    <string name="chat_edited">изменено</string>
+    <string name="chat_save">Сохранить</string>
+    <string name="chat_delete_for_everyone">Удалить для всех</string>
+    <string name="chat_you">Вы</string>
+    <string name="chat_leave">Выйти</string>
 
     <!-- Call Screen -->
     <string name="call_calling">Звоним…</string>
@@ -52,6 +72,7 @@
 
     <!-- System Messages -->
     <string name="system_peer_disconnected">Собеседник отключился</string>
+    <string name="system_peer_gone">Собеседник не вернулся</string>
     <string name="system_connection_restored">Соединение восстановлено</string>
     <string name="system_connection_lost">Соединение потеряно</string>
     <string name="system_secure_connection">Защищённое соединение установлено</string>
@@ -59,6 +80,9 @@
     <string name="system_key_exchange_error">Ошибка обмена ключами</string>
     <string name="system_screenshot_taken">⚠️ Вы сделали скриншот</string>
     <string name="system_decryption_error">Ошибка расшифровки</string>
+    <string name="system_replay_attack">Обнаружена replay-атака — сообщение отклонено</string>
+    <string name="system_message_too_old">Сообщение отклонено — слишком старое</string>
+    <string name="system_counter_too_old">Сообщение отклонено — счётчик устарел</string>
     <string name="system_send_error">Ошибка отправки</string>
     <string name="system_calling">Звоним…</string>
     <string name="system_incoming_call">Входящий звонок…</string>
@@ -66,6 +90,8 @@
     <string name="system_call_declined">Звонок отклонён</string>
     <string name="system_call_started">Звонок начат</string>
     <string name="system_call_ended">Звонок завершён</string>
+    <string name="system_no_answer">Нет ответа</string>
+    <string name="system_no_push_token">Офлайн звонок: нет push токена — собеседник не получит уведомление. Ожидание подключения…</string>
     <string name="system_peer_ended_call">Собеседник завершил звонок</string>
     <string name="system_peer_screenshot">Собеседник сделал скриншот</string>
     <string name="system_verified">Подтверждено! Соединение безопасно.</string>
@@ -80,6 +106,7 @@
     <string name="system_known_peer">Подключён: %1$s</string>
     <string name="system_unexpected_peer">ВНИМАНИЕ: Другой ключ идентификации! Возможна подмена.</string>
     <string name="system_peer_security_alert">⚠️ Собеседник: %1$s</string>
+    <string name="system_waiting_reconnect">Ожидание переподключения…</string>
 
     <!-- Security Monitor -->
     <string name="security_screen_recording_active">Запись экрана активна</string>
@@ -96,12 +123,31 @@
     <!-- Signaling -->
     <string name="signaling_reconnect_failed">Не удалось переподключиться</string>
 
-    <!-- Biometric -->
+    <!-- Biometric / PIN -->
     <string name="biometric_reason">Разблокировать Ghost Chat</string>
     <string name="biometric_enable">Включить биометрию</string>
     <string name="biometric_disable">Выключить биометрию</string>
     <string name="biometric_locked">Ghost Chat заблокирован</string>
     <string name="biometric_unlock">Разблокировать</string>
+    <string name="pin_enter">Введите PIN-код</string>
+    <string name="pin_confirm">Подтвердите PIN-код</string>
+    <string name="pin_digits">цифр</string>
+    <string name="pin_length_error">PIN должен быть %d цифр</string>
+    <string name="pin_mismatch">PIN-коды не совпадают</string>
+    <string name="settings_autolock">Автоблокировка</string>
+    <string name="autolock_instant">Сразу</string>
+    <string name="autolock_15s">15с</string>
+    <string name="autolock_30s">30с</string>
+    <string name="autolock_1m">1м</string>
+    <string name="autolock_5m">5м</string>
+    <string name="settings_set_pin">Установить PIN-код</string>
+    <string name="settings_change_pin">Изменить PIN-код</string>
+    <string name="settings_remove_pin">Удалить PIN-код</string>
+    <string name="settings_remove_pin_confirm">Удалить PIN-код? Биометрическая блокировка тоже будет отключена.</string>
+
+    <!-- Вложения -->
+    <string name="attach_photos">Фото</string>
+    <string name="attach_file">Файл</string>
 
     <!-- Settings -->
     <string name="settings_title">Настройки</string>
@@ -145,13 +191,50 @@
     <string name="contacts_skip">Пропустить</string>
     <string name="contacts_start_chat">Начать чат</string>
     <string name="contacts_details">ДЕТАЛИ</string>
-    <string name="contacts_fingerprint">Отпечаток</string>
     <string name="contacts_created">Создан</string>
     <string name="contacts_last_session">Последняя сессия</string>
     <string name="contacts_sessions">Сессии</string>
     <string name="contacts_key_state">Ключи</string>
     <string name="contacts_key_state_saved">Сохранены</string>
     <string name="contacts_key_state_none">Нет</string>
+    <string name="contacts_search">Поиск</string>
+    <string name="contacts_notes">Заметки</string>
+    <string name="contacts_notes_placeholder">Добавьте заметку о контакте…</string>
     <string name="contacts_delete">Удалить контакт</string>
     <string name="contacts_delete_confirm">Удалить %1$s? Сохранённые ключи шифрования тоже будут удалены.</string>
+    <string name="contacts_no_messages">Нет сообщений</string>
+    <string name="contacts_delete_history">Удалить историю</string>
+    <string name="contacts_ttl">Автоудаление сообщений</string>
+    <string name="contacts_ttl_header">ВРЕМЯ ЖИЗНИ СООБЩЕНИЙ</string>
+    <string name="contacts_ttl_footer">Сообщения старше выбранного времени будут автоматически удалены с устройства</string>
+    <string name="contacts_ttl_off">Выкл</string>
+    <string name="contacts_ttl_1h">1 час</string>
+    <string name="contacts_ttl_1d">1 день</string>
+    <string name="contacts_ttl_7d">7 дней</string>
+    <string name="contacts_ttl_30d">30 дней</string>
+
+    <!-- Избранное -->
+    <string name="saved_title">Избранное</string>
+    <string name="saved_hint">Ваш личный блокнот</string>
+    <string name="saved_placeholder">Напишите заметку…</string>
+    <string name="saved_disable_confirm">Отключить Избранное? Все сохранённые заметки будут удалены.</string>
+
+    <!-- Настройки истории -->
+    <string name="settings_history">ИСТОРИЯ ЧАТОВ</string>
+    <string name="settings_save_history">Сохранять историю сообщений</string>
+    <string name="settings_history_footer">При включении сообщения хранятся в зашифрованном виде на устройстве. При выключении — исчезают после каждой сессии.</string>
+    <string name="settings_delete_all_history">Удалить всю историю</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_calls">Входящие звонки</string>
+    <string name="notification_channel_calls_desc">Уведомления о входящих зашифрованных звонках</string>
+    <string name="notification_channel_invites">Приглашения в чат</string>
+    <string name="notification_channel_invites_desc">Уведомления когда контакт приглашает вас в чат</string>
+    <string name="notification_channel_messages">Сообщения</string>
+    <string name="notification_channel_messages_desc">Уведомления о сообщениях</string>
+    <string name="notification_incoming_call">Входящий звонок</string>
+    <string name="notification_chat_invite">Приглашение в чат</string>
+    <string name="notification_invite_from">%1$s приглашает вас в чат</string>
+    <string name="notification_new_message">Новое сообщение от %1$s</string>
+    <string name="notification_missed_call">Пропущенный звонок от %1$s</string>
 </resources>

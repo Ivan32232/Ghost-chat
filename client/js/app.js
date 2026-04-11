@@ -13,6 +13,10 @@ import { GhostVoice } from './voice.js';
 import { logger } from './logger.js';
 
 class GhostChat {
+  // File transfer: 2KB chunks, matches iOS FileTransferService chunk size.
+  // After base64 + JSON + encryption overhead each DataChannel send stays under ~6KB.
+  static FILE_CHUNK_SIZE = 2 * 1024;
+
   constructor() {
     this.ws = null;
     this.rtc = null;
@@ -27,6 +31,8 @@ class GhostChat {
     this.voice = null;
     this.callState = 'idle'; // idle, calling, ringing, active
     this.pendingRenegotiationOffer = null; // Store offer while waiting for user to accept call
+    this._ringingTimeout = null; // Auto-decline after 45s of ringing
+    this._callingTimeout = null; // Auto-cancel call after 45s of no answer
 
     // Remote audio output (iOS earpiece/speaker switching)
     this._remoteStream = null;
@@ -43,6 +49,11 @@ class GhostChat {
     // Connection timeout
     this.connectionTimeout = null;
 
+    // Typing indicator — unified timings (same on iOS/Android)
+    this._lastTypingSentAt = 0;
+    this._typingCancelTimer = null;
+    this._peerTypingCancelTimer = null;
+
     this.initUI();
     this.checkInviteLink();
     // Если нет invite link — пробуем восстановить сохранённую сессию
@@ -53,16 +64,34 @@ class GhostChat {
 
   /**
    * Check URL for invite link and auto-join
-   * Format: https://domain/?room=ROOM_ID
+   * L5: Support both fragment (#room=ID) and query (?room=ID) for backward compat
+   * Fragment is preferred — it's never sent to the server (privacy)
    */
   checkInviteLink() {
-    const params = new URLSearchParams(window.location.search);
-    const roomId = params.get('room');
+    // Try fragment first (preferred — not sent to server)
+    let roomId = null;
+    const hash = window.location.hash;
+    if (hash) {
+      const hashParams = new URLSearchParams(hash.substring(1));
+      roomId = hashParams.get('room');
+    }
+    // Fallback to query param (backward compat with existing links / deep links)
+    if (!roomId) {
+      const params = new URLSearchParams(window.location.search);
+      roomId = params.get('room');
+    }
     if (!roomId) return;
 
     this._hasInviteLink = true;
 
-    // Clear query from URL so refresh doesn't retry
+    // On mobile: show choice — open in app or continue in browser
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      this._showAppRedirect(roomId);
+      return;
+    }
+
+    // Clear URL so refresh doesn't retry
     history.replaceState(null, '', window.location.pathname);
 
     // Auto-join after a short delay to let UI initialize
@@ -91,14 +120,8 @@ class GhostChat {
       messagesContainer: document.getElementById('messages'),
       messageInput: document.getElementById('message-input'),
       sendBtn: document.getElementById('send-btn'),
-      fingerprint: document.getElementById('fingerprint'),
       connectionStatus: document.getElementById('connection-status'),
       privacyToggle: document.getElementById('privacy-mode-toggle'),
-      verifyBtn: document.getElementById('verify-btn'),
-      verifyPanel: document.getElementById('verify-panel'),
-      safetyNumberDisplay: document.getElementById('safety-number-display'),
-      verifiedBtn: document.getElementById('verified-btn'),
-      notVerifiedBtn: document.getElementById('not-verified-btn'),
       // Voice call elements
       callBtn: document.getElementById('call-btn'),
       callOverlay: document.getElementById('call-overlay'),
@@ -115,17 +138,26 @@ class GhostChat {
       declineCallBtn: document.getElementById('decline-call-btn'),
       remoteAudio: document.getElementById('remote-audio'),
       securityAlerts: document.getElementById('security-alerts'),
-      shareBtn: document.getElementById('share-room-btn')
+      shareBtn: document.getElementById('share-room-btn'),
+      // File + reply UI
+      attachBtn: document.getElementById('attach-btn'),
+      fileInput: document.getElementById('file-input'),
+      replyPreview: document.getElementById('reply-preview'),
+      replyPreviewText: document.getElementById('reply-preview-text'),
+      replyCancelBtn: document.getElementById('reply-cancel-btn')
     };
 
-    // Режим приватности (скрывает IP через relay)
-    this.privacyMode = false;
+    // Reply / quote state
+    this.replyingTo = null; // { id: senderMessageId, text: previewText }
+
+    // Режим приватности (скрывает IP через relay) — ON по умолчанию (max security)
+    this.privacyMode = false; // TURN relay disabled for now
     this.isVerified = false;
     this.isSpeakerOn = false;
 
     // Показываем кнопку "Поделиться" если Web Share API доступен (мобильные)
     if (navigator.share && this.elements.shareBtn) {
-      this.elements.shareBtn.style.display = 'flex';
+      this.elements.shareBtn.classList.add('visible');
     }
 
     // Event listeners
@@ -145,6 +177,15 @@ class GhostChat {
       }
     });
 
+    // Typing indicator — send on input
+    this.elements.messageInput.addEventListener('input', () => {
+      if (this.elements.messageInput.value.length > 0) {
+        this.userIsTyping();
+      } else {
+        this.stopTyping();
+      }
+    });
+
     // Privacy mode toggle
     this.elements.privacyToggle.addEventListener('change', (e) => {
       this.privacyMode = e.target.checked;
@@ -152,9 +193,28 @@ class GhostChat {
     });
 
     // Verification panel
-    this.elements.verifyBtn.addEventListener('click', () => this.toggleVerifyPanel());
-    this.elements.verifiedBtn.addEventListener('click', () => this.markAsVerified(true));
-    this.elements.notVerifiedBtn.addEventListener('click', () => this.markAsVerified(false));
+    // Security codes verification removed — nobody uses it
+
+    // File attachment
+    if (this.elements.attachBtn && this.elements.fileInput) {
+      this.elements.attachBtn.addEventListener('click', () => {
+        if (!this.isConnected) {
+          this.showToast('Нет соединения');
+          return;
+        }
+        this.elements.fileInput.click();
+      });
+      this.elements.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) this.sendFile(file);
+        e.target.value = ''; // reset so same file can be re-picked
+      });
+    }
+
+    // Reply cancel
+    if (this.elements.replyCancelBtn) {
+      this.elements.replyCancelBtn.addEventListener('click', () => this.cancelReply());
+    }
 
     // Voice call controls
     this.elements.callBtn.addEventListener('click', () => this.startCall());
@@ -186,7 +246,7 @@ class GhostChat {
     this.setupScreenshotDetection();
 
     // Автоудаление сообщений
-    this.messageAutoDeleteTime = 5 * 60 * 1000; // 5 минут по умолчанию
+    this.messageAutoDeleteTime = 0; // Автоудаление отключено по умолчанию
   }
 
   /**
@@ -226,11 +286,57 @@ class GhostChat {
   async sendEncryptedControl(message) {
     if (!this.crypto?.isReady() || !this.rtc?.isConnected()) return false;
     try {
+      message._ctrl = true;
       const encrypted = await this.crypto.encrypt(JSON.stringify(message));
       return this.rtc.send(JSON.stringify({ type: 'encrypted-message', data: encrypted, v: 2 }));
     } catch (e) {
       logger.error('Failed to send encrypted control:', e);
       return false;
+    }
+  }
+
+  // MARK: - Typing Indicator
+
+  /** Called on every keystroke in input */
+  userIsTyping() {
+    if (!this.isConnected) return;
+    const now = Date.now();
+    // Throttle: send at most every 3 seconds
+    if (now - this._lastTypingSentAt >= 3000) {
+      this._lastTypingSentAt = now;
+      this.sendEncryptedControl({ type: 'typing', isTyping: true });
+    }
+    // Auto-cancel after 5 seconds of no typing
+    clearTimeout(this._typingCancelTimer);
+    this._typingCancelTimer = setTimeout(() => this.stopTyping(), 5000);
+  }
+
+  /** Send typing:false immediately */
+  stopTyping() {
+    clearTimeout(this._typingCancelTimer);
+    this._typingCancelTimer = null;
+    // Не отправляем typing:false если typing:true не был отправлен (throttled)
+    if (this._lastTypingSentAt === 0) return;
+    this._lastTypingSentAt = 0;
+    if (this.isConnected) {
+      this.sendEncryptedControl({ type: 'typing', isTyping: false });
+    }
+  }
+
+  /** Handle peer typing indicator */
+  handlePeerTyping(isTyping) {
+    const el = document.getElementById('typing-indicator');
+    if (!el) return;
+    if (isTyping) {
+      el.classList.remove('hidden');
+      // Auto-clear after 6 seconds without update
+      clearTimeout(this._peerTypingCancelTimer);
+      this._peerTypingCancelTimer = setTimeout(() => {
+        el.classList.add('hidden');
+      }, 6000);
+    } else {
+      el.classList.add('hidden');
+      clearTimeout(this._peerTypingCancelTimer);
     }
   }
 
@@ -262,7 +368,11 @@ class GhostChat {
       };
 
       this.ws.onmessage = (event) => {
-        this.handleSignalingMessage(JSON.parse(event.data));
+        try {
+          this.handleSignalingMessage(JSON.parse(event.data));
+        } catch (e) {
+          logger.error('Invalid WS message:', e);
+        }
       };
     });
   }
@@ -298,7 +408,11 @@ class GhostChat {
         this.ws = ws;
         this._reconnectAttempts = 0;
         ws.onmessage = (event) => {
-          this.handleSignalingMessage(JSON.parse(event.data));
+          try {
+            this.handleSignalingMessage(JSON.parse(event.data));
+          } catch (e) {
+            logger.error('Invalid WS message:', e);
+          }
         };
         ws.onclose = () => {
           if (this.roomId && !this.isConnected) {
@@ -339,6 +453,20 @@ class GhostChat {
 
       case 'rejoin-ok':
         logger.log('Rejoined room after reconnect');
+        // Отправляем буферизованный ICE restart offer если есть
+        if (this._pendingIceRestartOffer) {
+          const offer = this._pendingIceRestartOffer;
+          this._pendingIceRestartOffer = null;
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'signal', data: offer }));
+            logger.log('Buffered ICE restart offer sent after rejoin');
+          }
+        } else if (this.rtc && !this.rtc._connected) {
+          // Нет буферизованного offer, но ICE до сих пор не восстановлен — повторяем restart
+          this.rtc._iceRestartAttempted = false;
+          this.rtc._attemptIceRestart();
+          logger.log('Re-attempting ICE restart after rejoin');
+        }
         break;
 
       case 'room-joined':
@@ -355,6 +483,14 @@ class GhostChat {
         break;
 
       case 'peer-joined':
+        // Пир вернулся — отменяем таймаут ожидания
+        this.showDisconnectBanner(false);
+        if (this._peerLeftTimeout) {
+          clearTimeout(this._peerLeftTimeout);
+          this._peerLeftTimeout = null;
+        }
+        // Сброс отложенных ICE кандидатов от предыдущего соединения
+        this.pendingIceCandidates = [];
         // Оба участника на месте — начинаем WebRTC handshake
         // Сброс isConnected гарантирует свежий key exchange (критично при rejoin)
         this.isConnected = false;
@@ -378,9 +514,20 @@ class GhostChat {
         break;
 
       case 'peer-left':
-        // Полный сброс — собеседник ушёл, комната бесполезна
-        this.leave();
-        this.showToast('Собеседник отключился');
+        // Собеседник потерял WS или вышел
+        this.isConnected = false;
+        this.handlePeerTyping(false);
+        this.showDisconnectBanner(true);
+        this.addSystemMessage('Собеседник отключился');
+        // Таймаут: если пир не вернулся за 60 секунд — выходим
+        if (this._peerLeftTimeout) clearTimeout(this._peerLeftTimeout);
+        this._peerLeftTimeout = setTimeout(() => {
+          this._peerLeftTimeout = null;
+          if (this.roomId) {
+            this.addSystemMessage('Собеседник не вернулся');
+            this.leave();
+          }
+        }, 60000);
         break;
 
       case 'error':
@@ -478,21 +625,36 @@ class GhostChat {
         this.connectionTimeout = null;
       }
       const wasConnected = this.isConnected;
-      this.isConnected = true;
+      // CRITICAL FIX: Don't enable send UI until crypto is ready
+      // isConnected = true only AFTER key exchange completes (see handleKeyExchange)
       this.updateConnectionStatus('connected');
-      this.elements.sendBtn.disabled = false;
-      this.elements.messageInput.disabled = false;
 
       if (!wasConnected) {
         // First connection — exchange keys (v2 Double Ratchet)
+        // Send button stays disabled until key exchange completes
+        // C1: Include DTLS fingerprint for transport binding
         const publicKey = await this.crypto.exportPublicKey();
+        let dtlsFingerprint = null;
+        try {
+          const localDesc = this.rtc.peerConnection?.localDescription;
+          if (localDesc?.sdp) {
+            const match = localDesc.sdp.match(/a=fingerprint:sha-256\s+([^\r\n]+)/i);
+            if (match) dtlsFingerprint = match[1].trim();
+          }
+        } catch {}
         this.rtc.send(JSON.stringify({
           type: 'key-exchange',
           publicKey: publicKey,
-          v: GhostCrypto.PROTOCOL_VERSION
+          identityKey: publicKey,
+          platform: 'web',
+          v: GhostCrypto.PROTOCOL_VERSION,
+          dtls: dtlsFingerprint
         }));
       } else {
-        // Reconnected after temporary disconnect
+        // Reconnected after temporary disconnect — crypto already established
+        this.isConnected = true;
+        this.elements.sendBtn.disabled = false;
+        this.elements.messageInput.disabled = false;
         this.addSystemMessage('Соединение восстановлено');
       }
     };
@@ -500,10 +662,12 @@ class GhostChat {
     this.rtc.onDisconnected = () => {
       this.addSystemMessage('Соединение потеряно');
       this.showDisconnected();
-      // End call if active
+      // End call if active — suppress renegotiation during cleanup
       if (this.voice) {
+        if (this.rtc) this.rtc._suppressNegotiation = true;
         this.voice.destroy();
         this.voice = null;
+        if (this.rtc) this.rtc._suppressNegotiation = false;
       }
       this._cleanupRemoteAudio();
       this._remoteStream = null;
@@ -515,10 +679,13 @@ class GhostChat {
       await this.handleP2PMessage(data);
     };
 
-    // Voice call support
+    // Voice call support — buffer track if voice not yet initialized
     this.rtc.onTrack = (event) => {
       if (this.voice) {
         this.voice.handleRemoteTrack(event);
+      } else {
+        logger.log('Buffering remote track (voice not initialized yet)');
+        this._pendingRemoteTrack = event;
       }
     };
 
@@ -527,7 +694,8 @@ class GhostChat {
       try {
         const encrypted = await this.crypto.encrypt(JSON.stringify({
           type: 'renegotiate',
-          sdp: offer.sdp
+          sdp: offer.sdp,
+          _ctrl: true
         }));
         this.rtc.send(JSON.stringify({
           type: 'encrypted-message',
@@ -536,6 +704,22 @@ class GhostChat {
         }));
       } catch (e) {
         logger.error('Failed to send renegotiation:', e);
+      }
+    };
+
+    // ICE restart offer goes through signaling server (not DataChannel!)
+    // DataChannel rides on the same ICE transport that just broke
+    this.rtc.onIceRestartNeeded = (offer) => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'signal',
+          data: offer
+        }));
+        logger.log('ICE restart offer sent via signaling server');
+      } else {
+        // WS не подключен — буферизуем offer для отправки после reconnect
+        this._pendingIceRestartOffer = offer;
+        logger.log('ICE restart offer buffered — WS not connected');
       }
     };
   }
@@ -616,10 +800,25 @@ class GhostChat {
 
       switch (message.type) {
         case 'key-exchange':
-          await this.handleKeyExchange(message.publicKey, message.v);
+          // M3: Validate types before passing to handler
+          if (typeof message.publicKey !== 'string' || typeof message.v !== 'number') {
+            logger.error('Invalid key-exchange message: bad types');
+            return;
+          }
+          // Validate dtls field type before passing
+          if (message.dtls !== undefined && typeof message.dtls !== 'string') {
+            this.addSystemMessage('БЕЗОПАСНОСТЬ: Некорректный формат DTLS fingerprint.');
+            this.leave();
+            return;
+          }
+          await this.handleKeyExchange(message.publicKey, message.v, message.dtls);
           break;
 
         case 'encrypted-message':
+          if (typeof message.data !== 'string') {
+            logger.error('Invalid encrypted-message: data must be string');
+            return;
+          }
           await this.handleEncryptedMessage(message.data);
           break;
       }
@@ -631,11 +830,40 @@ class GhostChat {
   /**
    * Обмен ключами (v2 Double Ratchet)
    */
-  async handleKeyExchange(peerPublicKey, peerVersion) {
+  async handleKeyExchange(peerPublicKey, peerVersion, peerDtlsFingerprint) {
     // Accept v2+ (backward compat: v3 iOS ↔ v2/v3 web)
     if (!peerVersion || peerVersion < 2) {
       this.addSystemMessage('Несовместимая версия протокола. Обновите Ghost Chat.');
       return;
+    }
+
+    // DTLS fingerprint is mandatory for v3+ peers
+    if (peerVersion >= 3 && !peerDtlsFingerprint) {
+      this.addSystemMessage('БЕЗОПАСНОСТЬ: Отсутствует DTLS fingerprint — возможна MITM атака. Соединение заблокировано.');
+      this.leave();
+      return;
+    }
+
+    // C1: Verify DTLS fingerprint binding (anti-MITM)
+    // If peer provided their DTLS fingerprint, verify it matches the remote SDP
+    // Mismatch = MITM attack → BLOCK connection (not just warn)
+    if (peerDtlsFingerprint && this.rtc?.peerConnection?.remoteDescription?.sdp) {
+      try {
+        const remoteSdp = this.rtc.peerConnection.remoteDescription.sdp;
+        const match = remoteSdp.match(/a=fingerprint:sha-256\s+([^\r\n]+)/i);
+        if (match) {
+          const expectedFingerprint = match[1].trim();
+          if (peerDtlsFingerprint !== expectedFingerprint) {
+            logger.error('DTLS fingerprint mismatch — MITM detected, terminating connection');
+            this.addSystemMessage('БЕЗОПАСНОСТЬ: DTLS fingerprint не совпадает! Возможна атака MITM.');
+            this.addSystemMessage('Соединение заблокировано. Попробуйте другую сеть.');
+            this.leave();
+            return;
+          }
+        }
+      } catch (e) {
+        logger.error('DTLS fingerprint verification failed:', e);
+      }
     }
 
     await this.crypto.importPeerPublicKey(peerPublicKey);
@@ -644,15 +872,14 @@ class GhostChat {
     // Генерируем fingerprint для верификации
     const fingerprint = await this.crypto.generateFingerprint();
     this.currentFingerprint = fingerprint;
-    this.elements.fingerprint.textContent = fingerprint.substring(0, 19) + '...';
-    this.elements.safetyNumberDisplay.textContent = fingerprint;
 
-    // Показываем экран чата
+    // Показываем экран чата — теперь crypto готов, можно разрешить отправку
+    this.isConnected = true;
+    this.elements.sendBtn.disabled = false;
+    this.elements.messageInput.disabled = false;
     this.showScreen('chat');
     this.updateConnectionStatus('connected');
     this.addSystemMessage('Защищённое соединение установлено');
-    this.addSystemMessage('Нажмите на щит для сверки кодов безопасности');
-    this.addSystemMessage('Контакты доступны в приложении Ghost Chat для iOS');
 
     // Host sends bootstrap message to initialize guest's send chain
     // (guest's Double Ratchet needs to receive at least one message
@@ -697,26 +924,7 @@ class GhostChat {
   /**
    * Показать/скрыть панель верификации
    */
-  toggleVerifyPanel() {
-    this.elements.verifyPanel.classList.toggle('hidden');
-  }
-
-  /**
-   * Отметить как проверенный/непроверенный
-   */
-  markAsVerified(verified) {
-    this.isVerified = verified;
-    this.elements.verifyPanel.classList.add('hidden');
-
-    if (verified) {
-      this.elements.verifyBtn.classList.add('verified');
-      this.addSystemMessage('Подтверждено! Соединение безопасно.');
-    } else {
-      this.addSystemMessage('ВНИМАНИЕ: Коды НЕ совпадают! Возможна атака!');
-      this.addSystemMessage('Немедленно завершите сессию.');
-      this.elements.connectionStatus.classList.add('disconnected');
-    }
-  }
+  // toggleVerifyPanel() and markAsVerified() removed — security codes UI removed
 
   /**
    * Обработка security alert от собеседника
@@ -746,6 +954,7 @@ class GhostChat {
     this.voice.onRemoteStream = (stream) => {
       this._remoteStream = stream;
       this._setRemoteAudioOutput(false); // false = earpiece (по умолчанию)
+      this._startAudioHealthCheck();
     };
 
     // Handle call state changes
@@ -770,6 +979,13 @@ class GhostChat {
       this.showSecurityAlert(alert);
       this.sendEncryptedControl({ type: 'call-security-alert', alert });
     };
+
+    // Replay buffered remote track if it arrived before voice was initialized
+    if (this._pendingRemoteTrack) {
+      logger.log('Replaying buffered remote track');
+      this.voice.handleRemoteTrack(this._pendingRemoteTrack);
+      this._pendingRemoteTrack = null;
+    }
   }
 
   /**
@@ -789,6 +1005,10 @@ class GhostChat {
     if (!this.voice) {
       this.initVoice();
     }
+    if (!this.voice) {
+      this.addSystemMessage('Ошибка инициализации звонка');
+      return;
+    }
 
     try {
       this.callState = 'calling';
@@ -805,12 +1025,16 @@ class GhostChat {
       await this.rtc.peerConnection.setLocalDescription(offer);
 
       // Send call-request FIRST (so callee enters 'ringing' state before offer arrives)
-      await this.sendEncryptedControl({ type: 'call-request' });
+      const sent = await this.sendEncryptedControl({ type: 'call-request' });
+      if (!sent) {
+        throw new Error('Не удалось отправить запрос звонка');
+      }
 
       // Then send renegotiation offer
       const encrypted = await this.crypto.encrypt(JSON.stringify({
         type: 'renegotiate',
-        sdp: this.rtc.peerConnection.localDescription
+        sdp: this.rtc.peerConnection.localDescription,
+        _ctrl: true
       }));
       this.rtc.send(JSON.stringify({
         type: 'encrypted-message',
@@ -823,10 +1047,25 @@ class GhostChat {
 
       this.addSystemMessage('Звоним...');
 
+      // Caller-side timeout — cancel call after 45s of no answer (matches iOS/Android)
+      this._callingTimeout = setTimeout(() => {
+        this._callingTimeout = null;
+        if (this.callState === 'calling') {
+          this.addSystemMessage('Нет ответа');
+          this.endCall();
+        }
+      }, 45000);
+
     } catch (error) {
       logger.error('Failed to start call:', error);
       this.addSystemMessage(`Ошибка звонка: ${error.message}`);
-      this.rtc._suppressNegotiation = false;
+      // Soft cleanup — keep voice instance for reuse
+      if (this.voice) {
+        this.voice.endCall();
+      }
+      this._cleanupRemoteAudio();
+      this._remoteStream = null;
+      if (this.rtc) this.rtc._suppressNegotiation = false;
       this.callState = 'idle';
       this.updateCallUI('idle');
     }
@@ -849,6 +1088,14 @@ class GhostChat {
     if (navigator.vibrate) {
       navigator.vibrate([200, 100, 200, 100, 200]);
     }
+
+    // Auto-decline after 45 seconds (matches iOS/Android behavior)
+    this._ringingTimeout = setTimeout(() => {
+      if (this.callState === 'ringing') {
+        this.declineCall();
+        this.addSystemMessage('Пропущенный звонок');
+      }
+    }, 45000);
   }
 
   /**
@@ -857,9 +1104,22 @@ class GhostChat {
   async acceptCall() {
     if (this.callState !== 'ringing') return;
 
+    // Clear ringing timeout
+    if (this._ringingTimeout) {
+      clearTimeout(this._ringingTimeout);
+      this._ringingTimeout = null;
+    }
+
     // Initialize voice if not already
     if (!this.voice) {
       this.initVoice();
+    }
+    if (!this.voice) {
+      this.addSystemMessage('Ошибка инициализации звонка');
+      this.sendEncryptedControl({ type: 'call-response', accepted: false });
+      this.callState = 'idle';
+      this.updateCallUI('idle');
+      return;
     }
 
     try {
@@ -877,9 +1137,13 @@ class GhostChat {
       } else {
         // No pending offer, add our track normally (will trigger our own renegotiation)
         await this.voice.initializeAudio();
-        this.voice.localStream.getAudioTracks().forEach(track => {
+        const track = this.voice.localStream.getAudioTracks()[0];
+        // Reuse existing sender if available
+        if (this.voice.audioSender) {
+          await this.voice.audioSender.replaceTrack(track);
+        } else {
           this.voice.audioSender = this.rtc.peerConnection.addTrack(track, this.voice.localStream);
-        });
+        }
         this.voice.startSecurityMonitoring();
       }
 
@@ -896,9 +1160,16 @@ class GhostChat {
 
       await this.sendEncryptedControl({ type: 'call-response', accepted: false });
 
-      this.voice.isInCall = false;
-      this.voice.stopCallTimer();
+      // Soft cleanup — keep voice instance for reuse
+      if (this.rtc) this.rtc._suppressNegotiation = true;
+      if (this.voice) {
+        this.voice.endCall();
+      }
+      this._cleanupRemoteAudio();
+      this._remoteStream = null;
       this.callState = 'idle';
+      this.pendingRenegotiationOffer = null;
+      if (this.rtc) this.rtc._suppressNegotiation = false;
       this.updateCallUI('idle');
     }
   }
@@ -909,13 +1180,21 @@ class GhostChat {
   declineCall() {
     if (this.callState !== 'ringing') return;
 
+    // Clear ringing timeout
+    if (this._ringingTimeout) {
+      clearTimeout(this._ringingTimeout);
+      this._ringingTimeout = null;
+    }
+
     // Notify peer through E2E
     this.sendEncryptedControl({ type: 'call-response', accepted: false });
 
-    // Clean up voice if it was initialized
+    // Suppress renegotiation during cleanup
+    if (this.rtc) this.rtc._suppressNegotiation = true;
+
+    // Soft cleanup — keep voice instance and transceiver for reuse
     if (this.voice) {
-      this.voice.destroy();
-      this.voice = null;
+      this.voice.endCall();
     }
 
     this._cleanupRemoteAudio();
@@ -935,6 +1214,12 @@ class GhostChat {
   handleCallResponse(accepted) {
     if (this.callState !== 'calling') return;
 
+    // Clear caller-side timeout
+    if (this._callingTimeout) {
+      clearTimeout(this._callingTimeout);
+      this._callingTimeout = null;
+    }
+
     if (accepted) {
       // Таймер начинается только когда собеседник принял звонок
       if (this.voice) {
@@ -945,10 +1230,11 @@ class GhostChat {
       this.updateCallUI('active');
       this.addSystemMessage('Звонок начат');
     } else {
+      // Suppress renegotiation before cleanup
+      if (this.rtc) this.rtc._suppressNegotiation = true;
+      // Soft cleanup — keep voice instance and transceiver for reuse
       if (this.voice) {
         this.voice.endCall();
-        this.voice.destroy();
-        this.voice = null;
       }
       this._cleanupRemoteAudio();
       this._remoteStream = null;
@@ -965,19 +1251,25 @@ class GhostChat {
   endCall() {
     if (this.callState === 'idle') return;
 
-    // End the call first (stops audio, timers, etc.)
+    // Clear caller-side timeout
+    if (this._callingTimeout) {
+      clearTimeout(this._callingTimeout);
+      this._callingTimeout = null;
+    }
+
+    // Notify peer BEFORE cleaning up
+    this.sendEncryptedControl({ type: 'call-end' });
+
+    // Suppress renegotiation during cleanup
+    if (this.rtc) this.rtc._suppressNegotiation = true;
+
+    // Soft cleanup — keep voice instance and transceiver for reuse
     if (this.voice) {
       this.voice.endCall();
-      // Destroy voice object so a fresh one is created for next call
-      this.voice.destroy();
-      this.voice = null;
     }
 
     this._cleanupRemoteAudio();
     this._remoteStream = null;
-
-    // Notify peer through E2E
-    this.sendEncryptedControl({ type: 'call-end' });
 
     // Always update UI state
     this.callState = 'idle';
@@ -991,12 +1283,25 @@ class GhostChat {
    * Обработка завершения звонка от собеседника
    */
   handleCallEnded() {
+    // Clear ringing timeout (peer may end call while we're ringing)
+    if (this._ringingTimeout) {
+      clearTimeout(this._ringingTimeout);
+      this._ringingTimeout = null;
+    }
+
+    // Clear caller-side timeout (peer may end call while we're calling)
+    if (this._callingTimeout) {
+      clearTimeout(this._callingTimeout);
+      this._callingTimeout = null;
+    }
+
+    // Suppress renegotiation during cleanup
+    if (this.rtc) this.rtc._suppressNegotiation = true;
+
     try {
+      // Soft cleanup — keep voice instance and transceiver for reuse
       if (this.voice) {
         this.voice.endCall();
-        // Destroy voice object so a fresh one is created for next call
-        this.voice.destroy();
-        this.voice = null;
       }
     } catch (e) {
       logger.error('Error ending voice call:', e);
@@ -1066,18 +1371,24 @@ class GhostChat {
 
     const platform = this._getAudioPlatform();
 
+    // Helper: reliable play via <audio> element with autoplay fallback
+    const playViaAudioElement = () => {
+      this.elements.remoteAudio.srcObject = stream;
+      // autoplay attribute handles most cases; explicit play() as backup
+      const p = this.elements.remoteAudio.play();
+      if (p) p.catch(e => logger.warn('Audio play() failed:', e.message));
+    };
+
     if (platform === 'desktop') {
       // Desktop: всегда через <audio>, выбор устройства через setSinkId
-      this.elements.remoteAudio.srcObject = stream;
-      this.elements.remoteAudio.play().catch(() => {});
+      playViaAudioElement();
       return;
     }
 
     // Мобильные (iOS + Android)
     if (speakerMode) {
       // ДИНАМИК: <audio> элемент на мобильных играет через громкоговоритель
-      this.elements.remoteAudio.srcObject = stream;
-      this.elements.remoteAudio.play().catch(() => {});
+      playViaAudioElement();
     } else {
       // УХО: AudioContext при активном getUserMedia → voice route → earpiece
       // Это работает потому что при активном микрофоне OS переводит аудио
@@ -1100,12 +1411,20 @@ class GhostChat {
         this._remoteAudioSource = this._remoteAudioCtx.createMediaStreamSource(stream);
         this._remoteAudioSource.connect(this._remoteAudioCtx.destination);
 
+        // Safety net: if AudioContext stays suspended, fallback to <audio>
+        setTimeout(() => {
+          if (this._remoteAudioCtx && this._remoteAudioCtx.state === 'suspended') {
+            logger.warn('AudioContext stuck suspended, falling back to <audio>');
+            this._cleanupRemoteAudio();
+            playViaAudioElement();
+          }
+        }, 1500);
+
         logger.log(`Audio output: earpiece via AudioContext (${platform})`);
       } catch (e) {
         logger.warn('AudioContext earpiece failed, fallback to <audio>:', e);
         // Fallback: <audio> element + setSinkId на Android
-        this.elements.remoteAudio.srcObject = stream;
-        this.elements.remoteAudio.play().catch(() => {});
+        playViaAudioElement();
         if (platform === 'android') {
           this._setAudioToEarpiece();
         }
@@ -1117,6 +1436,7 @@ class GhostChat {
    * Очистка аудио-выхода
    */
   _cleanupRemoteAudio() {
+    this._stopAudioHealthCheck();
     if (this._remoteAudioCtx) {
       try {
         if (this._remoteAudioSource) this._remoteAudioSource.disconnect();
@@ -1127,6 +1447,43 @@ class GhostChat {
     }
     this.elements.remoteAudio.pause();
     this.elements.remoteAudio.srcObject = null;
+  }
+
+  /**
+   * Периодическая проверка здоровья аудио — восстановление после suspend
+   * Браузеры могут приостановить AudioContext при power management
+   */
+  _startAudioHealthCheck() {
+    this._stopAudioHealthCheck();
+    this._audioHealthInterval = setInterval(() => {
+      if (!this.voice?.isInCall || !this._remoteStream) return;
+
+      // Проверяем AudioContext
+      if (this._remoteAudioCtx && this._remoteAudioCtx.state === 'suspended') {
+        logger.warn('AudioContext suspended — resuming');
+        this._remoteAudioCtx.resume().catch(() => {});
+      }
+
+      // Проверяем что remote audio track жив
+      const remoteTracks = this._remoteStream.getAudioTracks();
+      if (remoteTracks.length > 0 && remoteTracks[0].readyState === 'ended') {
+        logger.warn('Remote audio track ended unexpectedly');
+      }
+
+      // Проверяем <audio> element
+      const audio = this.elements.remoteAudio;
+      if (audio && audio.srcObject && audio.paused) {
+        logger.warn('Audio element paused — resuming');
+        audio.play().catch(() => {});
+      }
+    }, 3000);
+  }
+
+  _stopAudioHealthCheck() {
+    if (this._audioHealthInterval) {
+      clearInterval(this._audioHealthInterval);
+      this._audioHealthInterval = null;
+    }
   }
 
   /**
@@ -1247,6 +1604,7 @@ class GhostChat {
       case 'active':
         this.elements.callBtn.disabled = true;
         this.elements.callOverlay.classList.remove('hidden');
+        this.elements.callTimer.textContent = '00:00';
         break;
 
       case 'idle':
@@ -1262,7 +1620,9 @@ class GhostChat {
    */
   showSecurityAlert(alert) {
     const alertEl = document.createElement('div');
-    alertEl.className = `security-alert severity-${alert.severity || 'medium'}`;
+    const validSeverities = ['high', 'medium', 'low'];
+    const sev = validSeverities.includes(alert.severity) ? alert.severity : 'medium';
+    alertEl.className = `security-alert severity-${sev}`;
 
     const icons = {
       high: '🚨',
@@ -1308,22 +1668,31 @@ class GhostChat {
    */
   async handleEncryptedMessage(encryptedData) {
     try {
+      // crypto.decrypt() unwraps {m,t,c,id} meta → returns plaintext (m)
+      // crypto.lastDecryptedId has the sender message ID
       const plaintext = await this.crypto.decrypt(encryptedData);
 
-      // Проверяем, управляющее ли это сообщение
+      // Control messages are wrapped with _ctrl=true — check if plaintext is one
       try {
         const msg = JSON.parse(plaintext);
-        if (msg.type) {
-          await this.handleControlMessage(msg);
+        if (msg._ctrl) {
+          if (msg.type) await this.handleControlMessage(msg);
           return;
         }
       } catch {
-        // Не JSON — обычное текстовое сообщение
+        // Not JSON control — it's a regular text message
       }
 
-      this.addMessage(plaintext, 'received');
-      // Подтверждение доставки
-      this.sendEncryptedControl({ type: 'message-ack', c: this.crypto.peerMessageCounter });
+      // Regular message — display with sender ID from crypto meta
+      this.handlePeerTyping(false);
+      const senderMsgId = this.crypto.lastDecryptedId || null;
+      const replyMeta = this.crypto.lastDecryptedReply; // { id, t } or null
+      this.addMessage(plaintext, 'received', senderMsgId, replyMeta);
+
+      // ACK + read
+      const counter = this.crypto.peerMessageCounter;
+      this.sendEncryptedControl({ type: 'message-ack', c: counter });
+      this.sendEncryptedControl({ type: 'message-read', c: counter });
     } catch (e) {
       logger.error('Error decrypting message:', e);
       this.addSystemMessage('Ошибка расшифровки');
@@ -1356,10 +1725,450 @@ class GhostChat {
       case 'message-ack':
         this.handleMessageAck(msg.c);
         break;
+      case 'message-read':
+        // Mark message as read (ignore on web for now)
+        break;
       case 'ready':
         // Bootstrap from host — decryption already triggered DH ratchet
         break;
+      case 'push-token':
+      case 'notify-token':
+        // Mobile peer's push token — ignore on web
+        break;
+      case 'typing':
+        this.handlePeerTyping(msg.isTyping);
+        break;
+      case 'capabilities':
+        // Mobile peer's capabilities — track file-transfer support
+        this._peerSupportsFiles = msg.features?.includes('file-transfer') ?? false;
+        break;
+      case 'file-start':
+        this.handleFileStart(msg);
+        break;
+      case 'file-chunk':
+        this.handleFileChunk(msg);
+        break;
+      case 'file-complete':
+        this.handleFileComplete(msg);
+        break;
+      case 'file-retransmit':
+        this.handleFileRetransmit(msg);
+        break;
+      case 'room-rotate':
+        // Room rotation — ignore on web
+        break;
+      case 'message-delete':
+        // Mobile peer deleted a message — remove from DOM
+        if (msg.messageId) this.handleRemoteMessageDelete(msg.messageId);
+        break;
+      case 'message-edit':
+        // Mobile peer edited a message — update text + show "edited"
+        if (msg.messageId && msg.newText) this.handleRemoteMessageEdit(msg.messageId, msg.newText);
+        break;
     }
+  }
+
+  /**
+   * Remove a message from chat by sender's message ID
+   */
+  handleRemoteMessageDelete(senderMessageId) {
+    const el = document.querySelector(`[data-sender-id="${senderMessageId}"]`);
+    if (el) el.remove();
+  }
+
+  /**
+   * Update message text and show "edited" label
+   */
+  handleRemoteMessageEdit(senderMessageId, newText) {
+    const el = document.querySelector(`[data-sender-id="${senderMessageId}"]`);
+    if (el) {
+      const textEl = el.querySelector('.message-text') || el.querySelector('.msg-text');
+      if (textEl) textEl.textContent = newText;
+      // Add "edited" label if not already present
+      if (!el.querySelector('.edited-label')) {
+        const label = document.createElement('span');
+        label.className = 'edited-label';
+        label.textContent = ' (edited)';
+        label.style.cssText = 'font-size:10px;color:#777;margin-left:4px;';
+        const meta = el.querySelector('.message-meta') || el.querySelector('.msg-time');
+        if (meta) meta.appendChild(label);
+      }
+    }
+  }
+
+  // MARK: - File Transfer (receive from mobile)
+
+  handleFileStart(msg) {
+    const { fileId, name, size, mimeType, totalChunks } = msg;
+    if (!fileId || !name || size > 100 * 1024 * 1024) return; // 100MB max
+    this._incomingFiles = this._incomingFiles || {};
+    this._incomingFiles[fileId] = {
+      name: name.replace(/[\/\\]/g, '_').replace(/\.\./g, '_'),
+      size, mimeType, totalChunks,
+      chunks: {},
+      receivedCount: 0
+    };
+    this.addSystemMessage(`📎 Получение файла: ${name} (${this._formatSize(size)})...`);
+  }
+
+  handleFileChunk(msg) {
+    const { fileId, index, data } = msg;
+    if (!this._incomingFiles?.[fileId]) return;
+    const transfer = this._incomingFiles[fileId];
+    transfer.chunks[index] = data; // base64 chunk
+    transfer.receivedCount++;
+  }
+
+  handleFileRetransmit(msg) {
+    const { fileId, indices } = msg;
+    const transfer = this._outgoingFiles?.[fileId];
+    if (!transfer || !transfer.data) return;
+    logger.log(`[FileTransfer] Retransmit ${indices.length} chunks for ${fileId}`);
+    const CHUNK = GhostChat.FILE_CHUNK_SIZE;
+    for (const i of indices) {
+      const start = i * CHUNK;
+      const end = Math.min(start + CHUNK, transfer.data.byteLength);
+      if (start >= transfer.data.byteLength) continue;
+      const chunk = transfer.data.slice(start, end);
+      const b64 = this._uint8ToBase64(new Uint8Array(chunk));
+      this.sendEncryptedControl({ type: 'file-chunk', fileId, index: i, data: b64 });
+    }
+    this.sendEncryptedControl({ type: 'file-complete', fileId });
+  }
+
+  handleFileComplete(msg) {
+    const { fileId } = msg;
+    const transfer = this._incomingFiles?.[fileId];
+    if (!transfer) return;
+
+    // Check for missing chunks → request retransmit
+    const missing = [];
+    for (let i = 0; i < transfer.totalChunks; i++) {
+      if (!transfer.chunks[i]) missing.push(i);
+    }
+    if (missing.length > 0) {
+      transfer.retryCount = (transfer.retryCount || 0) + 1;
+      if (transfer.retryCount <= 2) {
+        logger.log(`[FileTransfer] Requesting retransmit: ${missing.length} chunks`);
+        this.sendEncryptedControl({ type: 'file-retransmit', fileId, indices: missing });
+        return; // Wait for retransmitted chunks + another file-complete
+      }
+      this.addSystemMessage('⚠️ Ошибка получения файла');
+      delete this._incomingFiles[fileId];
+      return;
+    }
+
+    delete this._incomingFiles[fileId];
+
+    // Собираем из base64 chunks
+    try {
+      const parts = [];
+      for (let i = 0; i < transfer.totalChunks; i++) {
+        const b64 = transfer.chunks[i];
+        if (!b64) { this.addSystemMessage('⚠️ Ошибка получения файла: пропущен чанк'); return; }
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
+        parts.push(bytes);
+      }
+      const blob = new Blob(parts, { type: transfer.mimeType || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+
+      // Отображаем файл в чате
+      if (transfer.mimeType?.startsWith('image/')) {
+        this._addFileMessage(url, transfer.name, transfer.size, transfer.mimeType, 'image');
+      } else if (transfer.mimeType?.startsWith('video/')) {
+        this._addFileMessage(url, transfer.name, transfer.size, transfer.mimeType, 'video');
+      } else {
+        this._addFileMessage(url, transfer.name, transfer.size, transfer.mimeType, 'file');
+      }
+    } catch (e) {
+      this.addSystemMessage('⚠️ Ошибка сборки файла');
+    }
+  }
+
+  _addFileMessage(url, name, size, mimeType, fileType) {
+    const container = this.elements.messagesContainer;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message received';
+
+    if (fileType === 'image') {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = name;
+      img.style.maxWidth = '280px';
+      img.style.maxHeight = '280px';
+      img.style.borderRadius = '12px';
+      img.style.cursor = 'pointer';
+      img.onclick = () => window.open(url, '_blank');
+      wrapper.appendChild(img);
+    } else if (fileType === 'video') {
+      const video = document.createElement('video');
+      video.src = url;
+      video.controls = true;
+      video.style.maxWidth = '280px';
+      video.style.borderRadius = '12px';
+      wrapper.appendChild(video);
+    } else {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      link.textContent = `📎 ${name} (${this._formatSize(size)})`;
+      link.style.color = '#f0f0f0';
+      link.style.textDecoration = 'underline';
+      wrapper.appendChild(link);
+    }
+
+    const time = document.createElement('span');
+    time.className = 'message-time';
+    time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    wrapper.appendChild(time);
+
+    container.appendChild(wrapper);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  _formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  /** Sanitize filename for safe display (strip path + control chars, cap length) */
+  _sanitizeFilename(name) {
+    if (!name) return 'file';
+    let clean = String(name).replace(/[\/\\]/g, '_').replace(/\.\./g, '_');
+    clean = clean.replace(/[\x00-\x1f\x7f]/g, '');
+    if (clean.length > 120) clean = clean.slice(0, 117) + '...';
+    return clean || 'file';
+  }
+
+  /** Efficient Uint8Array → base64 (chunked to avoid call-stack issues on large data) */
+  _uint8ToBase64(bytes) {
+    let binary = '';
+    const len = bytes.byteLength;
+    const CHUNK = 0x8000; // 32KB slices for String.fromCharCode.apply
+    for (let i = 0; i < len; i += CHUNK) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(binary);
+  }
+
+  /**
+   * Send a file over the encrypted DataChannel.
+   * Protocol: file-start control → file-chunk controls → file-complete control.
+   * Uses bufferedAmount backpressure to prevent SCTP overflow.
+   */
+  async sendFile(file) {
+    if (!file || !this.isConnected) {
+      this.showToast('Нет соединения');
+      return;
+    }
+    // Max file size — aligned with iOS/Android (100 MB)
+    const MAX_SIZE = 100 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      this.showToast(`Файл слишком большой (макс. ${this._formatSize(MAX_SIZE)})`);
+      return;
+    }
+    if (file.size === 0) {
+      this.showToast('Пустой файл');
+      return;
+    }
+    // Check peer capability — mobile peers advertise file-transfer; web peers we treat as supported
+    if (this._peerSupportsFiles === false) {
+      this.showToast('Собеседник не поддерживает отправку файлов');
+      return;
+    }
+
+    const fileId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random()));
+    const cleanName = this._sanitizeFilename(file.name);
+    const mimeType = file.type || 'application/octet-stream';
+
+    // Read file fully into ArrayBuffer
+    let buffer;
+    try {
+      buffer = await file.arrayBuffer();
+    } catch (e) {
+      logger.error('Failed to read file:', e);
+      this.showToast('Не удалось прочитать файл');
+      return;
+    }
+    const data = new Uint8Array(buffer);
+    const CHUNK = GhostChat.FILE_CHUNK_SIZE;
+    const totalChunks = Math.max(1, Math.ceil(data.byteLength / CHUNK));
+
+    // Track outgoing transfer (used by retransmit path)
+    this._outgoingFiles = this._outgoingFiles || {};
+    this._outgoingFiles[fileId] = { data, name: cleanName, size: file.size, mimeType, totalChunks };
+
+    // Build placeholder "sending" bubble with progress
+    const placeholder = this._createFileSendingPlaceholder(cleanName, file.size, mimeType);
+    this.elements.messagesContainer.appendChild(placeholder.root);
+    this.elements.messagesContainer.scrollTop = this.elements.messagesContainer.scrollHeight;
+
+    try {
+      // 1) file-start
+      const startOk = await this.sendEncryptedControl({
+        type: 'file-start',
+        fileId,
+        name: cleanName,
+        size: file.size,
+        mimeType,
+        totalChunks
+      });
+      if (!startOk) throw new Error('file-start send failed');
+
+      // 2) file-chunks with backpressure
+      const BACKPRESSURE_LIMIT = 256 * 1024; // 256KB high-water mark (task spec)
+      const BACKPRESSURE_TIMEOUT = 30000;
+      const dc = this.rtc?.dataChannel;
+
+      for (let i = 0; i < totalChunks; i++) {
+        // Wait for bufferedAmount to drain below threshold
+        if (dc) {
+          const waitStart = Date.now();
+          while (dc.readyState === 'open' && dc.bufferedAmount > BACKPRESSURE_LIMIT) {
+            if (Date.now() - waitStart > BACKPRESSURE_TIMEOUT) {
+              throw new Error('Backpressure timeout');
+            }
+            await new Promise(r => setTimeout(r, 25));
+          }
+          if (dc.readyState !== 'open') throw new Error('DataChannel closed');
+        }
+
+        const start = i * CHUNK;
+        const end = Math.min(start + CHUNK, data.byteLength);
+        const b64 = this._uint8ToBase64(data.subarray(start, end));
+        const ok = await this.sendEncryptedControl({
+          type: 'file-chunk', fileId, index: i, data: b64
+        });
+        if (!ok) throw new Error(`Chunk ${i} send failed`);
+
+        // Update progress bar
+        const pct = Math.round(((i + 1) / totalChunks) * 100);
+        placeholder.setProgress(pct);
+      }
+
+      // 3) file-complete
+      await this.sendEncryptedControl({ type: 'file-complete', fileId });
+
+      // Replace placeholder with final rendered message
+      placeholder.root.remove();
+      const url = URL.createObjectURL(new Blob([data], { type: mimeType }));
+      if (mimeType.startsWith('image/')) {
+        this._addOutgoingFileBubble(url, cleanName, file.size, mimeType, 'image');
+      } else if (mimeType.startsWith('video/')) {
+        this._addOutgoingFileBubble(url, cleanName, file.size, mimeType, 'video');
+      } else {
+        this._addOutgoingFileBubble(url, cleanName, file.size, mimeType, 'file');
+      }
+    } catch (e) {
+      logger.error('[FileTransfer] send failed:', e);
+      placeholder.setError('Ошибка отправки');
+      this.showToast('Ошибка отправки файла');
+      // Leave transfer state around in case retransmit arrives; auto-cleanup after 5 min
+      setTimeout(() => { if (this._outgoingFiles) delete this._outgoingFiles[fileId]; }, 5 * 60 * 1000);
+      return;
+    }
+
+    // Keep outgoing data around briefly in case peer requests retransmit
+    setTimeout(() => { if (this._outgoingFiles) delete this._outgoingFiles[fileId]; }, 60 * 1000);
+  }
+
+  /** Build a "sending..." bubble with progress bar. Returns { root, setProgress, setError } */
+  _createFileSendingPlaceholder(name, size, mimeType) {
+    const root = document.createElement('div');
+    root.className = 'message sent';
+
+    const att = document.createElement('div');
+    att.className = 'file-attachment';
+
+    const icon = document.createElement('div');
+    icon.className = 'file-attachment-icon';
+    icon.textContent = mimeType?.startsWith('image/') ? '🖼' : (mimeType?.startsWith('video/') ? '🎬' : '📎');
+
+    const meta = document.createElement('div');
+    meta.className = 'file-attachment-meta';
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'file-attachment-name';
+    nameEl.textContent = name;
+
+    const sub = document.createElement('span');
+    sub.className = 'file-attachment-sub';
+    sub.textContent = `${this._formatSize(size)} · отправка 0%`;
+
+    const progress = document.createElement('div');
+    progress.className = 'file-progress';
+    const fill = document.createElement('div');
+    fill.className = 'file-progress-fill';
+    progress.appendChild(fill);
+
+    meta.appendChild(nameEl);
+    meta.appendChild(sub);
+    meta.appendChild(progress);
+    att.appendChild(icon);
+    att.appendChild(meta);
+    root.appendChild(att);
+
+    const time = document.createElement('div');
+    time.className = 'message-time';
+    time.textContent = new Date().toLocaleTimeString();
+    root.appendChild(time);
+
+    return {
+      root,
+      setProgress: (pct) => {
+        fill.style.width = `${pct}%`;
+        sub.textContent = `${this._formatSize(size)} · отправка ${pct}%`;
+      },
+      setError: (msg) => {
+        sub.textContent = `${this._formatSize(size)} · ${msg}`;
+        fill.style.background = '#ff453a';
+      }
+    };
+  }
+
+  /** Render final outgoing file bubble (after send complete) */
+  _addOutgoingFileBubble(url, name, size, mimeType, fileType) {
+    const container = this.elements.messages || this.elements.messagesContainer;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message sent';
+
+    if (fileType === 'image') {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = name;
+      img.style.maxWidth = '280px';
+      img.style.maxHeight = '280px';
+      img.style.borderRadius = '12px';
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', () => window.open(url, '_blank'));
+      wrapper.appendChild(img);
+    } else if (fileType === 'video') {
+      const video = document.createElement('video');
+      video.src = url;
+      video.controls = true;
+      video.style.maxWidth = '280px';
+      video.style.borderRadius = '12px';
+      wrapper.appendChild(video);
+    } else {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      link.textContent = `📎 ${name} (${this._formatSize(size)})`;
+      link.style.color = '#0a0a0a';
+      link.style.textDecoration = 'underline';
+      wrapper.appendChild(link);
+    }
+
+    const time = document.createElement('span');
+    time.className = 'message-time';
+    time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    wrapper.appendChild(time);
+
+    container.appendChild(wrapper);
+    container.scrollTop = container.scrollHeight;
   }
 
   /**
@@ -1380,6 +2189,11 @@ class GhostChat {
    * Обработка renegotiation для добавления audio tracks
    */
   async handleRenegotiation(sdp) {
+    if (!sdp || !['offer', 'answer'].includes(sdp.type)) {
+      logger.error('Invalid renegotiation SDP type');
+      return;
+    }
+
     logger.log('Handling renegotiation:', sdp.type, 'callState:', this.callState);
 
     try {
@@ -1396,43 +2210,78 @@ class GhostChat {
 
       } else if (sdp.type === 'answer') {
         // We received an answer — clear suppression (caller side)
-        await this.rtc.handleAnswer(sdp);
+        try {
+          await this.rtc.handleAnswer(sdp);
+        } catch (answerErr) {
+          logger.error('handleAnswer failed:', answerErr);
+          // Try to recover: if signaling state is wrong, reset suppression
+          this.rtc._suppressNegotiation = false;
+          return;
+        }
         this.rtc._suppressNegotiation = false;
+
+        // Auto-transition: receiving a renegotiation answer means callee accepted
+        // and sent their audio. Don't wait for explicit call-response message
+        // (which may be delayed or lost due to ratchet timing)
+        if (this.callState === 'calling') {
+          this.handleCallResponse(true);
+        }
       }
     } catch (e) {
       logger.error('Renegotiation error:', e);
+      // Ensure suppression is cleared even on error
+      if (this.rtc) this.rtc._suppressNegotiation = false;
     }
   }
 
   /**
    * Process a renegotiation offer - add our audio and send answer
+   *
+   * CRITICAL: Order matters for bidirectional audio!
+   * 1. setRemoteDescription(offer) — creates transceiver from offer's audio m-line
+   * 2. addTrack — reuses existing transceiver (direction becomes sendrecv)
+   * 3. createAnswer — includes our audio as sendrecv
+   *
+   * Wrong order (addTrack before setRemoteDescription) creates a NEW transceiver,
+   * and the answer SDP has recvonly — one-way audio (walkie-talkie bug).
    */
   async processRenegotiationOffer(sdp) {
     // Suppress automatic onnegotiationneeded — addTrack would trigger a conflicting offer
     this.rtc._suppressNegotiation = true;
 
     try {
-      // Add our audio track BEFORE creating the answer
-      // This ensures the answer SDP includes our audio as sendrecv
+      // Step 1: Set the remote offer — this creates transceivers for the caller's audio
+      await this.rtc.peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+
+      // Step 2: Add our audio track — reuses the offer's transceiver (sendrecv)
       if (this.voice && !this.voice.localStream) {
-        logger.log('Adding our audio track before answering renegotiation');
+        logger.log('Adding our audio track after setRemoteDescription');
         try {
           await this.voice.initializeAudio();
-          this.voice.localStream.getAudioTracks().forEach(track => {
+          const track = this.voice.localStream.getAudioTracks()[0];
+          // Reuse existing sender if available (prevents transceiver accumulation)
+          if (this.voice.audioSender) {
+            await this.voice.audioSender.replaceTrack(track);
+            logger.log('Audio track replaced on existing sender (renegotiation)');
+          } else {
             this.voice.audioSender = this.rtc.peerConnection.addTrack(track, this.voice.localStream);
-          });
+            logger.log('Audio track added (renegotiation)');
+          }
           this.voice.startSecurityMonitoring();
         } catch (e) {
           logger.error('Failed to add audio track:', e);
         }
       }
 
-      // Create answer with our audio included
-      const answer = await this.rtc.handleOffer(sdp);
+      // Step 3: Create answer with our audio included as sendrecv
+      const answer = await this.rtc.peerConnection.createAnswer();
+      await this.rtc.peerConnection.setLocalDescription(answer);
 
+      // Send the answer back through E2E encrypted channel
       const encrypted = await this.crypto.encrypt(JSON.stringify({
         type: 'renegotiate',
-        sdp: answer.sdp
+        sdp: this.rtc.peerConnection.localDescription,
+        _ctrl: true
       }));
 
       this.rtc.send(JSON.stringify({
@@ -1452,8 +2301,21 @@ class GhostChat {
     const text = this.elements.messageInput.value.trim();
     if (!text || !this.isConnected) return;
 
+    // Stop typing indicator on send
+    this.stopTyping();
+
+    // Capture reply state before clearing UI
+    const reply = this.replyingTo;
+    this.cancelReply();
+
     try {
-      const encrypted = await this.crypto.encrypt(text);
+      // crypto.encrypt wraps in {m, t, c, id, r?} — pass raw text + options
+      const msgId = crypto.randomUUID();
+      const encryptOpts = { id: msgId };
+      if (reply && reply.id) {
+        encryptOpts.r = { id: reply.id, t: String(reply.text || '').slice(0, 100) };
+      }
+      const encrypted = await this.crypto.encrypt(text, encryptOpts);
 
       this.rtc.send(JSON.stringify({
         type: 'encrypted-message',
@@ -1461,7 +2323,7 @@ class GhostChat {
         v: 2
       }));
 
-      const div = this.addMessage(text, 'sent');
+      const div = this.addMessage(text, 'sent', msgId, reply ? { id: reply.id, t: reply.text } : null);
       // Tracking доставки по счётчику
       this.sentMessages.set(this.crypto.messageCounter, div);
       this.elements.messageInput.value = '';
@@ -1472,12 +2334,67 @@ class GhostChat {
   }
 
   /**
+   * Start replying to a message — shows preview bar above input
+   */
+  startReply(senderMessageId, previewText) {
+    if (!senderMessageId) return;
+    this.replyingTo = { id: senderMessageId, text: String(previewText || '').slice(0, 200) };
+    if (this.elements.replyPreview && this.elements.replyPreviewText) {
+      this.elements.replyPreviewText.textContent = this.replyingTo.text;
+      this.elements.replyPreview.classList.remove('hidden');
+    }
+    // Focus input so user can type immediately
+    try { this.elements.messageInput.focus(); } catch {}
+  }
+
+  /**
+   * Cancel active reply state and hide preview bar
+   */
+  cancelReply() {
+    this.replyingTo = null;
+    if (this.elements.replyPreview) {
+      this.elements.replyPreview.classList.add('hidden');
+    }
+    if (this.elements.replyPreviewText) {
+      this.elements.replyPreviewText.textContent = '';
+    }
+  }
+
+  /**
    * Добавление сообщения в чат с автоудалением
    * Возвращает DOM-элемент сообщения (для tracking доставки)
    */
-  addMessage(text, type) {
+  addMessage(text, type, senderMessageId = null, replyMeta = null) {
     const div = document.createElement('div');
     div.className = `message ${type}`;
+    if (senderMessageId) div.setAttribute('data-sender-id', senderMessageId);
+
+    // Inline quoted block (if this message is a reply)
+    if (replyMeta && (replyMeta.t || replyMeta.id)) {
+      const quote = document.createElement('div');
+      quote.className = 'message-quote';
+      if (replyMeta.id) quote.setAttribute('data-reply-to', replyMeta.id);
+      const qLabel = document.createElement('span');
+      qLabel.className = 'message-quote-label';
+      qLabel.textContent = 'Ответ';
+      const qText = document.createElement('span');
+      qText.className = 'message-quote-text';
+      qText.textContent = String(replyMeta.t || '').slice(0, 200);
+      quote.appendChild(qLabel);
+      quote.appendChild(qText);
+      // Click quote → scroll to original message
+      quote.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!replyMeta.id) return;
+        const target = document.querySelector(`[data-sender-id="${CSS.escape(replyMeta.id)}"]`);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          target.classList.add('message-highlight');
+          setTimeout(() => target.classList.remove('message-highlight'), 1200);
+        }
+      });
+      div.appendChild(quote);
+    }
 
     const content = document.createElement('div');
     content.className = 'message-content';
@@ -1487,27 +2404,137 @@ class GhostChat {
     time.className = 'message-time';
     time.textContent = new Date().toLocaleTimeString();
 
-    // Индикатор самоуничтожения
-    const timer = document.createElement('div');
-    timer.className = 'message-timer';
-    timer.textContent = '⏱️ 5:00';
-
     div.appendChild(content);
     div.appendChild(time);
-    div.appendChild(timer);
+
+    // Автоудаление только если включено (> 0)
+    if (this.messageAutoDeleteTime > 0) {
+      const timer = document.createElement('div');
+      timer.className = 'message-timer';
+      const mins = Math.floor(this.messageAutoDeleteTime / 60000);
+      timer.textContent = `⏱️ ${mins}:00`;
+      div.appendChild(timer);
+
+      this.activeMessageTimers.push({
+        messageEl: div,
+        timerEl: timer,
+        endTime: Date.now() + this.messageAutoDeleteTime
+      });
+      this.startMessageTimerLoop();
+    }
+
+    // Context menu (right-click, desktop) — copy, delete, edit, reply
+    div.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.showMessageContextMenu(e, div, type, senderMessageId);
+    });
+
+    // Mobile long-press + swipe-to-reply
+    this._attachTouchHandlers(div, type, senderMessageId);
 
     this.elements.messagesContainer.appendChild(div);
     this.elements.messagesContainer.scrollTop = this.elements.messagesContainer.scrollHeight;
 
-    // Регистрируем в централизованном таймере
-    this.activeMessageTimers.push({
-      messageEl: div,
-      timerEl: timer,
-      endTime: Date.now() + this.messageAutoDeleteTime
-    });
-    this.startMessageTimerLoop();
-
     return div;
+  }
+
+  /**
+   * Attach touch handlers for: long-press (context menu) + horizontal swipe (reply)
+   */
+  _attachTouchHandlers(el, type, senderMessageId) {
+    const LONG_PRESS_MS = 600;
+    const MOVE_CANCEL_PX = 10;
+    const SWIPE_TRIGGER_PX = 60;
+    const SWIPE_MAX_PX = 90;
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let longPressTimer = null;
+    let didLongPress = false;
+    let swiping = false;
+    let currentDX = 0;
+
+    const clearLongPress = () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      el.classList.remove('long-pressing');
+    };
+
+    el.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+      didLongPress = false;
+      swiping = false;
+      currentDX = 0;
+      el.classList.remove('swipe-snapback');
+
+      longPressTimer = setTimeout(() => {
+        didLongPress = true;
+        el.classList.add('long-pressing');
+        // Haptic feedback if available
+        if (navigator.vibrate) { try { navigator.vibrate(12); } catch {} }
+        // Show context menu positioned at touch point
+        this.showMessageContextMenu(
+          { preventDefault: () => {}, clientX: touchStartX, clientY: touchStartY },
+          el, type, senderMessageId
+        );
+        longPressTimer = null;
+      }, LONG_PRESS_MS);
+    }, { passive: true });
+
+    el.addEventListener('touchmove', (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+
+      // Cancel long-press if moved too much
+      if (longPressTimer && (Math.abs(dx) > MOVE_CANCEL_PX || Math.abs(dy) > MOVE_CANCEL_PX)) {
+        clearLongPress();
+      }
+
+      // Swipe-to-reply: only right-swipes, only if mostly horizontal
+      if (!swiping && Math.abs(dx) > MOVE_CANCEL_PX && Math.abs(dx) > Math.abs(dy) * 1.5 && dx > 0) {
+        swiping = true;
+        el.classList.add('swiping');
+      }
+      if (swiping) {
+        currentDX = Math.max(0, Math.min(dx, SWIPE_MAX_PX));
+        el.style.transform = `translateX(${currentDX}px)`;
+        // Prevent vertical scroll while swiping horizontally
+        if (e.cancelable) e.preventDefault();
+      }
+    }, { passive: false });
+
+    el.addEventListener('touchend', () => {
+      clearLongPress();
+      if (swiping) {
+        el.classList.remove('swiping');
+        el.classList.add('swipe-snapback');
+        el.style.transform = '';
+        setTimeout(() => el.classList.remove('swipe-snapback'), 260);
+        if (currentDX >= SWIPE_TRIGGER_PX) {
+          // Trigger reply
+          if (navigator.vibrate) { try { navigator.vibrate(8); } catch {} }
+          const quoted = el.querySelector('.message-content')?.textContent || '';
+          const id = senderMessageId || el.getAttribute('data-sender-id');
+          if (id) this.startReply(id, quoted);
+        }
+      }
+    });
+
+    el.addEventListener('touchcancel', () => {
+      clearLongPress();
+      if (swiping) {
+        swiping = false;
+        el.classList.remove('swiping');
+        el.style.transform = '';
+      }
+    });
   }
 
   /**
@@ -1525,8 +2552,7 @@ class GhostChat {
         entry.timerEl.textContent = `⏱️ ${minutes}:${seconds.toString().padStart(2, '0')}`;
 
         if (remaining <= 0) {
-          entry.messageEl.style.opacity = '0';
-          entry.messageEl.style.transform = 'scale(0.8)';
+          entry.messageEl.classList.add('message-deleting');
           setTimeout(() => entry.messageEl.remove(), 300);
           return false;
         }
@@ -1550,9 +2576,144 @@ class GhostChat {
     document.body.appendChild(toast);
     // Плавное исчезновение через 3 секунды
     setTimeout(() => {
-      toast.style.opacity = '0';
+      toast.classList.add('toast-fading');
       setTimeout(() => toast.remove(), 300);
     }, 3000);
+  }
+
+  /**
+   * Context menu для сообщений (правый клик)
+   */
+  showMessageContextMenu(e, msgEl, type, senderMessageId) {
+    // Remove existing menu
+    document.querySelectorAll('.msg-context-menu').forEach(m => m.remove());
+
+    const menu = document.createElement('div');
+    menu.className = 'msg-context-menu';
+    menu.style.cssText = `position:fixed;top:${e.clientY}px;left:${e.clientX}px;background:#222;border:1px solid #333;border-radius:8px;padding:4px 0;z-index:1000;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,0.5);`;
+
+    const textContent = msgEl.querySelector('.message-content')?.textContent || '';
+
+    // Reply — available for any message with a sender ID
+    if (senderMessageId) {
+      const replyBtn = document.createElement('div');
+      replyBtn.textContent = '↩ Ответить';
+      replyBtn.style.cssText = 'padding:8px 16px;cursor:pointer;color:#f0f0f0;font-size:13px;';
+      replyBtn.onmouseenter = () => replyBtn.style.background = '#333';
+      replyBtn.onmouseleave = () => replyBtn.style.background = '';
+      replyBtn.onclick = () => {
+        this.startReply(senderMessageId, textContent);
+        menu.remove();
+      };
+      menu.appendChild(replyBtn);
+    }
+
+    // Copy
+    const copyBtn = document.createElement('div');
+    copyBtn.textContent = '📋 Копировать';
+    copyBtn.style.cssText = 'padding:8px 16px;cursor:pointer;color:#f0f0f0;font-size:13px;';
+    copyBtn.onmouseenter = () => copyBtn.style.background = '#333';
+    copyBtn.onmouseleave = () => copyBtn.style.background = '';
+    copyBtn.onclick = () => { navigator.clipboard.writeText(textContent); menu.remove(); };
+    menu.appendChild(copyBtn);
+
+    // Delete for everyone (own messages only)
+    if (type === 'sent' && senderMessageId) {
+      const delBtn = document.createElement('div');
+      delBtn.textContent = '🗑 Удалить для всех';
+      delBtn.style.cssText = 'padding:8px 16px;cursor:pointer;color:#ff453a;font-size:13px;';
+      delBtn.onmouseenter = () => delBtn.style.background = '#333';
+      delBtn.onmouseleave = () => delBtn.style.background = '';
+      delBtn.onclick = () => {
+        msgEl.remove();
+        this.sendEncryptedControl({ type: 'message-delete', messageId: senderMessageId });
+        menu.remove();
+      };
+      menu.appendChild(delBtn);
+    }
+
+    // Edit (own messages only)
+    if (type === 'sent' && senderMessageId) {
+      const editBtn = document.createElement('div');
+      editBtn.textContent = '✏️ Редактировать';
+      editBtn.style.cssText = 'padding:8px 16px;cursor:pointer;color:#f0f0f0;font-size:13px;';
+      editBtn.onmouseenter = () => editBtn.style.background = '#333';
+      editBtn.onmouseleave = () => editBtn.style.background = '';
+      editBtn.onclick = () => {
+        menu.remove();
+        const newText = prompt('Редактировать сообщение:', textContent);
+        if (newText && newText.trim() !== textContent) {
+          const contentEl = msgEl.querySelector('.message-content');
+          if (contentEl) contentEl.textContent = newText.trim();
+          // Add "edited" label
+          if (!msgEl.querySelector('.edited-label')) {
+            const label = document.createElement('span');
+            label.className = 'edited-label';
+            label.textContent = ' (изм.)';
+            label.style.cssText = 'font-size:10px;color:#777;margin-left:4px;';
+            msgEl.querySelector('.message-time')?.appendChild(label);
+          }
+          this.sendEncryptedControl({ type: 'message-edit', messageId: senderMessageId, newText: newText.trim() });
+        }
+      };
+      menu.appendChild(editBtn);
+    }
+
+    document.body.appendChild(menu);
+
+    // Clamp position inside viewport (important for mobile long-press)
+    requestAnimationFrame(() => {
+      const rect = menu.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      let left = parseFloat(menu.style.left) || rect.left;
+      let top = parseFloat(menu.style.top) || rect.top;
+      if (left + rect.width > vw - 8) left = Math.max(8, vw - rect.width - 8);
+      if (top + rect.height > vh - 8) top = Math.max(8, vh - rect.height - 8);
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+    });
+
+    // Close on click or touch outside
+    const closeMenu = (ev) => {
+      if (!menu.contains(ev.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+        document.removeEventListener('touchstart', closeMenu);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', closeMenu);
+      document.addEventListener('touchstart', closeMenu);
+    }, 0);
+  }
+
+  /**
+   * Disconnect banner — красная полоска "Собеседник отключился"
+   */
+  showDisconnectBanner(show) {
+    let banner = document.getElementById('disconnect-banner');
+    if (show) {
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'disconnect-banner';
+        banner.innerHTML = `
+          <span>⚡ Собеседник отключился. Ожидание переподключения...</span>
+          <button onclick="document.getElementById('disconnect-banner').remove(); app.leave();">Выйти</button>
+        `;
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;padding:12px 16px;background:rgba(255,69,58,0.15);color:#ff453a;display:flex;justify-content:space-between;align-items:center;z-index:999;font-size:13px;backdrop-filter:blur(10px);';
+        banner.querySelector('button').style.cssText = 'background:rgba(255,69,58,0.2);color:#ff453a;border:1px solid #ff453a;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;';
+        document.body.prepend(banner);
+      }
+      // Disable input
+      if (this.elements.messageInput) this.elements.messageInput.disabled = true;
+      if (this.elements.sendBtn) this.elements.sendBtn.disabled = true;
+    } else {
+      if (banner) banner.remove();
+      // Re-enable input
+      if (this.elements.messageInput) this.elements.messageInput.disabled = false;
+      if (this.elements.sendBtn) this.elements.sendBtn.disabled = false;
+    }
   }
 
   /**
@@ -1570,6 +2731,8 @@ class GhostChat {
    * Получить invite ссылку
    */
   getInviteLink() {
+    // L5: Use query param (?room=) for Universal Links / App Links compatibility
+    // Fragment links (#room=) still accepted as fallback (see checkInviteLink)
     return `${window.location.origin}/?room=${this.roomId}`;
   }
 
@@ -1617,11 +2780,11 @@ class GhostChat {
       const spanEl = this.elements.copyBtn.querySelector('span');
       if (spanEl) spanEl.textContent = 'Скопировано!';
       const feedback = document.getElementById('copy-feedback');
-      if (feedback) feedback.style.display = 'block';
+      if (feedback) feedback.classList.add('visible');
       setTimeout(() => {
         this.elements.copyBtn.classList.remove('copied');
         if (spanEl) spanEl.textContent = 'Скопировать ссылку';
-        if (feedback) feedback.style.display = 'none';
+        if (feedback) feedback.classList.remove('visible');
       }, 2000);
     } else {
       alert(inviteLink);
@@ -1645,6 +2808,42 @@ class GhostChat {
         this.copyRoomId();
       }
     }
+  }
+
+  /**
+   * Показать выбор: открыть в приложении или продолжить в браузере
+   */
+  _showAppRedirect(roomId) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;';
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:20px;font-weight:700;color:#fff;margin-bottom:8px;';
+    title.textContent = 'Ghost Chat';
+
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'font-size:14px;color:#8e8e93;margin-bottom:24px;text-align:center;';
+    subtitle.textContent = 'Вас пригласили в приватный чат';
+
+    const appBtn = document.createElement('button');
+    appBtn.style.cssText = 'width:100%;max-width:320px;padding:16px;background:#0A84FF;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;';
+    appBtn.textContent = 'Открыть в приложении';
+    appBtn.addEventListener('click', () => {
+      window.location.href = `ghostchat://room/${roomId}`;
+    });
+
+    const webBtn = document.createElement('button');
+    webBtn.style.cssText = 'width:100%;max-width:320px;padding:16px;background:#2C2C2E;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:600;cursor:pointer;';
+    webBtn.textContent = 'Продолжить в браузере';
+    webBtn.addEventListener('click', () => {
+      overlay.remove();
+      history.replaceState(null, '', window.location.pathname);
+      this.elements.joinInput.value = roomId;
+      this.joinRoom();
+    });
+
+    overlay.append(title, subtitle, appBtn, webBtn);
+    document.body.appendChild(overlay);
   }
 
   /**
@@ -1688,35 +2887,31 @@ class GhostChat {
   }
 
   // ============================================
-  // SESSION PERSISTENCE (переживает переключение приложений)
+  // SESSION PERSISTENCE (in-memory only — no sessionStorage for zero-trace)
   // ============================================
 
   /**
-   * Сохранить состояние сессии в sessionStorage
-   * Позволяет восстановить сессию после переключения приложений на мобильных
+   * Сохранить состояние сессии в памяти (M2: no sessionStorage)
+   * Позволяет восстановить сессию при переподключении WS
    */
   saveSession() {
-    try {
-      sessionStorage.setItem('ghost-room', JSON.stringify({
-        roomId: this.roomId,
-        isHost: this.isHost,
-        ts: Date.now()
-      }));
-    } catch {
-      // sessionStorage недоступен — работаем без persistence
-    }
+    GhostChat._savedSession = {
+      roomId: this.roomId,
+      isHost: this.isHost,
+      ts: Date.now()
+    };
   }
 
   /**
-   * Восстановить сессию из sessionStorage
+   * Восстановить сессию из памяти
    * Вызывается при загрузке страницы (если нет invite link)
    */
   async restoreSession() {
     try {
-      const saved = sessionStorage.getItem('ghost-room');
+      const saved = GhostChat._savedSession;
       if (!saved) return;
 
-      const { roomId, isHost, ts } = JSON.parse(saved);
+      const { roomId, isHost, ts } = saved;
       if (!roomId) return;
 
       // Сессия старше 10 минут — комната уже удалена на сервере
@@ -1764,11 +2959,7 @@ class GhostChat {
    * Очистить сохранённую сессию
    */
   clearSession() {
-    try {
-      sessionStorage.removeItem('ghost-room');
-    } catch {
-      // sessionStorage недоступен
-    }
+    GhostChat._savedSession = null;
   }
 
   /**
@@ -1777,6 +2968,7 @@ class GhostChat {
   leave() {
     this.clearSession();
     this.destroy();
+    this.cancelReply();
     this.showScreen('welcome');
     this.elements.messagesContainer.replaceChildren();
     this.elements.messageInput.value = '';
@@ -1797,9 +2989,14 @@ class GhostChat {
   destroy() {
     // Останавливаем автопереподключение
     this._reconnecting = false;
+    this._pendingIceRestartOffer = null;
     this.roomId = null;
 
     // Очищаем таймеры
+    if (this._peerLeftTimeout) {
+      clearTimeout(this._peerLeftTimeout);
+      this._peerLeftTimeout = null;
+    }
     if (this.connectionTimeout) {
       clearTimeout(this.connectionTimeout);
       this.connectionTimeout = null;
@@ -1811,12 +3008,38 @@ class GhostChat {
     this.activeMessageTimers = [];
     this.sentMessages.clear();
 
-    // End any active call
+    // Clear typing timers
+    clearTimeout(this._typingCancelTimer);
+    clearTimeout(this._peerTypingCancelTimer);
+    this._typingCancelTimer = null;
+    this._peerTypingCancelTimer = null;
+    this._lastTypingSentAt = 0;
+    const typingEl = document.getElementById('typing-indicator');
+    if (typingEl) typingEl.classList.add('hidden');
+
+    // Clear ringing timeout
+    if (this._ringingTimeout) {
+      clearTimeout(this._ringingTimeout);
+      this._ringingTimeout = null;
+    }
+
+    // Clear caller-side timeout
+    if (this._callingTimeout) {
+      clearTimeout(this._callingTimeout);
+      this._callingTimeout = null;
+    }
+
+    // End any active call — suppress renegotiation during cleanup
     if (this.voice) {
+      if (this.rtc) this.rtc._suppressNegotiation = true;
       this.voice.destroy();
       this.voice = null;
+      if (this.rtc) this.rtc._suppressNegotiation = false;
     }
+    this._cleanupRemoteAudio();
+    this._remoteStream = null;
     this.callState = 'idle';
+    this.pendingRenegotiationOffer = null;
     this.updateCallUI('idle');
 
     // Уведомляем сервер
@@ -1872,15 +3095,18 @@ function detectPlatform() {
 
   if (/android/i.test(ua)) {
     if (androidEl) {
-      androidEl.style.display = '';
+      androidEl.classList.remove('hidden');
       androidEl.addEventListener('click', () => {
         window.location.href = '/GhostChat.apk';
       });
     }
   } else if (/iPhone|iPad|iPod/i.test(ua)) {
-    if (iosEl) iosEl.style.display = '';
+    if (iosEl) {
+      iosEl.classList.remove('hidden');
+      // TODO: заменить на реальную ссылку App Store после публикации
+    }
   } else {
-    if (desktopEl) desktopEl.style.display = '';
+    if (desktopEl) desktopEl.classList.remove('hidden');
   }
 }
 

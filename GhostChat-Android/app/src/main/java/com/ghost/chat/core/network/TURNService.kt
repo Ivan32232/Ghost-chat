@@ -13,7 +13,8 @@ data class TURNCredentials(
     val username: String,
     val credential: String,
     val ttl: Int,
-    val urls: List<String>
+    val urls: List<String>,
+    val pushAuth: String? = null
 )
 
 class TURNService(private val baseURL: String) {
@@ -44,7 +45,8 @@ class TURNService(private val baseURL: String) {
             username = json.getString("username"),
             credential = json.getString("credential"),
             ttl = json.getInt("ttl"),
-            urls = urls
+            urls = urls,
+            pushAuth = json.optString("pushAuth", null)
         )
     }
 }
