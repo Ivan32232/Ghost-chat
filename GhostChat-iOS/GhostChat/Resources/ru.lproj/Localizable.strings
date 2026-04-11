@@ -305,3 +305,8 @@
 
 /* Notifications — default sender name */
 "notification.yourContact" = "Ваш контакт";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "Отмена";
+"attach.send" = "Отправить";
+"attach.count" = "%d файлов";

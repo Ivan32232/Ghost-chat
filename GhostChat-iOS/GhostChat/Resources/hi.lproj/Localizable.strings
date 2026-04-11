@@ -262,3 +262,8 @@
 "push.missedCall.title" = "Ghost Chat";
 "push.missedCall.body" = "%@ का छूटा हुआ कॉल";
 "system.connecting" = "कनेक्ट हो रहा है...";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "रद्द करें";
+"attach.send" = "भेजें";
+"attach.count" = "%d आइटम";

@@ -67,7 +67,25 @@ fun ChatScreen(
     onLeave: () -> Unit,
     onContactClick: ((com.ghost.chat.models.Contact) -> Unit)? = null
 ) {
-    var messageText by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    // Per-contact drafts — saved in SharedPreferences keyed by contactId
+    val draftPrefs = remember { context.getSharedPreferences("ghost_drafts", android.content.Context.MODE_PRIVATE) }
+    val currentContactKey = remember(viewModel.currentContactId) {
+        viewModel.currentContactId?.let { "draft_$it" }
+    }
+    var messageText by remember(currentContactKey) {
+        val initial = currentContactKey?.let { draftPrefs.getString(it, "") } ?: ""
+        mutableStateOf(initial ?: "")
+    }
+    // Persist draft on every keystroke
+    LaunchedEffect(messageText, currentContactKey) {
+        val key = currentContactKey ?: return@LaunchedEffect
+        if (messageText.isEmpty()) {
+            draftPrefs.edit().remove(key).apply()
+        } else {
+            draftPrefs.edit().putString(key, messageText).apply()
+        }
+    }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val canAttachFiles = viewModel.isSavedMessagesMode || viewModel.isConnected
@@ -77,12 +95,39 @@ fun ChatScreen(
         uri?.let { viewModel.sendFile(it) }
     }
 
-    // Auto-scroll to bottom on new messages
-    LaunchedEffect(viewModel.messages.size) {
-        Log.d("GhostChat", "[UI] LaunchedEffect messages.size=${viewModel.messages.size}")
-        if (viewModel.messages.isNotEmpty()) {
-            listState.animateScrollToItem(viewModel.messages.size - 1)
+    // Jump-to-bottom state (Telegram-style)
+    // User is "near bottom" if the last visible item is within the last 2 of the list.
+    val isNearBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val total = layoutInfo.totalItemsCount
+            if (total == 0) return@derivedStateOf true
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf true
+            lastVisible >= total - 2
         }
+    }
+    var unreadSinceScroll by remember { mutableIntStateOf(0) }
+
+    // Auto-scroll to bottom on new messages, but ONLY if user is already near bottom.
+    // Otherwise increment the unread badge on the jump-to-bottom button.
+    LaunchedEffect(viewModel.messages.size) {
+        Log.d("GhostChat", "[UI] LaunchedEffect messages.size=${viewModel.messages.size}, isNearBottom=$isNearBottom")
+        if (viewModel.messages.isNotEmpty()) {
+            if (isNearBottom) {
+                listState.animateScrollToItem(viewModel.messages.size - 1)
+                unreadSinceScroll = 0
+            } else {
+                // Only count received messages for the badge
+                val last = viewModel.messages.lastOrNull()
+                if (last?.type == com.ghost.chat.models.ChatMessage.MessageType.RECEIVED) {
+                    unreadSinceScroll += 1
+                }
+            }
+        }
+    }
+    // Reset badge when user manually scrolls to bottom
+    LaunchedEffect(isNearBottom) {
+        if (isNearBottom) unreadSinceScroll = 0
     }
 
     Column(
@@ -167,25 +212,79 @@ fun ChatScreen(
             PeerDisconnectedBanner(onLeave = { Log.d("GhostChat", "[UI] Peer disconnected leave button tapped"); onLeave() })
         }
 
-        // Messages
-        LazyColumn(
+        // Messages with jump-to-bottom FAB overlay
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            state = listState,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            items(viewModel.messages, key = { it.id }) { message ->
-                SwipeToReplyWrapper(
-                    message = message,
-                    onReply = {
-                        Log.d("GhostChat", "[UI] Swipe to reply triggered, messageId=${message.id}")
-                        viewModel.replyingTo = message
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = PaddingValues(vertical = 8.dp)
+            ) {
+                items(viewModel.messages, key = { it.id }) { message ->
+                    SwipeToReplyWrapper(
+                        message = message,
+                        onReply = {
+                            Log.d("GhostChat", "[UI] Swipe to reply triggered, messageId=${message.id}")
+                            viewModel.replyingTo = message
+                        }
+                    ) {
+                        MessageBubble(message, viewModel)
                     }
+                }
+            }
+
+            // Jump-to-bottom floating button (Telegram-style)
+            if (!isNearBottom) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 14.dp, bottom = 10.dp)
                 ) {
-                    MessageBubble(message, viewModel)
+                    IconButton(
+                        onClick = {
+                            Log.d("GhostChat", "[UI] Jump-to-bottom tapped, unread=$unreadSinceScroll")
+                            coroutineScope.launch {
+                                if (viewModel.messages.isNotEmpty()) {
+                                    listState.animateScrollToItem(viewModel.messages.size - 1)
+                                }
+                                unreadSinceScroll = 0
+                            }
+                        },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF262626))
+                    ) {
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Jump to bottom",
+                            tint = GhostWhite
+                        )
+                    }
+                    if (unreadSinceScroll > 0) {
+                        Box(
+                            modifier = Modifier
+                                .offset(x = 16.dp, y = (-16).dp)
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(GhostGreen),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "$unreadSinceScroll",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GhostWhite
+                            )
+                        }
+                    }
                 }
             }
         }

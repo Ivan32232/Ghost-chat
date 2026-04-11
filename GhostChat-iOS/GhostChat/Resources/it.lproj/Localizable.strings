@@ -262,3 +262,8 @@
 "push.missedCall.title" = "Ghost Chat";
 "push.missedCall.body" = "Chiamata persa da %@";
 "system.connecting" = "Connessione...";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "Annulla";
+"attach.send" = "Invia";
+"attach.count" = "%d elementi";

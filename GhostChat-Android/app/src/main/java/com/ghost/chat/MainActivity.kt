@@ -334,29 +334,36 @@ private fun GhostChatContent(
             )
         }
 
-        AppScreen.SOUND_PICKER -> SoundPickerScreen(
-            title = stringResource(R.string.settings_msg_sound),
-            sounds = SoundLibrary.messageSounds,
-            currentId = chatViewModel.messageSoundId,
-            onBack = { onScreenChange(AppScreen.SETTINGS) },
-            onSelect = { id ->
-                chatViewModel.messageSoundId = id
-                chatViewModel.saveSettings()
-                onScreenChange(AppScreen.SETTINGS)
-            }
-        )
+        AppScreen.SOUND_PICKER -> {
+            val ctx = LocalContext.current
+            SoundPickerScreen(
+                title = stringResource(R.string.settings_msg_sound),
+                sounds = SoundLibrary.messageSoundOptions(ctx),
+                currentId = chatViewModel.messageSoundId,
+                onBack = { onScreenChange(AppScreen.SETTINGS) },
+                onSelect = { id ->
+                    chatViewModel.messageSoundId = id
+                    chatViewModel.saveSettings()
+                    onScreenChange(AppScreen.SETTINGS)
+                }
+            )
+        }
 
-        AppScreen.RINGTONE_PICKER -> SoundPickerScreen(
-            title = stringResource(R.string.settings_ringtone),
-            sounds = SoundLibrary.ringtones,
-            currentId = chatViewModel.ringtoneId,
-            onBack = { onScreenChange(AppScreen.SETTINGS) },
-            onSelect = { id ->
-                chatViewModel.ringtoneId = id
-                chatViewModel.saveSettings()
-                onScreenChange(AppScreen.SETTINGS)
-            }
-        )
+        AppScreen.RINGTONE_PICKER -> {
+            val ctx = LocalContext.current
+            SoundPickerScreen(
+                title = stringResource(R.string.settings_ringtone),
+                sounds = SoundLibrary.ringtoneOptions(ctx),
+                currentId = chatViewModel.ringtoneId,
+                onBack = { onScreenChange(AppScreen.SETTINGS) },
+                onSelect = { id ->
+                    chatViewModel.ringtoneId = id
+                    chatViewModel.saveSettings()
+                    onScreenChange(AppScreen.SETTINGS)
+                },
+                onPreview = { c, id -> SoundLibrary.previewRingtone(c, id) }
+            )
+        }
     }
 }
 

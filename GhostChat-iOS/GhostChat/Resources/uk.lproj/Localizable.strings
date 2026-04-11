@@ -262,3 +262,8 @@
 "push.missedCall.title" = "Ghost Chat";
 "push.missedCall.body" = "Пропущений дзвінок від %@";
 "system.connecting" = "Підключення...";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "Скасувати";
+"attach.send" = "Надіслати";
+"attach.count" = "%d файлів";

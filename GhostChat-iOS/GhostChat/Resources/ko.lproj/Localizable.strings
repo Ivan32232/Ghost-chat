@@ -262,3 +262,8 @@
 "push.missedCall.title" = "Ghost Chat";
 "push.missedCall.body" = "%@님의 부재중 전화";
 "system.connecting" = "연결 중...";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "취소";
+"attach.send" = "보내기";
+"attach.count" = "%d개 항목";

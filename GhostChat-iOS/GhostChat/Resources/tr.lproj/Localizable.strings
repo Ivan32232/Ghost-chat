@@ -262,3 +262,8 @@
 "push.missedCall.title" = "Ghost Chat";
 "push.missedCall.body" = "%@ kişisinden cevapsız arama";
 "system.connecting" = "Bağlanıyor...";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "İptal";
+"attach.send" = "Gönder";
+"attach.count" = "%d öğe";

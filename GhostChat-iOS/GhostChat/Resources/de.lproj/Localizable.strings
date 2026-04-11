@@ -262,3 +262,8 @@
 "push.missedCall.title" = "Ghost Chat";
 "push.missedCall.body" = "Verpasster Anruf von %@";
 "system.connecting" = "Verbinde...";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "Abbrechen";
+"attach.send" = "Senden";
+"attach.count" = "%d Objekte";

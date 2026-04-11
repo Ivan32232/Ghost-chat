@@ -698,7 +698,7 @@
 				CODE_SIGN_ENTITLEMENTS = GhostChat/Resources/GhostChat.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 75;
+				CURRENT_PROJECT_VERSION = 76;
 				DEVELOPMENT_TEAM = G2VZKDYV38;
 				INFOPLIST_FILE = GhostChat/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -860,7 +860,7 @@
 				CODE_SIGN_ENTITLEMENTS = GhostChat/Resources/GhostChat.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 75;
+				CURRENT_PROJECT_VERSION = 76;
 				DEVELOPMENT_TEAM = G2VZKDYV38;
 				INFOPLIST_FILE = GhostChat/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

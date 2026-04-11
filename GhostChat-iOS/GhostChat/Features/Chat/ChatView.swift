@@ -4,6 +4,21 @@ import QuickLook
 import UniformTypeIdentifiers
 import AVFoundation
 
+/// Staged attachment waiting for user confirmation before send.
+/// Telegram-style: pick several items, review, then tap "Send" once.
+struct PendingAttachment: Identifiable, Equatable {
+    let id = UUID()
+    let url: URL
+    let name: String
+    let mimeType: String
+    let isImage: Bool
+    let thumbnail: UIImage?  // nil for non-images
+
+    static func == (lhs: PendingAttachment, rhs: PendingAttachment) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 /// Экран чата — сообщения + ввод
 struct ChatView: View {
     @EnvironmentObject var biometricAuth: BiometricAuthService
@@ -16,8 +31,12 @@ struct ChatView: View {
     @State private var lastMessageCount = 0
     @State private var showFilePicker = false
     @State private var showPhotoPicker = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var showAttachPanel = false
+    /// Telegram-style multi-attachment preview before sending.
+    /// When non-empty, a confirmation sheet with thumbnails is shown.
+    @State private var pendingAttachments: [PendingAttachment] = []
+    @State private var showAttachConfirm = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -89,6 +108,46 @@ struct ChatView: View {
             }
             lastMessageCount = newCount
         }
+        // Load draft when entering chat (Telegram-style per-contact drafts)
+        .onAppear {
+            if messageText.isEmpty, let draft = Self.loadDraft(for: viewModel.currentContactId) {
+                ghostLog("[UI] Loaded draft for contact, len=\(draft.count)")
+                messageText = draft
+            }
+        }
+        // Save draft on every keystroke
+        .onChange(of: messageText) { newValue in
+            Self.saveDraft(newValue, for: viewModel.currentContactId)
+        }
+    }
+
+    // MARK: - Per-contact drafts
+    // Lightweight UserDefaults-backed drafts keyed by contactId. No DB, no sync.
+    // Privacy: drafts are cleared via delete-all-history (Settings).
+
+    private static func draftKey(for contactId: String?) -> String? {
+        guard let id = contactId, !id.isEmpty else { return nil }
+        return "chat.draft.\(id)"
+    }
+
+    static func loadDraft(for contactId: String?) -> String? {
+        guard let key = draftKey(for: contactId) else { return nil }
+        let val = UserDefaults.standard.string(forKey: key)
+        return (val?.isEmpty == false) ? val : nil
+    }
+
+    static func saveDraft(_ text: String, for contactId: String?) {
+        guard let key = draftKey(for: contactId) else { return }
+        if text.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key)
+        } else {
+            UserDefaults.standard.set(text, forKey: key)
+        }
+    }
+
+    static func clearDraft(for contactId: String?) {
+        guard let key = draftKey(for: contactId) else { return }
+        UserDefaults.standard.removeObject(forKey: key)
     }
 
     // MARK: - Header
@@ -265,37 +324,104 @@ struct ChatView: View {
 
     // MARK: - Messages
 
+    // Jump-to-bottom state (Telegram-style)
+    @State private var isNearBottom: Bool = true
+    @State private var unreadSinceScroll: Int = 0
+
     private var messageList: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(viewModel.messages) { message in
-                        SwipeToReplyWrapper(message: message, onReply: {
-                            ghostLog("[UI] Swipe to reply triggered, msgId=\(message.id)")
-                            viewModel.replyingTo = message
-                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        }) {
-                            MessageBubble(message: message, viewModel: viewModel)
+            ZStack(alignment: .bottomTrailing) {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(viewModel.messages) { message in
+                            SwipeToReplyWrapper(message: message, onReply: {
+                                ghostLog("[UI] Swipe to reply triggered, msgId=\(message.id)")
+                                viewModel.replyingTo = message
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            }) {
+                                MessageBubble(message: message, viewModel: viewModel)
+                            }
+                            .id(message.id)
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.9).combined(with: .opacity),
+                                removal: .opacity
+                            ))
                         }
-                        .id(message.id)
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.9).combined(with: .opacity),
-                            removal: .opacity
-                        ))
+
+                        // Sentinel at the bottom — used to detect if the user is
+                        // near the bottom of the list. When this view appears, we
+                        // know the last message is visible.
+                        Color.clear
+                            .frame(height: 1)
+                            .id("ghost_bottom_sentinel")
+                            .onAppear {
+                                isNearBottom = true
+                                unreadSinceScroll = 0
+                            }
+                            .onDisappear {
+                                isNearBottom = false
+                            }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: viewModel.messages.count)
+                }
+                .onChange(of: viewModel.messages.count) { newCount in
+                    ghostLog("[UI] onChange messages.count (scroll), count=\(newCount), isNearBottom=\(isNearBottom)")
+                    if isNearBottom {
+                        // User is at the bottom — always auto-scroll to newest
+                        if let lastMessage = viewModel.messages.last {
+                            withAnimation {
+                                proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                            }
+                        }
+                    } else {
+                        // User scrolled up — count new incoming messages for the badge
+                        if let last = viewModel.messages.last, last.type == .received {
+                            unreadSinceScroll += 1
+                        }
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: viewModel.messages.count)
-            }
-            .onChange(of: viewModel.messages.count) { newCount in
-                ghostLog("[UI] onChange messages.count (scroll), count=\(newCount)")
-                if let lastMessage = viewModel.messages.last {
-                    withAnimation {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+
+                // Jump-to-bottom floating button (Telegram-style)
+                if !isNearBottom {
+                    Button {
+                        ghostLog("[UI] Jump-to-bottom tapped, unread=\(unreadSinceScroll)")
+                        if let last = viewModel.messages.last {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                        unreadSinceScroll = 0
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(Color(white: 0.15))
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                                .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
+
+                            if unreadSinceScroll > 0 {
+                                Text("\(unreadSinceScroll)")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .frame(minWidth: 18, minHeight: 18)
+                                    .background(Color.green)
+                                    .clipShape(Capsule())
+                                    .offset(x: 4, y: -4)
+                            }
+                        }
                     }
+                    .padding(.trailing, 14)
+                    .padding(.bottom, 10)
+                    .transition(.scale.combined(with: .opacity))
                 }
             }
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isNearBottom)
         }
     }
 
@@ -422,38 +548,117 @@ struct ChatView: View {
         }
         .background(Color(white: 0.04))
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showAttachPanel)
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .any(of: [.images, .videos]))
-        .onChange(of: selectedPhotoItem) { item in
-            ghostLog("[UI] onChange selectedPhotoItem, hasItem=\(item != nil)")
-            guard let item else { return }
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 10,
+            matching: .any(of: [.images, .videos])
+        )
+        .onChange(of: selectedPhotoItems) { items in
+            ghostLog("[UI] onChange selectedPhotoItems, count=\(items.count)")
+            guard !items.isEmpty else { return }
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self) {
-                    ghostLog("[UI] Photo picker loaded data, bytes=\(data.count)")
+                var newPending: [PendingAttachment] = []
+                for item in items {
+                    guard let data = try? await item.loadTransferable(type: Data.self) else {
+                        ghostLog("[UI] PhotosPicker loadTransferable FAILED for item")
+                        continue
+                    }
                     let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
+                    let mimeType = item.supportedContentTypes.first?.preferredMIMEType ?? "image/jpeg"
                     let tmpURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(ext)")
                     try? data.write(to: tmpURL)
-                    viewModel.sendFile(url: tmpURL)
-                    try? FileManager.default.removeItem(at: tmpURL)
-                } else {
-                    ghostLog("[UI] Photo picker loadTransferable FAILED")
+                    let thumb = UIImage(data: data).flatMap { Self.thumbnail(from: $0, maxSide: 200) }
+                    newPending.append(PendingAttachment(
+                        url: tmpURL,
+                        name: tmpURL.lastPathComponent,
+                        mimeType: mimeType,
+                        isImage: mimeType.hasPrefix("image/"),
+                        thumbnail: thumb
+                    ))
                 }
-                selectedPhotoItem = nil
+                await MainActor.run {
+                    pendingAttachments.append(contentsOf: newPending)
+                    if !pendingAttachments.isEmpty {
+                        showAttachConfirm = true
+                    }
+                    selectedPhotoItems = []
+                }
             }
         }
-        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.item], allowsMultipleSelection: false) { result in
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
             ghostLog("[UI] fileImporter result received")
-            if case .success(let urls) = result, let url = urls.first {
-                ghostLog("[UI] fileImporter success, url=\(url.lastPathComponent)")
-                if url.startAccessingSecurityScopedResource() {
-                    viewModel.sendFile(url: url)
-                    url.stopAccessingSecurityScopedResource()
-                } else {
-                    ghostLog("[UI] fileImporter startAccessingSecurityScopedResource FAILED")
+            if case .success(let urls) = result {
+                ghostLog("[UI] fileImporter success, count=\(urls.count)")
+                var newPending: [PendingAttachment] = []
+                for url in urls {
+                    guard url.startAccessingSecurityScopedResource() else {
+                        ghostLog("[UI] fileImporter: couldn't access \(url.lastPathComponent)")
+                        continue
+                    }
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    // Copy to temp so we don't lose access after sheet closes
+                    let tmpURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)_\(url.lastPathComponent)")
+                    try? FileManager.default.copyItem(at: url, to: tmpURL)
+                    let mime = FileTransferService.mimeType(for: url)
+                    let isImg = FileTransferService.isImage(mime)
+                    let thumb: UIImage? = isImg ? (try? Data(contentsOf: tmpURL)).flatMap { UIImage(data: $0).flatMap { Self.thumbnail(from: $0, maxSide: 200) } } : nil
+                    newPending.append(PendingAttachment(
+                        url: tmpURL,
+                        name: url.lastPathComponent,
+                        mimeType: mime,
+                        isImage: isImg,
+                        thumbnail: thumb
+                    ))
+                }
+                pendingAttachments.append(contentsOf: newPending)
+                if !pendingAttachments.isEmpty {
+                    showAttachConfirm = true
                 }
             } else if case .failure(let err) = result {
                 ghostLog("[UI] fileImporter FAILED: \(err.localizedDescription)")
             }
         }
+        .sheet(isPresented: $showAttachConfirm) {
+            AttachmentConfirmSheet(
+                attachments: $pendingAttachments,
+                onSend: { items in
+                    ghostLog("[UI] AttachmentConfirmSheet onSend count=\(items.count)")
+                    for a in items {
+                        viewModel.sendFile(url: a.url)
+                    }
+                    // Clean up temp files after send kick-off
+                    for a in items {
+                        try? FileManager.default.removeItem(at: a.url)
+                    }
+                    pendingAttachments.removeAll()
+                    showAttachConfirm = false
+                },
+                onCancel: {
+                    ghostLog("[UI] AttachmentConfirmSheet cancelled")
+                    for a in pendingAttachments {
+                        try? FileManager.default.removeItem(at: a.url)
+                    }
+                    pendingAttachments.removeAll()
+                    showAttachConfirm = false
+                }
+            )
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    /// Generate thumbnail for preview (keeps aspect ratio).
+    static func thumbnail(from image: UIImage, maxSide: CGFloat) -> UIImage {
+        let w = image.size.width
+        let h = image.size.height
+        let scale = min(maxSide / max(w, h), 1.0)
+        let newSize = CGSize(width: w * scale, height: h * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 
     private var peerStatusColor: Color {
@@ -1139,3 +1344,101 @@ struct DebugLogOverlay: View {
     }
 }
 #endif
+
+// MARK: - Attachment Confirmation Sheet (Telegram-style)
+
+/// Review sheet shown after picking photos/files. User sees thumbnails,
+/// can remove individual items, and taps "Send" once to send them all.
+struct AttachmentConfirmSheet: View {
+    @Binding var attachments: [PendingAttachment]
+    let onSend: ([PendingAttachment]) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Handle bar
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.white.opacity(0.25))
+                .frame(width: 36, height: 4)
+                .padding(.top, 8)
+
+            // Header
+            HStack {
+                Button("attach.cancel", action: onCancel)
+                    .foregroundStyle(.white)
+                Spacer()
+                Text(String(format: NSLocalizedString("attach.count", comment: ""), attachments.count))
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Spacer()
+                Button {
+                    onSend(attachments)
+                } label: {
+                    Text("attach.send")
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.white)
+                .disabled(attachments.isEmpty)
+                .opacity(attachments.isEmpty ? 0.5 : 1)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            Divider().background(Color.white.opacity(0.1))
+
+            // Grid of thumbnails
+            ScrollView {
+                LazyVGrid(
+                    columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+                    spacing: 8
+                ) {
+                    ForEach(attachments) { att in
+                        ZStack(alignment: .topTrailing) {
+                            // Thumbnail or file icon
+                            if let img = att.thumbnail {
+                                Image(uiImage: img)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(minWidth: 0, maxWidth: .infinity)
+                                    .frame(height: 110)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                            } else {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.white.opacity(0.1))
+                                    .frame(height: 110)
+                                    .overlay(
+                                        VStack(spacing: 6) {
+                                            Image(systemName: "doc.fill")
+                                                .font(.title)
+                                                .foregroundStyle(.white.opacity(0.8))
+                                            Text(att.name)
+                                                .font(.caption2)
+                                                .lineLimit(2)
+                                                .multilineTextAlignment(.center)
+                                                .foregroundStyle(.white.opacity(0.8))
+                                                .padding(.horizontal, 6)
+                                        }
+                                    )
+                            }
+
+                            // Remove button
+                            Button {
+                                attachments.removeAll { $0.id == att.id }
+                                if attachments.isEmpty { onCancel() }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.white, .black.opacity(0.7))
+                            }
+                            .padding(6)
+                        }
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .background(Color(white: 0.07))
+        .preferredColorScheme(.dark)
+    }
+}

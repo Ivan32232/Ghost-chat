@@ -305,3 +305,8 @@
 
 /* Notifications — default sender name */
 "notification.yourContact" = "Your contact";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "Cancel";
+"attach.send" = "Send";
+"attach.count" = "%d items";

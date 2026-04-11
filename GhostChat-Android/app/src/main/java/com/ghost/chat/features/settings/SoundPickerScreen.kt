@@ -29,7 +29,10 @@ fun SoundPickerScreen(
     sounds: List<Pair<String, String>>, // id -> display name
     currentId: String,
     onBack: () -> Unit,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    /// Optional preview callback — for ringtone picker pass SoundLibrary::previewRingtone,
+    /// for message sound picker default previewSound is used.
+    onPreview: ((android.content.Context, String) -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -76,7 +79,10 @@ fun SoundPickerScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
-                                onClick = { SoundLibrary.previewSound(context, id) },
+                                onClick = {
+                                    if (onPreview != null) onPreview(context, id)
+                                    else SoundLibrary.previewSound(context, id)
+                                },
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(

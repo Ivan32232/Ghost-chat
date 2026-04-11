@@ -2592,6 +2592,7 @@ final class ChatViewModel: ObservableObject {
         guard let appDelegate = AppDelegate.shared ?? (AppDelegate.shared ?? (UIApplication.shared.delegate as? AppDelegate)) else {
             ghostLog("[ChatViewModel] reportIncomingCallToSystem: appDelegate is nil!")
             voice?.enableAudioManually()
+            // CallKit not available → start our custom ringtone as fallback
             startIncomingCallVibration()
             return
         }
@@ -2601,7 +2602,10 @@ final class ChatViewModel: ObservableObject {
         let callerName = currentPeerContact?.label ?? "Ghost Chat"
         ghostLog("[ChatViewModel] reportIncomingCallToSystem: calling reportIncomingCall, name=\(callerName)")
 
-        startIncomingCallVibration()
+        // CRITICAL: Do NOT start our custom ringtone here — CallKit will play its own
+        // system ringtone when reportIncomingCall succeeds. Playing both simultaneously
+        // produces the "double ringtone" bug the user reported. We only fall back to
+        // our custom ringtone if CallKit explicitly fails (error path below).
 
         // CRITICAL: Register callbacks BEFORE reportIncomingCall —
         // CallKit may invoke onCallAnswer synchronously on the main thread
@@ -2624,13 +2628,14 @@ final class ChatViewModel: ObservableObject {
 
         appDelegate.reportIncomingCall(uuid: uuid, handle: callerName) { [weak self] error in
             if let error {
-                ghostLog("[ChatViewModel] CallKit reportIncomingCall FAILED: \(error)")
+                ghostLog("[ChatViewModel] CallKit reportIncomingCall FAILED: \(error) — falling back to custom ringtone")
                 #if DEBUG
                 print("[CallKit] Failed to report call: \(error)")
                 #endif
                 self?.activeCallUUID = nil
-                // Fallback при ошибке CallKit — вручную включаем аудио
+                // CallKit failed → we now own the ringtone & audio
                 self?.voice?.enableAudioManually()
+                self?.startIncomingCallVibration()
             }
         }
     }
@@ -3018,6 +3023,14 @@ final class ChatViewModel: ObservableObject {
         // Load history if enabled
         loadMessageHistory()
 
+        // Mark received messages as delivered (clears unread badge)
+        try? messageStore.markAllDelivered(for: contact.id.uuidString)
+
+        // CRITICAL: Switch to chat screen — ensures UI shows loaded history.
+        // Symmetric with startChatWithContact on welcome-flow tap.
+        screen = .chat
+        startMessageCleanup()
+
         // Create new room (new keys, new fingerprint every time)
         await inviteContactToChat(contact)
     }
@@ -3295,7 +3308,15 @@ final class ChatViewModel: ObservableObject {
         messages.append(enriched)
 
         // Ghost Threads: persist to DB if history enabled
-        if saveMessageHistory, let contactId = currentContactId, type != .system {
+        if saveMessageHistory, type != .system {
+            // Resolve contactId — prefer currentContactId, fall back to currentPeerContact.
+            // Without this, early messages (before contact auto-save completes) could be
+            // persisted with contactId=nil and become unreachable by fetchForContact().
+            let resolvedContactId = currentContactId ?? currentPeerContact?.id.uuidString
+            guard let contactId = resolvedContactId else {
+                ghostLog("[ChatViewModel] addMessage: SKIP DB persist — no contactId resolved yet (msg will only live in memory)")
+                return enriched
+            }
             // Received messages viewed in open chat are immediately "delivered" (read)
             let isDeliveredForDB = enriched.isDelivered || (type == .received && screen == .chat)
             let persistMsg = ChatMessage(
@@ -3311,6 +3332,7 @@ final class ChatViewModel: ObservableObject {
             )
             do {
                 try messageStore.save(persistMsg)
+                ghostLog("[ChatViewModel] addMessage: persisted to DB, contactId=\(contactId.prefix(8)), type=\(type)")
             } catch {
                 ghostLog("[ChatViewModel] ERROR: failed to persist message to DB: \(error)")
             }
@@ -3328,15 +3350,28 @@ final class ChatViewModel: ObservableObject {
     /// Load message history from DB for current contact
     /// Guard: verify contactId hasn't changed during fetch (fast switch protection)
     func loadMessageHistory() {
-        ghostLog("[ChatViewModel] loadMessageHistory called, contactId=\(currentContactId ?? "nil")")
-        guard let contactId = currentContactId else { return }
+        ghostLog("[ChatViewModel] loadMessageHistory called, contactId=\(currentContactId ?? "nil"), saveHistory=\(saveMessageHistory), savedMode=\(isSavedMessagesMode)")
+        guard let contactId = currentContactId else {
+            ghostLog("[ChatViewModel] loadMessageHistory: SKIP — no currentContactId")
+            return
+        }
         // Always load for saved messages; otherwise only if history is enabled
-        guard isSavedMessagesMode || saveMessageHistory else { return }
-        if let history = try? messageStore.fetchForContact(contactId) {
+        guard isSavedMessagesMode || saveMessageHistory else {
+            ghostLog("[ChatViewModel] loadMessageHistory: SKIP — saveMessageHistory=false (user disabled it in settings)")
+            return
+        }
+        do {
+            let history = try messageStore.fetchForContact(contactId)
             // Verify contact hasn't changed during fetch
-            guard currentContactId == contactId else { return }
+            guard currentContactId == contactId else {
+                ghostLog("[ChatViewModel] loadMessageHistory: contactId changed mid-fetch, aborting")
+                return
+            }
+            ghostLog("[ChatViewModel] loadMessageHistory: fetched \(history.count) messages from DB for contact \(contactId.prefix(8))")
             // Prepend history (no auto-delete timer — persisted messages)
             messages.insert(contentsOf: history, at: 0)
+        } catch {
+            ghostLog("[ChatViewModel] loadMessageHistory: FETCH FAILED: \(error.localizedDescription)")
         }
     }
 

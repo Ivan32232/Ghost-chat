@@ -262,3 +262,8 @@
 "push.missedCall.title" = "Ghost Chat";
 "push.missedCall.body" = "未接来电：%@";
 "system.connecting" = "正在连接...";
+
+/* Attachment confirmation sheet */
+"attach.cancel" = "取消";
+"attach.send" = "发送";
+"attach.count" = "%d 项";
