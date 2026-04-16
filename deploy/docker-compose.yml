@@ -1,4 +1,5 @@
 services:
+  # --- Always runs (dev + prod) ---
   ghost-chat:
     build:
       context: ..
@@ -6,27 +7,61 @@ services:
     container_name: ghost-chat
     restart: unless-stopped
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-development}
       - PORT=3000
-      - TRUST_PROXY=1
-      - TURN_SECRET=${TURN_SECRET}
-      - TURN_DOMAIN=${TURN_DOMAIN}
-      - APNS_KEY_ID=${APNS_KEY_ID}
-      - APNS_TEAM_ID=${APNS_TEAM_ID}
+      - TRUST_PROXY=${TRUST_PROXY:-0}
+      - TURN_SECRET=${TURN_SECRET:-}
+      - TURN_DOMAIN=${TURN_DOMAIN:-localhost}
+      - APNS_KEY_ID=${APNS_KEY_ID:-}
+      - APNS_TEAM_ID=${APNS_TEAM_ID:-}
       - APNS_KEY_PATH=/app/keys/AuthKey.p8
-      - APNS_BUNDLE_ID=${APNS_BUNDLE_ID}
+      - APNS_BUNDLE_ID=${APNS_BUNDLE_ID:-com.kordar.ghostchat}
       - FCM_SA_PATH=/app/keys/firebase-sa.json
     volumes:
       - ./keys:/app/keys:ro
     networks:
       - ghost-network
-    expose:
-      - "3000"
+    ports:
+      - "${HOST_PORT:-3000}:3000"
 
+  # --- Dev profile: coturn without TLS (local testing) ---
+  coturn-dev:
+    image: coturn/coturn:4.6.2
+    container_name: ghost-turn-dev
+    restart: unless-stopped
+    network_mode: host
+    profiles: ["dev"]
+    command:
+      - -n
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:-ghost-dev-secret-NOT-FOR-PRODUCTION}
+      - --realm=localhost
+      - --listening-port=3478
+      - --no-tls
+      - --no-dtls
+      - --total-quota=100
+      - --no-multicast-peers
+      - --log-file=stdout
+      - --no-cli
+
+  # --- Prod profile: coturn with TLS ---
+  coturn:
+    image: coturn/coturn:4.6.2
+    container_name: ghost-turn
+    restart: unless-stopped
+    network_mode: host
+    profiles: ["prod"]
+    volumes:
+      - ./turnserver.conf:/etc/turnserver.conf:ro
+      - ./ssl:/etc/ssl/turn:ro
+    command: ["-c", "/etc/turnserver.conf"]
+
+  # --- Prod profile: nginx reverse proxy with TLS ---
   nginx:
     image: nginx:1.27-alpine
     container_name: ghost-nginx
     restart: unless-stopped
+    profiles: ["prod"]
     ports:
       - "80:80"
       - "443:443"
@@ -39,19 +74,11 @@ services:
     networks:
       - ghost-network
 
-  coturn:
-    image: coturn/coturn:4.6.2
-    container_name: ghost-turn
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - ./turnserver.conf:/etc/turnserver.conf:ro
-      - ./ssl:/etc/ssl/turn:ro
-    command: ["-c", "/etc/turnserver.conf"]
-
+  # --- Prod profile: certbot for Let's Encrypt renewal ---
   certbot:
     image: certbot/certbot
     container_name: ghost-certbot
+    profiles: ["prod"]
     volumes:
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot

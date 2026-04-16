@@ -29,12 +29,13 @@ cleanup() {
 trap cleanup EXIT
 
 # Restart server to clear in-memory rate limits between test groups
+# No TURN_SECRET needed — dev mode auto-generates one
 restart_server() {
   if [ -n "${SERVER_PID:-}" ]; then
     kill "$SERVER_PID" 2>/dev/null
     wait "$SERVER_PID" 2>/dev/null
   fi
-  TURN_SECRET=test-verify-secret TURN_DOMAIN=test.local PORT=3199 \
+  TURN_DOMAIN=test.local PORT=3199 \
     node server/dist/src/index.js &>/dev/null &
   SERVER_PID=$!
   sleep 2
@@ -90,7 +91,8 @@ done
 echo "=== 3. Server Start ==="
 # ========================================
 
-TURN_SECRET=test-verify-secret TURN_DOMAIN=test.local PORT=3199 \
+# No TURN_SECRET — dev mode uses built-in dev secret
+TURN_DOMAIN=test.local PORT=3199 \
   node server/dist/src/index.js &
 SERVER_PID=$!
 sleep 2
@@ -410,17 +412,52 @@ setTimeout(() => process.exit(0), 2000);
 if echo "$WS_LEAVE" | grep -q "leave-ok"; then pass "WS: leave-room works"; else fail "WS: leave-room failed"; fi
 
 # ========================================
-echo "=== 13. Docker Build (optional) ==="
+echo "=== 13. Docker E2E ==="
 # ========================================
 
-if command -v docker &>/dev/null && docker info &>/dev/null; then
+# Kill local server before Docker test (port conflict)
+kill "$SERVER_PID" 2>/dev/null
+wait "$SERVER_PID" 2>/dev/null
+SERVER_PID=""
+
+if ! command -v docker &>/dev/null || ! docker info &>/dev/null; then
+  fail "Docker not available — install Docker Desktop and start daemon"
+else
+  # Build
   if docker compose -f deploy/docker-compose.yml build ghost-chat 2>&1 | tail -3; then
     pass "Docker build succeeds"
   else
     fail "Docker build failed"
   fi
-else
-  skip "Docker not available (install Docker Desktop or start daemon)"
+
+  # Run in dev mode (no secrets needed)
+  docker compose -f deploy/docker-compose.yml up -d ghost-chat 2>/dev/null
+  sleep 5
+
+  # Health check inside container
+  DOCKER_HEALTH=$(docker exec ghost-chat node -e "
+    require('http').get('http://localhost:3000/health', r => {
+      let d=''; r.on('data',c=>d+=c);
+      r.on('end',()=>{console.log(r.statusCode+':'+d);process.exit(r.statusCode===200?0:1)});
+    }).on('error', e => { console.error(e.message); process.exit(1); });
+  " 2>&1)
+
+  if echo "$DOCKER_HEALTH" | grep -q "200:"; then
+    pass "Docker container health check returns 200"
+  else
+    fail "Docker container health check failed: $DOCKER_HEALTH"
+  fi
+
+  # Health check from host
+  HOST_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null)
+  if [ "$HOST_HEALTH" = "200" ]; then
+    pass "Docker host port health check returns 200"
+  else
+    fail "Docker host port health check: $HOST_HEALTH"
+  fi
+
+  # Cleanup
+  docker compose -f deploy/docker-compose.yml down 2>/dev/null
 fi
 
 # ========================================

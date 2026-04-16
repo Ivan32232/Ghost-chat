@@ -45,39 +45,43 @@ jobs:
         run: |
           mkdir -p deploy/keys
           openssl ecparam -genkey -name prime256v1 -noout -out deploy/keys/AuthKey.p8
-          echo '{"project_id":"test","client_email":"test@test.iam.gserviceaccount.com","private_key":"test"}' > deploy/keys/firebase-sa.json
+          echo '{"project_id":"ci-test","client_email":"ci@test.iam.gserviceaccount.com","private_key":"test"}' > deploy/keys/firebase-sa.json
 
-      - name: Create .env for Docker Compose
-        working-directory: deploy
-        run: |
-          cat > .env <<EOF
-          TURN_SECRET=ci-test-secret
-          TURN_DOMAIN=localhost
-          APNS_KEY_ID=TEST_KEY
-          APNS_TEAM_ID=TEST_TEAM
-          APNS_BUNDLE_ID=com.test.app
-          EOF
-
-      - name: Docker Compose build
+      - name: Docker build
         working-directory: deploy
         run: docker compose build ghost-chat
 
-      - name: Docker Compose up
+      - name: Docker up (dev mode — no secrets needed)
         working-directory: deploy
         run: |
           docker compose up -d ghost-chat
           sleep 10
 
-      - name: Health check
+      - name: Health check (inside container)
         run: |
-          STATUS=$(docker exec ghost-chat node -e "
+          docker exec ghost-chat node -e "
             require('http').get('http://localhost:3000/health', r => {
-              let d=''; r.on('data',c=>d+=c); r.on('end',()=>{console.log(r.statusCode,d);process.exit(r.statusCode===200?0:1)});
+              let d=''; r.on('data',c=>d+=c);
+              r.on('end',()=>{
+                console.log('Status:', r.statusCode, 'Body:', d);
+                process.exit(r.statusCode===200?0:1);
+              });
             }).on('error', e => { console.error(e.message); process.exit(1); });
-          ")
-          echo "Health check: $STATUS"
+          "
 
-      - name: Docker Compose down
+      - name: Health check (from host)
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health)
+          echo "Host health check: $STATUS"
+          [ "$STATUS" = "200" ]
+
+      - name: TURN credentials check
+        run: |
+          TURN=$(curl -s http://localhost:3000/api/turn-credentials)
+          echo "TURN: $TURN"
+          echo "$TURN" | grep -q '"credential"'
+
+      - name: Docker down
         if: always()
         working-directory: deploy
         run: docker compose down

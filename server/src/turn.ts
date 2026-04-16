@@ -1,6 +1,11 @@
 import { createHmac, randomBytes } from 'node:crypto';
 
-const TURN_SECRET = process.env.TURN_SECRET ?? '';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const DEV_SECRET = 'ghost-dev-secret-NOT-FOR-PRODUCTION';
+
+// In dev mode: use a hardcoded secret so the server starts without .env
+// In production: TURN_SECRET env var is REQUIRED — server exits without it
+const TURN_SECRET = process.env.TURN_SECRET || (IS_PRODUCTION ? '' : DEV_SECRET);
 const TURN_DOMAIN = process.env.TURN_DOMAIN ?? 'localhost';
 const TURN_TTL = 3600;
 
@@ -17,9 +22,12 @@ export function isTurnConfigured(): boolean {
 }
 
 export function requireTurnInProduction(): void {
-  if (process.env.NODE_ENV === 'production' && !TURN_SECRET) {
+  if (IS_PRODUCTION && !process.env.TURN_SECRET) {
     console.error('FATAL: TURN_SECRET is required in production');
     process.exit(1);
+  }
+  if (!IS_PRODUCTION && !process.env.TURN_SECRET) {
+    console.warn('[WARN] TURN_SECRET not set — using dev default. DO NOT use in production!');
   }
 }
 
