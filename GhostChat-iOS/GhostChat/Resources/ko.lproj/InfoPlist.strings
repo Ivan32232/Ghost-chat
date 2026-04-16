@@ -1,4 +1,0 @@
-/* Info.plist localization — Korean */
-
-"NSMicrophoneUsageDescription" = "음성 통화를 위해 마이크가 필요합니다";
-"NSFaceIDUsageDescription" = "데이터 보호를 위해 Face ID를 사용합니다";

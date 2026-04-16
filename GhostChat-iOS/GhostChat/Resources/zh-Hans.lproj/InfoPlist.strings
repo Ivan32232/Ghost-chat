@@ -1,4 +1,0 @@
-/* Info.plist localization — Simplified Chinese */
-
-"NSMicrophoneUsageDescription" = "语音通话需要使用麦克风";
-"NSFaceIDUsageDescription" = "面容 ID 用于保护您的数据";

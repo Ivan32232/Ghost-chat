@@ -1,5 +1,0 @@
-/* Info.plist localization — Russian */
-
-"NSCameraUsageDescription" = "Ghost Chat не использует камеру. Это разрешение требуется фреймворком WebRTC.";
-"NSMicrophoneUsageDescription" = "Микрофон необходим для голосовых звонков";
-"NSFaceIDUsageDescription" = "Face ID используется для защиты ваших данных";
