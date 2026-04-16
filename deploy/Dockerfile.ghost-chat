@@ -1,29 +1,32 @@
+# Multi-stage build: TypeScript compile → minimal Node.js runtime
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY server/package*.json ./
+RUN npm ci
+
+COPY server/tsconfig.json ./
+COPY server/src/ ./src/
+RUN npx tsc
+
+# --- Runtime ---
 FROM node:20-alpine
 
-# Create non-root user first
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
 WORKDIR /app
 
-# Copy package files
-COPY ghost-chat/package*.json ./
+COPY --from=builder /app/package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Install dependencies
-RUN npm ci --only=production
+COPY --from=builder /app/dist/ ./dist/
 
-# Copy application code
-COPY ghost-chat/server/ ./server/
-COPY ghost-chat/client/ ./client/
-
-# Set ownership for non-root user
-RUN chown -R nodejs:nodejs /app
-
-# Expose port
+# Non-root for security
+USER nodejs
 EXPOSE 3000
 
-# Run as non-root user for security
-USER nodejs
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+  CMD node -e "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
-# Start server
-CMD ["node", "server/index.js"]
+CMD ["node", "dist/src/index.js"]

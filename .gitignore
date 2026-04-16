@@ -3,6 +3,9 @@ node_modules/
 .DS_Store
 *.log
 
+# Server compiled output
+server/dist/
+
 # SSL certificates
 deploy/ssl/
 deploy/certbot/
