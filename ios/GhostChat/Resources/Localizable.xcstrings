@@ -1,7 +1,360 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-
+    "app.name" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ghost Chat" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ghost Chat" } }
+      }
+    },
+    "welcome.create" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create Ghost Chat" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать Ghost Chat" } }
+      }
+    },
+    "welcome.join" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Join with Link" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Войти по ссылке" } }
+      }
+    },
+    "welcome.join_placeholder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paste room link or ID" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вставьте ссылку или ID" } }
+      }
+    },
+    "welcome.contacts" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved contacts" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранённые контакты" } }
+      }
+    },
+    "welcome.settings" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройки" } }
+      }
+    },
+    "welcome.share_link" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Share link" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поделиться ссылкой" } }
+      }
+    },
+    "welcome.copy_link" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy link" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Копировать ссылку" } }
+      }
+    },
+    "chat.send" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отправить" } }
+      }
+    },
+    "chat.type_message" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сообщение" } }
+      }
+    },
+    "chat.connecting" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Соединение…" } }
+      }
+    },
+    "chat.connected" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "End-to-end encrypted" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сквозное шифрование" } }
+      }
+    },
+    "chat.disconnected" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnected" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отключено" } }
+      }
+    },
+    "chat.save_contact" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save contact" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить контакт" } }
+      }
+    },
+    "chat.leave" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Leave" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выйти" } }
+      }
+    },
+    "chat.call" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Call" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Позвонить" } }
+      }
+    },
+    "chat.reply" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reply" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ответить" } }
+      }
+    },
+    "chat.typing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Typing…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Печатает…" } }
+      }
+    },
+    "chat.safety_number" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Safety number" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Номер безопасности" } }
+      }
+    },
+    "call.incoming" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Incoming call" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Входящий звонок" } }
+      }
+    },
+    "call.accept" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accept" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ответить" } }
+      }
+    },
+    "call.decline" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Decline" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отклонить" } }
+      }
+    },
+    "call.end" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "End call" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Завершить" } }
+      }
+    },
+    "call.mute" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mute" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выкл. микрофон" } }
+      }
+    },
+    "call.unmute" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unmute" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Вкл. микрофон" } }
+      }
+    },
+    "call.speaker" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Speaker" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Динамик" } }
+      }
+    },
+    "call.earpiece" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Earpiece" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разговорный" } }
+      }
+    },
+    "contacts.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contacts" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Контакты" } }
+      }
+    },
+    "contacts.search" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Поиск" } }
+      }
+    },
+    "contacts.empty" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No saved contacts" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет сохранённых контактов" } }
+      }
+    },
+    "contacts.delete" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить" } }
+      }
+    },
+    "contacts.rename" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rename" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переименовать" } }
+      }
+    },
+    "contacts.notes" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Notes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Заметки" } }
+      }
+    },
+    "settings.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройки" } }
+      }
+    },
+    "settings.privacy_mode" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Privacy mode (TURN relay)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Режим приватности (TURN)" } }
+      }
+    },
+    "settings.biometric" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Biometric lock" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Биометрическая блокировка" } }
+      }
+    },
+    "settings.auto_lock" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Auto-lock" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Автоблокировка" } }
+      }
+    },
+    "settings.language" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Language" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Язык" } }
+      }
+    },
+    "settings.sound" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sound" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Звук" } }
+      }
+    },
+    "settings.message_ttl" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message auto-delete" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Авто-удаление сообщений" } }
+      }
+    },
+    "settings.wipe" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wipe all data" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Стереть все данные" } }
+      }
+    },
+    "settings.security_dashboard" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Security dashboard" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Панель безопасности" } }
+      }
+    },
+    "settings.about" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "About" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "О приложении" } }
+      }
+    },
+    "ttl.thirty_seconds" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "30 seconds" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "30 секунд" } }
+      }
+    },
+    "ttl.one_minute" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "1 minute" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "1 минута" } }
+      }
+    },
+    "ttl.five_minutes" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "5 minutes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "5 минут" } }
+      }
+    },
+    "ttl.fifteen_minutes" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "15 minutes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "15 минут" } }
+      }
+    },
+    "ttl.one_hour" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "1 hour" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "1 час" } }
+      }
+    },
+    "lock.enter_pin" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter PIN" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Введите PIN" } }
+      }
+    },
+    "lock.unlock_biometric" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlock Ghost Chat" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разблокировать Ghost Chat" } }
+      }
+    },
+    "lock.invalid_pin" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Invalid PIN" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Неверный PIN" } }
+      }
+    },
+    "security.screenshot_alert" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Peer took a screenshot" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Собеседник сделал скриншот" } }
+      }
+    },
+    "security.recording_alert" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Peer is recording the screen" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Собеседник записывает экран" } }
+      }
+    },
+    "error.connection_failed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection failed" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось подключиться" } }
+      }
+    },
+    "error.invalid_room" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Invalid room link" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Неверная ссылка на комнату" } }
+      }
+    },
+    "error.cert_pinning_failed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Server identity verification failed" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проверка подлинности сервера не удалась" } }
+      }
+    },
+    "action.cancel" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отмена" } }
+      }
+    },
+    "action.done" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Готово" } }
+      }
+    },
+    "action.save" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сохранить" } }
+      }
+    }
   },
   "version" : "1.0"
 }
