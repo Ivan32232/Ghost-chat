@@ -47,7 +47,7 @@ abort_if_failed() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "toolchain"
-for cmd in xcodegen xcodebuild swift openssl python3; do
+for cmd in xcodegen xcodebuild swift openssl python3 pod; do
     if command -v "$cmd" >/dev/null 2>&1; then
         pass "$cmd present"
     else
@@ -76,6 +76,28 @@ fi
 abort_if_failed
 
 # ─────────────────────────────────────────────────────────────────────────────
+step "CocoaPods install (SQLCipher + GRDB/SQLCipher)"
+(cd "$IOS_DIR" && pod install >/dev/null 2>&1) || fail "pod install exited non-zero"
+if [ -d "$IOS_DIR/GhostChat.xcworkspace" ] && [ -f "$IOS_DIR/Podfile.lock" ]; then
+    pass "GhostChat.xcworkspace + Podfile.lock ready"
+else
+    fail "pod install did not produce xcworkspace / Podfile.lock"
+fi
+if grep -q "GRDB.swift/SQLCipher" "$IOS_DIR/Podfile.lock" 2>/dev/null; then
+    pass "Podfile.lock locks GRDB.swift/SQLCipher"
+else
+    fail "GRDB.swift/SQLCipher missing from Podfile.lock"
+fi
+if grep -q "SQLCipher" "$IOS_DIR/Podfile.lock" 2>/dev/null; then
+    GRDB_VER=$(grep -oE "GRDB\.swift/SQLCipher \([0-9.]+\)" "$IOS_DIR/Podfile.lock" | head -1 | grep -oE "\([0-9.]+\)" | tr -d '()')
+    SQLCIPHER_VER=$(grep -oE "^  - SQLCipher \([0-9.]+\)" "$IOS_DIR/Podfile.lock" | head -1 | grep -oE "\([0-9.]+\)" | tr -d '()')
+    pass "Pods: GRDB.swift/SQLCipher ${GRDB_VER:-?} + SQLCipher ${SQLCIPHER_VER:-?}"
+else
+    fail "SQLCipher missing from Podfile.lock"
+fi
+abort_if_failed
+
+# ─────────────────────────────────────────────────────────────────────────────
 step "Phase 2 crypto tests (swift test)"
 PHASE2_OUT="$(cd "$IOS_DIR" && swift test --quiet 2>&1 || true)"
 if echo "$PHASE2_OUT" | grep -q "0 failures" ; then
@@ -89,11 +111,11 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-step "xcodebuild: build for $SIM"
+step "xcodebuild: build workspace for $SIM"
 BUILD_LOG="$IOS_DIR/.phase3-build.log"
 (cd "$IOS_DIR" && \
   xcodebuild \
-    -project GhostChat.xcodeproj \
+    -workspace GhostChat.xcworkspace \
     -scheme GhostChat \
     -destination "platform=iOS Simulator,name=$SIM" \
     -configuration Debug \
@@ -111,7 +133,7 @@ step "xcodebuild: unit tests on $SIM"
 TEST_LOG="$IOS_DIR/.phase3-test.log"
 (cd "$IOS_DIR" && \
   xcodebuild \
-    -project GhostChat.xcodeproj \
+    -workspace GhostChat.xcworkspace \
     -scheme GhostChat \
     -destination "platform=iOS Simulator,name=$SIM" \
     -configuration Debug \
@@ -131,8 +153,48 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+step "SQLCipher proof test ran"
+if grep -q "test_onDiskFile_isEncrypted_notPlaintext.*passed" "$TEST_LOG"; then
+    pass "raw-file encryption-proof test passed"
+else
+    fail "SQLCipher encryption-proof test did not run or did not pass"
+fi
+if grep -q "test_onDiskFile_reopenWithDifferentKey_fails.*passed" "$TEST_LOG"; then
+    pass "wrong-key reopen rejection test passed"
+else
+    fail "wrong-key reopen rejection test missing"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+step "SQLCipher linkage check on built app"
+APP_BUNDLE=$(find ~/Library/Developer/Xcode/DerivedData -type d -name "GhostChat.app" -path "*/Debug-iphonesimulator/*" 2>/dev/null | head -1)
+if [ -n "$APP_BUNDLE" ] && [ -d "$APP_BUNDLE/Frameworks" ]; then
+    if [ -d "$APP_BUNDLE/Frameworks/SQLCipher.framework" ]; then
+        pass "SQLCipher.framework bundled in GhostChat.app/Frameworks"
+    else
+        ls "$APP_BUNDLE/Frameworks" 2>/dev/null | head
+        fail "SQLCipher.framework missing from app bundle"
+    fi
+    if [ -d "$APP_BUNDLE/Frameworks/GRDB.framework" ]; then
+        pass "GRDB.framework bundled in GhostChat.app/Frameworks"
+    else
+        fail "GRDB.framework missing from app bundle"
+    fi
+    # Verify the dylib links them (confirms dynamic load, not just bundled).
+    DYLIB="$APP_BUNDLE/GhostChat.debug.dylib"
+    if [ -f "$DYLIB" ]; then
+        if otool -L "$DYLIB" 2>/dev/null | grep -q "SQLCipher.framework"; then
+            pass "GhostChat dylib links SQLCipher.framework"
+        else
+            fail "GhostChat dylib does not link SQLCipher"
+        fi
+    fi
+else
+    fail "could not locate built GhostChat.app to inspect Frameworks/"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 step "forbidden patterns scan"
-FORBIDDEN_SOURCES=()
 
 # UserDefaults used (not just mentioned in comments)
 if grep -rnE "UserDefaults\.(standard|init|\()|UserDefaults\(" "$IOS_DIR/GhostChat" 2>/dev/null > /tmp/phase3.userdefaults; then
@@ -168,6 +230,19 @@ else
     pass "ATS allowsArbitraryLoads is not enabled"
 fi
 rm -f /tmp/phase3.ats
+
+# FileProtection.complete stub must not be USED (mentions in doc comments OK).
+if grep -nE "^[^/]*FileProtectionType\.complete" "$IOS_DIR/GhostChat/Core/Storage/DatabaseService.swift" 2>/dev/null | grep -v "^[[:space:]]*//" > /tmp/phase3.fp; then
+    if [ -s /tmp/phase3.fp ]; then
+        cat /tmp/phase3.fp
+        fail "DatabaseService.swift still USES FileProtectionType.complete (should be removed — SQLCipher replaces it)"
+    else
+        pass "FileProtection.complete stub removed from DatabaseService"
+    fi
+else
+    pass "FileProtection.complete stub removed from DatabaseService"
+fi
+rm -f /tmp/phase3.fp
 
 # ─────────────────────────────────────────────────────────────────────────────
 step "generated Info.plist + entitlements sanity"
@@ -206,6 +281,22 @@ if grep -q "/AdS6h9evKtyk7J9aoy+0isfcARe0dv7/C+BOUabNeo=" "$PIN_FILE"; then
     pass "backup pin present (matches deploy/keys/backup-pin-private.pem)"
 else
     fail "backup pin missing from CertificatePinning.swift"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+step "SQLCipher PRAGMAs + passphrase usage sanity"
+DB_FILE="$IOS_DIR/GhostChat/Core/Storage/DatabaseService.swift"
+for pragma in "cipher_page_size = 4096" "kdf_iter = 256000" "cipher_memory_security = ON" "secure_delete = ON"; do
+    if grep -q "$pragma" "$DB_FILE"; then
+        pass "PRAGMA $pragma present"
+    else
+        fail "PRAGMA $pragma missing from DatabaseService.swift"
+    fi
+done
+if grep -q "usePassphrase" "$DB_FILE"; then
+    pass "db.usePassphrase(...) call present"
+else
+    fail "db.usePassphrase(...) missing — DB is not being unlocked with the master key"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -3,12 +3,16 @@ import GRDB
 
 /// Encrypted persistent storage for saved contacts, messages, and Double Ratchet state.
 ///
-/// **Encryption strategy (Phase 3):** system-level `FileProtectionType.complete` — data is
-/// encrypted on disk with a device-derived key, decrypted only while the device is unlocked.
-/// The 32-byte master key is generated once and kept in the Keychain for when SQLCipher
-/// integration lands in Phase 6 (page-level encryption regardless of lock state).
+/// **Encryption:** SQLCipher with a 32-byte per-install master key stored in Keychain
+/// (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`). PRAGMAs:
+///   - `cipher_page_size = 4096`, `kdf_iter = 256000`
+///   - `cipher_memory_security = ON` (zeros page buffers on free)
+///   - `secure_delete = ON` (zeros freed pages before reuse)
 ///
-/// File layout: `Application Support/ghostchat.db` (+ wal, shm), excluded from iCloud backup.
+/// File is excluded from iCloud/iTunes backup. With SQLCipher in place, the
+/// iOS-level `FileProtectionType.complete` attribute is no longer required —
+/// SQLCipher encrypts pages regardless of device lock state, which is strictly
+/// stronger than FileProtection (which only encrypts while the device is locked).
 final class DatabaseService {
 
     enum Error: Swift.Error, Equatable {
@@ -28,48 +32,49 @@ final class DatabaseService {
         self.dbQueue = dbQueue
     }
 
-    // MARK: - Factory
+    // MARK: - Factories
 
-    /// Opens (or creates) the on-disk database at the app's Application Support directory.
+    /// Opens (or creates) the on-disk encrypted database in Application Support.
     static func onDisk(keychain: KeychainServicing) throws -> DatabaseService {
         let fm = FileManager.default
         guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw Error.applicationSupportUnavailable
         }
         try fm.createDirectory(at: base, withIntermediateDirectories: true)
-
         let dbURL = base.appendingPathComponent("ghostchat.db")
 
-        // Protect at file-system level: `.complete` = decryption requires unlocked device.
-        var attrs: [FileAttributeKey: Any] = [.protectionKey: FileProtectionType.complete]
-        if fm.fileExists(atPath: dbURL.path) {
-            try? fm.setAttributes(attrs, ofItemAtPath: dbURL.path)
-        } else {
-            fm.createFile(atPath: dbURL.path, contents: nil, attributes: attrs)
-        }
+        excludeFromBackup(url: dbURL)
 
-        // Exclude from iCloud / iTunes backup.
-        var urlVar = dbURL
-        var resourceValues = URLResourceValues()
-        resourceValues.isExcludedFromBackup = true
-        try? urlVar.setResourceValues(resourceValues)
+        return try encrypted(at: dbURL.path, keychain: keychain)
+    }
 
-        _ = try ensureMasterKey(keychain: keychain)
+    /// Opens or creates an encrypted database at an explicit path. Intended for tests
+    /// that need to inspect the raw file (e.g., prove ciphertext).
+    static func encrypted(at path: String, keychain: KeychainServicing) throws -> DatabaseService {
+        let passphrase = try ensureMasterKey(keychain: keychain)
 
         var configuration = Configuration()
         configuration.prepareDatabase { db in
+            // Cipher parameters MUST be set before `usePassphrase` on a fresh DB, and
+            // must match on re-open — hard-coded here so they never drift.
+            try db.execute(sql: "PRAGMA cipher_page_size = 4096")
+            try db.execute(sql: "PRAGMA kdf_iter = 256000")
+            try db.usePassphrase(passphrase)
+            try db.execute(sql: "PRAGMA cipher_memory_security = ON")
             try db.execute(sql: "PRAGMA secure_delete = ON")
             try db.execute(sql: "PRAGMA journal_mode = WAL")
             try db.execute(sql: "PRAGMA foreign_keys = ON")
         }
 
-        let queue = try DatabaseQueue(path: dbURL.path, configuration: configuration)
+        let queue = try DatabaseQueue(path: path, configuration: configuration)
         let service = DatabaseService(keychain: keychain, dbQueue: queue)
         try service.migrate()
         return service
     }
 
-    /// Spins up an in-memory DB for tests.
+    /// Plain in-memory DB for fast unit tests — no encryption because the DB never
+    /// touches disk. The master key is still provisioned so code paths exercising
+    /// the keychain stay covered.
     static func inMemory(keychain: KeychainServicing) throws -> DatabaseService {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
@@ -85,7 +90,6 @@ final class DatabaseService {
     // MARK: - Master key
 
     /// Returns the 32-byte DB master key, generating it on first access.
-    /// Not applied to the SQLite connection in Phase 3 — reserved for Phase 6 SQLCipher.
     @discardableResult
     static func ensureMasterKey(keychain: KeychainServicing) throws -> Data {
         if let existing = try keychain.get(Keys.dbMasterKey) {
@@ -177,5 +181,14 @@ final class DatabaseService {
             let url = base.appendingPathComponent(name)
             try? fm.removeItem(at: url)
         }
+    }
+
+    // MARK: - Private
+
+    private static func excludeFromBackup(url: URL) {
+        var mutable = url
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try? mutable.setResourceValues(resourceValues)
     }
 }

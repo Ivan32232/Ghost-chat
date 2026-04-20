@@ -30,12 +30,13 @@ packages:
   WebRTC:
     url: https://github.com/stasel/WebRTC
     from: "123.0.0"
-  GRDB:
-    url: https://github.com/groue/GRDB.swift
-    from: "6.29.0"
   Sentry:
     url: https://github.com/getsentry/sentry-cocoa
     from: "8.36.0"
+  # GRDB is provided via CocoaPods (GRDB.swift/SQLCipher subspec) to get real
+  # SQLCipher page-level encryption. See ios/Podfile. Run `pod install` after
+  # every `xcodegen generate` — XcodeGen rewrites the xcodeproj and CocoaPods
+  # re-integrates into it.
 
 targets:
   GhostChat:
@@ -93,8 +94,6 @@ targets:
         product: GhostCrypto
       - package: WebRTC
         product: WebRTC
-      - package: GRDB
-        product: GRDB
       - package: Sentry
         product: Sentry
     settings:

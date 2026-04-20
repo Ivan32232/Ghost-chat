@@ -52,6 +52,9 @@ ios/DerivedData/
 ios/.phase3-build.log
 ios/.phase3-test.log
 
+# CocoaPods — Pods/ is vendored, Podfile.lock IS committed to pin versions
+ios/Pods/
+
 # Phase 2 Android Gradle artifacts
 android/.gradle/
 android/build/

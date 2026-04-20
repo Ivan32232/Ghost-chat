@@ -1,0 +1,25 @@
+PODS:
+  - GRDB.swift/SQLCipher (6.24.1):
+    - SQLCipher (>= 3.4.2)
+  - SQLCipher (4.10.0):
+    - SQLCipher/standard (= 4.10.0)
+  - SQLCipher/common (4.10.0)
+  - SQLCipher/standard (4.10.0):
+    - SQLCipher/common
+
+DEPENDENCIES:
+  - GRDB.swift/SQLCipher (~> 6.24)
+  - SQLCipher (~> 4.6)
+
+SPEC REPOS:
+  trunk:
+    - GRDB.swift
+    - SQLCipher
+
+SPEC CHECKSUMS:
+  GRDB.swift: 136dcb5d8dddca50aae3ba7d77475f79e7232cd8
+  SQLCipher: eb79c64049cb002b4e9fcb30edb7979bf4706dfc
+
+PODFILE CHECKSUM: eb972334c614fd2df6c4cd207c350f94c5a83dfb
+
+COCOAPODS: 1.16.2
