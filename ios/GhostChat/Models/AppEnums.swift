@@ -23,10 +23,10 @@ enum Role: String, Codable, Equatable {
     case guest
 }
 
-enum Sender: String, Codable, Equatable {
-    case me
-    case peer
-    case system
+enum Sender: Int, Codable, Equatable {
+    case me = 0
+    case peer = 1
+    case system = 2
 }
 
 enum MessageType: Int, Codable, Equatable {
