@@ -38,6 +38,18 @@ GhostChat-Android/*.apk
 GhostChat-Android/**/*.apk
 GhostChat-Android/**/*.aab
 
+# Phase 2 iOS Swift Package build artifacts
+ios/.build/
+ios/.swiftpm/
+ios/Package.resolved
+
+# Phase 2 Android Gradle artifacts
+android/.gradle/
+android/build/
+android/**/build/
+android/local.properties
+android/.kotlin/
+
 # Signing keys — NEVER commit
 *.jks
 *.keystore
