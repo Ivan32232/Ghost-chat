@@ -5,14 +5,28 @@ struct TURNCredentials: Codable, Equatable {
     let credential: String
     let urls: [String]
     let ttl: Int
+    let pushAuth: String?
     let fetchedAt: Date
 
-    init(username: String, credential: String, urls: [String], ttl: Int, fetchedAt: Date = Date()) {
+    init(username: String, credential: String, urls: [String], ttl: Int, pushAuth: String? = nil, fetchedAt: Date = Date()) {
         self.username = username
         self.credential = credential
         self.urls = urls
         self.ttl = ttl
+        self.pushAuth = pushAuth
         self.fetchedAt = fetchedAt
+    }
+
+    /// Server JSON does not include `fetchedAt`; default it to `Date()` so the same type
+    /// can be decoded straight from the API response.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.username   = try c.decode(String.self,   forKey: .username)
+        self.credential = try c.decode(String.self,   forKey: .credential)
+        self.urls       = try c.decode([String].self, forKey: .urls)
+        self.ttl        = try c.decode(Int.self,      forKey: .ttl)
+        self.pushAuth   = try c.decodeIfPresent(String.self, forKey: .pushAuth)
+        self.fetchedAt  = try c.decodeIfPresent(Date.self, forKey: .fetchedAt) ?? Date()
     }
 
     /// True once ≥ 5 minutes remain below the `ttl` boundary.
@@ -51,6 +65,7 @@ final class TURNService {
               let ttl = json["ttl"] as? Int else {
             throw Error.malformedResponse
         }
-        return TURNCredentials(username: username, credential: credential, urls: urls, ttl: ttl)
+        let pushAuth = json["pushAuth"] as? String
+        return TURNCredentials(username: username, credential: credential, urls: urls, ttl: ttl, pushAuth: pushAuth)
     }
 }
