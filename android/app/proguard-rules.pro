@@ -1,0 +1,3 @@
+-keep class com.kordar.ghostchat.** { *; }
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**

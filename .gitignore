@@ -62,6 +62,13 @@ android/**/build/
 android/local.properties
 android/.kotlin/
 
+# Phase 4 Android app build artifacts
+android/app/build/
+android/app/release/
+android/**/*.apk
+android/**/*.aab
+android/.idea/
+
 # Signing keys — NEVER commit
 *.jks
 *.keystore
