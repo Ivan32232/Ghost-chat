@@ -255,6 +255,61 @@ public struct DoubleRatchet {
     }
 }
 
+// MARK: - State Persistence (for saved contacts)
+
+extension DoubleRatchet {
+
+    private struct SerializedStateV1: Codable {
+        let dhsPriv: Data
+        let dhrPubX963: Data?
+        let rk: Data
+        let cks: Data?
+        let ckr: Data?
+        let ns: UInt32
+        let nr: UInt32
+        let pn: UInt32
+        let mkSkipped: [String: Data]
+        let lastDHr: Data?
+    }
+
+    /// Opaque persistence blob. Contains secret key material — store in SQLCipher / protected DB only.
+    public var exportedState: Data {
+        get throws {
+            let snapshot = SerializedStateV1(
+                dhsPriv:    dhs.rawRepresentation,
+                dhrPubX963: dhr?.x963Representation,
+                rk:         rk.rawData,
+                cks:        cks?.rawData,
+                ckr:        ckr?.rawData,
+                ns: ns, nr: nr, pn: pn,
+                mkSkipped: mkSkipped.mapValues { $0.rawData },
+                lastDHr:   lastDHr
+            )
+            return try JSONEncoder().encode(snapshot)
+        }
+    }
+
+    /// Re-hydrate a ratchet previously persisted via `exportedState`.
+    public init(importing stateData: Data, keyPairGenerator: KeyPairGenerating? = nil) throws {
+        let snapshot = try JSONDecoder().decode(SerializedStateV1.self, from: stateData)
+        self.keyGen = keyPairGenerator ?? RandomKeyPairGenerator()
+        self.dhs    = try P256.KeyAgreement.PrivateKey(rawRepresentation: snapshot.dhsPriv)
+        if let pub = snapshot.dhrPubX963 {
+            self.dhr = try P256.KeyAgreement.PublicKey(x963Representation: pub)
+        } else {
+            self.dhr = nil
+        }
+        self.rk  = SymmetricKey(data: snapshot.rk)
+        self.cks = snapshot.cks.map { SymmetricKey(data: $0) }
+        self.ckr = snapshot.ckr.map { SymmetricKey(data: $0) }
+        self.ns  = snapshot.ns
+        self.nr  = snapshot.nr
+        self.pn  = snapshot.pn
+        self.mkSkipped = snapshot.mkSkipped.mapValues { SymmetricKey(data: $0) }
+        self.lastDHr   = snapshot.lastDHr
+    }
+}
+
 // MARK: - Errors
 
 public enum RatchetError: Error {
