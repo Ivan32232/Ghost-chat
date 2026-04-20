@@ -43,6 +43,13 @@ ios/.build/
 ios/.swiftpm/
 ios/Package.resolved
 
+# Phase 3 iOS XcodeGen artifacts — project.yml is source of truth
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+ios/GhostChat/Resources/Info.plist
+ios/GhostChat/Resources/GhostChat.entitlements
+ios/DerivedData/
+
 # Phase 2 Android Gradle artifacts
 android/.gradle/
 android/build/
@@ -87,4 +94,4 @@ ghost-chat.bak/
 # Temp files
 2.txt
 Midjourney.html
-Midjourney_files/
+Midjourney_files/test.db

@@ -1,0 +1,142 @@
+name: GhostChat
+
+options:
+  bundleIdPrefix: com.kordar
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    SWIFT_VERSION: "5.9"
+    ENABLE_BITCODE: NO
+    TARGETED_DEVICE_FAMILY: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    DEAD_CODE_STRIPPING: YES
+    CLANG_ENABLE_MODULES: YES
+    SWIFT_STRICT_CONCURRENCY: minimal
+  configs:
+    Debug:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+
+packages:
+  GhostCrypto:
+    path: .
+  WebRTC:
+    url: https://github.com/stasel/WebRTC
+    from: "123.0.0"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: "6.29.0"
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    from: "8.36.0"
+
+targets:
+  GhostChat:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: GhostChat
+        excludes:
+          - "Resources/Sounds/.gitkeep"
+    resources:
+      - path: GhostChat/Resources/Localizable.xcstrings
+      - path: GhostChat/Resources/Sounds
+        optional: true
+    info:
+      path: GhostChat/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Ghost Chat
+        CFBundleShortVersionString: "2.0.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        NSFaceIDUsageDescription: Unlock Ghost Chat with biometrics
+        NSMicrophoneUsageDescription: Record voice messages and make voice calls
+        NSCameraUsageDescription: Attach photos to messages
+        NSPhotoLibraryUsageDescription: Attach photos to messages
+        UIBackgroundModes:
+          - voip
+          - audio
+          - remote-notification
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+        CFBundleURLTypes:
+          - CFBundleURLName: com.kordar.ghostchat
+            CFBundleURLSchemes:
+              - ghostchat
+    entitlements:
+      path: GhostChat/Resources/GhostChat.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.associated-domains:
+          - applinks:ghostchat.one
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.kordar.ghostchat
+    dependencies:
+      - package: GhostCrypto
+        product: GhostCrypto
+      - package: WebRTC
+        product: WebRTC
+      - package: GRDB
+        product: GRDB
+      - package: Sentry
+        product: Sentry
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kordar.ghostchat
+        PRODUCT_NAME: GhostChat
+        DEVELOPMENT_TEAM: G2VZKDYV38
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]: NO
+        CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]: NO
+        GENERATE_INFOPLIST_FILE: NO
+      configs:
+        Debug:
+          ENABLE_TESTABILITY: YES
+        Release:
+          ENABLE_TESTABILITY: NO
+
+  GhostChatTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: GhostChatTests
+    dependencies:
+      - target: GhostChat
+      - package: GhostCrypto
+        product: GhostCrypto
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kordar.ghostchat.tests
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/GhostChat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GhostChat
+        BUNDLE_LOADER: $(TEST_HOST)
+
+schemes:
+  GhostChat:
+    build:
+      targets:
+        GhostChat: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - GhostChatTests
+    archive:
+      config: Release
