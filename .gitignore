@@ -49,6 +49,8 @@ ios/*.xcworkspace/
 ios/GhostChat/Resources/Info.plist
 ios/GhostChat/Resources/GhostChat.entitlements
 ios/DerivedData/
+ios/.phase3-build.log
+ios/.phase3-test.log
 
 # Phase 2 Android Gradle artifacts
 android/.gradle/
