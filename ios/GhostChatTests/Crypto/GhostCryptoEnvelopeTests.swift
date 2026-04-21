@@ -24,10 +24,13 @@ final class GhostCryptoEnvelopeTests: XCTestCase {
     }
 
     private func handshake(_ host: GhostChatCrypto, _ guest: GhostChatCrypto) async throws {
-        let hostPkt = try await host.beginHandshake()
-        let guestPkt = try await guest.beginHandshake()
+        let hostPkt = try await host.beginHandshake(role: .host)
+        let guestPkt = try await guest.beginHandshake(role: .guest)
+        let pqOut = try await guest.completeAsGuest(peer: hostPkt)
         try await host.completeAsHost(peer: guestPkt)
-        try await guest.completeAsGuest(peer: hostPkt)
+        if let pq = pqOut {
+            try await host.completePQ(pqCiphertext: pq.pqCiphertext)
+        }
     }
 
     func test_encryptWrapsInEnvelopeAndDecryptUnwraps() async throws {

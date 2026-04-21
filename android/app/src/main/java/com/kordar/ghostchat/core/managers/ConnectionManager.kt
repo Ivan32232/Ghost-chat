@@ -4,6 +4,8 @@ import android.content.Context
 import com.kordar.ghostchat.core.crypto.GhostChatCrypto
 import com.kordar.ghostchat.core.crypto.IdentityKeyService
 import com.kordar.ghostchat.core.crypto.KeyExchangePacket
+import com.kordar.ghostchat.core.crypto.PqExchangePacket
+import com.kordar.ghostchat.core.crypto.RatchetRole
 import com.kordar.ghostchat.core.files.ChunkTimeoutTracker
 import com.kordar.ghostchat.core.files.FileTransferService
 import com.kordar.ghostchat.core.network.SignalingClient
@@ -296,21 +298,46 @@ class ConnectionManager(
     private suspend fun startKeyExchangeOverDataChannel() {
         val crypto = crypto ?: return
         val rtc = rtc ?: return
+        val role = role ?: return
         runCatching {
-            val pkt = crypto.beginHandshake()
-            val encoded = KeyExchangePacket.encode(pkt)
-            rtc.send(encoded.toByteArray(Charsets.UTF_8))
+            val ratchetRole = if (role == Role.HOST) RatchetRole.HOST else RatchetRole.GUEST
+            val pkt = crypto.beginHandshake(ratchetRole)
+            rtc.send(KeyExchangePacket.encode(pkt).toByteArray(Charsets.UTF_8))
         }.onFailure { _state.value = ConnectionState.DISCONNECTED }
     }
 
     private suspend fun completeHandshake(pkt: KeyExchangePacket?) {
         val role = role ?: return
         val crypto = crypto ?: return
+        val rtc = rtc ?: return
         pkt ?: return
         runCatching {
-            if (role == Role.HOST) crypto.completeAsHost(pkt) else crypto.completeAsGuest(pkt)
+            if (role == Role.HOST) {
+                val ready = crypto.completeAsHost(pkt)
+                _peerIdentity.value = java.util.Base64.getDecoder().decode(pkt.identityKey)
+                if (ready) {
+                    _state.value = ConnectionState.ENCRYPTED
+                    _safetyNumber.value = runCatching { crypto.safetyNumber() }.getOrNull()
+                }
+                // Otherwise HOST sits in AwaitingPq until a PqExchangePacket arrives.
+            } else {
+                val pqOut = crypto.completeAsGuest(pkt)
+                _peerIdentity.value = java.util.Base64.getDecoder().decode(pkt.identityKey)
+                _state.value = ConnectionState.ENCRYPTED
+                _safetyNumber.value = runCatching { crypto.safetyNumber() }.getOrNull()
+                if (pqOut != null) {
+                    rtc.send(PqExchangePacket.encode(pqOut).toByteArray(Charsets.UTF_8))
+                }
+            }
+        }
+    }
+
+    private suspend fun completePqHandshake(pkt: PqExchangePacket) {
+        val crypto = crypto ?: return
+        runCatching {
+            val ct = java.util.Base64.getDecoder().decode(pkt.pqCiphertext)
+            crypto.completePQ(ct)
             _state.value = ConnectionState.ENCRYPTED
-            _peerIdentity.value = java.util.Base64.getDecoder().decode(pkt.identityKey)
             _safetyNumber.value = runCatching { crypto.safetyNumber() }.getOrNull()
         }
     }
@@ -318,8 +345,12 @@ class ConnectionManager(
     private suspend fun handleDataChannelMessage(data: ByteArray) {
         val crypto = crypto ?: return
         val text = String(data, Charsets.UTF_8)
+        // Plaintext handshake packets — either KeyExchangePacket or PqExchangePacket (Phase 7 hybrid).
         runCatching { KeyExchangePacket.decode(text) }.getOrNull()?.let { pkt ->
             if (pkt.type == "key-exchange") { completeHandshake(pkt); return }
+        }
+        runCatching { PqExchangePacket.decode(text) }.getOrNull()?.let { pqPkt ->
+            if (pqPkt.type == "pq-exchange") { completePqHandshake(pqPkt); return }
         }
         val plaintext = runCatching { crypto.decrypt(text) }.getOrNull() ?: return
 

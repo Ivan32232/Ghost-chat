@@ -29,26 +29,41 @@ struct GhostCryptoExport: Codable, Equatable {
 
 /// Stateful actor wrapping a single P2P crypto session.
 ///
-/// Lifecycle:
-/// 1. `beginHandshake()` → send resulting packet over signaling.
-/// 2. On peer's packet arrival → `completeAsHost(peer:)` or `completeAsGuest(peer:)`.
-/// 3. Session is encrypted: `encrypt(_:)` / `decrypt(_:)`.
-/// 4. `exportState()` to persist for saved contacts; `restore(_:)` on reopen.
-///
-/// Phase 7: every message is wrapped in a `MessageEnvelope {m,t,c,id}` before padding +
-/// encryption. Receivers extract `env.t` and pass it to `ReplayGuard.admit` for ±5 min
-/// window enforcement. Clock is injectable for tests.
+/// Lifecycle (Phase 7, post ML-KEM integration):
+/// 1. `beginHandshake(role:)` → generates ECDH ephemeral; HOST *also* generates an
+///    ML-KEM768 keypair (when `PostQuantum.isSupported`) and attaches its public key to
+///    the resulting packet.
+/// 2. On peer's `KeyExchangePacket`:
+///    - GUEST → `completeAsGuest(peer:)` returns an optional `PqExchangePacket`. If the
+///      HOST advertised a `pqKey` and the GUEST can encapsulate, the returned packet
+///      carries the ciphertext the HOST needs.
+///    - HOST → `completeAsHost(peer:)` returns `true` if the session is already ready
+///      (ECDH-only path); returns `false` if we're now *awaiting* a PqExchangePacket.
+/// 3. HOST only: `completePQ(pqCiphertext:)` decapsulates and finishes the handshake.
+/// 4. Once `.ready`, `encrypt` / `decrypt` — envelope-wrapped, timestamp-guarded.
+/// 5. `exportState()` / `restore(_:)` for saved-contact persistence.
 actor GhostChatCrypto {
 
     enum Error: Swift.Error, Equatable {
         case notInitialized
         case alreadyHandshook
         case invalidPeerPacket
+        case unexpectedState
     }
 
     private enum InternalState {
         case uninitialized
-        case handshakeInProgress(ephemeral: P256.KeyAgreement.PrivateKey)
+        case handshakeInProgress(
+            ephemeral: P256.KeyAgreement.PrivateKey,
+            mlkemPrivate: Data?         // non-nil only when HOST generated an ML-KEM keypair
+        )
+        case awaitingPq(
+            ourEphemeral: P256.KeyAgreement.PrivateKey,
+            mlkemPrivate: Data,
+            peerECDHPub: P256.KeyAgreement.PublicKey,
+            ecdhSharedSecret: Data,
+            peerIdentity: Data
+        )
         case ready(ratchet: DoubleRatchet, peerIdentity: Data)
     }
 
@@ -68,47 +83,127 @@ actor GhostChatCrypto {
 
     // MARK: - Handshake
 
-    /// Generates an ephemeral keypair and returns the packet to send to the peer.
-    func beginHandshake() throws -> KeyExchangePacket {
+    /// Generate our ephemeral ECDH keypair and (if we are the HOST and PostQuantum is
+    /// supported on this platform) an ML-KEM768 keypair. Returns the `KeyExchangePacket`
+    /// to ship to the peer over the DataChannel.
+    func beginHandshake(role: RatchetRole) throws -> KeyExchangePacket {
         if case .ready = state { throw Error.alreadyHandshook }
         let eph = P256.KeyAgreement.PrivateKey()
-        state = .handshakeInProgress(ephemeral: eph)
+
+        var mlkemPriv: Data? = nil
+        var pqKey: Data? = nil
+        if role == .host, PostQuantum.isSupported {
+            if let kp = try? PostQuantum.generateKeyPair() {
+                mlkemPriv = kp.privateKey
+                pqKey = kp.publicKey
+            }
+        }
+
+        state = .handshakeInProgress(ephemeral: eph, mlkemPrivate: mlkemPriv)
         return KeyExchangePacket(
             publicKey: eph.publicKey.x963Representation,
-            identityKey: try identity.publicKeyX963
+            identityKey: try identity.publicKeyX963,
+            pqKey: pqKey,
+            pqSupported: PostQuantum.isSupported
         )
     }
 
-    func completeAsHost(peer: KeyExchangePacket) throws {
-        try complete(peer: peer, role: .host)
-    }
-
-    func completeAsGuest(peer: KeyExchangePacket) throws {
-        try complete(peer: peer, role: .guest)
-    }
-
-    private func complete(peer: KeyExchangePacket, role: RatchetRole) throws {
-        guard case .handshakeInProgress(let eph) = state else {
+    /// HOST-side completion. Returns `true` when the session is ready after this call;
+    /// returns `false` when we're now *awaiting* a `PqExchangePacket` from the GUEST
+    /// (i.e., we advertised ML-KEM and the GUEST told us it can encapsulate).
+    @discardableResult
+    func completeAsHost(peer: KeyExchangePacket) throws -> Bool {
+        guard case .handshakeInProgress(let eph, let mlkemPriv) = state else {
             throw Error.notInitialized
         }
         guard peer.type == "key-exchange" else { throw Error.invalidPeerPacket }
 
         let peerPub = try P256.KeyAgreement.PublicKey(x963Representation: peer.publicKey)
         let shared = try eph.sharedSecretFromKeyAgreement(with: peerPub)
-        let rootKey = CryptoUtils.deriveInitialRootKey(sharedSecret: shared)
+        let ecdhSS = shared.rawData
 
-        let theirPub: P256.KeyAgreement.PublicKey? = (role == .host) ? peerPub : nil
+        let peerSupportsPQ = peer.pqSupported ?? false
+        if let mlkemPriv, peerSupportsPQ {
+            // Hold off — GUEST will follow up with a PqExchangePacket carrying our pq ciphertext.
+            state = .awaitingPq(
+                ourEphemeral: eph,
+                mlkemPrivate: mlkemPriv,
+                peerECDHPub: peerPub,
+                ecdhSharedSecret: ecdhSS,
+                peerIdentity: peer.identityKey
+            )
+            return false
+        }
+
+        // ECDH-only path (either we didn't advertise PQ or peer can't encapsulate).
+        let sessionKey = PostQuantum.hybridDeriveSharedKey(ecdhSharedSecret: ecdhSS, pqSharedSecret: nil)
         let ratchet = DoubleRatchet(
-            role: role,
-            sharedKey: rootKey,
+            role: .host,
+            sharedKey: SymmetricKey(data: sessionKey),
             ourKeyPair: eph,
-            theirPublicKey: theirPub
+            theirPublicKey: peerPub
         )
         state = .ready(ratchet: ratchet, peerIdentity: peer.identityKey)
+        return true
+    }
+
+    /// Finish the HOST handshake by decapsulating the GUEST's ML-KEM ciphertext.
+    func completePQ(pqCiphertext: Data) throws {
+        guard case .awaitingPq(let eph, let mlkemPriv, let peerPub, let ecdhSS, let peerIdentity) = state else {
+            throw Error.unexpectedState
+        }
+        let pqSS = try PostQuantum.decapsulate(ciphertext: pqCiphertext, privateKey: mlkemPriv)
+        let sessionKey = PostQuantum.hybridDeriveSharedKey(ecdhSharedSecret: ecdhSS, pqSharedSecret: pqSS)
+        let ratchet = DoubleRatchet(
+            role: .host,
+            sharedKey: SymmetricKey(data: sessionKey),
+            ourKeyPair: eph,
+            theirPublicKey: peerPub
+        )
+        state = .ready(ratchet: ratchet, peerIdentity: peerIdentity)
+    }
+
+    /// GUEST-side completion. Returns a `PqExchangePacket` iff both sides can do ML-KEM
+    /// and the HOST sent us its Kyber public key — in that case the caller must forward
+    /// the returned packet to the HOST before either side can encrypt.
+    @discardableResult
+    func completeAsGuest(peer: KeyExchangePacket) throws -> PqExchangePacket? {
+        guard case .handshakeInProgress(let eph, _) = state else {
+            throw Error.notInitialized
+        }
+        guard peer.type == "key-exchange" else { throw Error.invalidPeerPacket }
+
+        let peerPub = try P256.KeyAgreement.PublicKey(x963Representation: peer.publicKey)
+        let shared = try eph.sharedSecretFromKeyAgreement(with: peerPub)
+        let ecdhSS = shared.rawData
+
+        var pqSS: Data? = nil
+        var pqOut: PqExchangePacket? = nil
+        if let pqKey = peer.pqKey, PostQuantum.isSupported,
+           let encap = try? PostQuantum.encapsulate(peerPublic: pqKey) {
+            pqSS = encap.sharedSecret
+            pqOut = PqExchangePacket(pqCiphertext: encap.ciphertext)
+        }
+
+        let sessionKey = PostQuantum.hybridDeriveSharedKey(ecdhSharedSecret: ecdhSS, pqSharedSecret: pqSS)
+        let ratchet = DoubleRatchet(
+            role: .guest,
+            sharedKey: SymmetricKey(data: sessionKey),
+            ourKeyPair: eph,
+            theirPublicKey: nil
+        )
+        state = .ready(ratchet: ratchet, peerIdentity: peer.identityKey)
+        return pqOut
     }
 
     var isReady: Bool {
         if case .ready = state { return true } else { return false }
+    }
+
+    /// `true` when we've sent our ECDH packet and are waiting for the GUEST's
+    /// PqExchangePacket to arrive. Used by ConnectionManager to gate state transitions.
+    var isAwaitingPq: Bool {
+        if case .awaitingPq = state { return true } else { return false }
     }
 
     // MARK: - Encrypt / Decrypt (envelope-wrapped)
@@ -143,9 +238,6 @@ actor GhostChatCrypto {
     func decryptEnvelope(_ wireBase64: String) throws -> MessageEnvelope {
         guard case .ready(var ratchet, let peer) = state else { throw Error.notInitialized }
 
-        // Cheap first-line defence: nonce + counter LRU on the ReplayGuard BEFORE decrypt.
-        // `timestampMs: nil` here — the authoritative timestamp lives inside the envelope and
-        // is checked post-decrypt once we can actually read it.
         if let wireData = Data(base64Encoded: wireBase64),
            let parsed = try? WireFormat.parseMessage(wireData),
            let header = try? WireFormat.parseHeader(parsed.header) {
@@ -163,13 +255,10 @@ actor GhostChatCrypto {
         let envData = Data(envJson.utf8)
         let env = try JSONDecoder().decode(MessageEnvelope.self, from: envData)
 
-        // Post-decrypt timestamp check — the message is authentic (AES-GCM tag valid),
-        // but may still be stale and need rejection.
         let now = clock.nowMs()
         if abs(now - env.t) > ReplayGuard.defaultTimestampWindowMs {
             throw ReplayError.timestampOutOfWindow
         }
-
         return env
     }
 
@@ -188,8 +277,7 @@ actor GhostChatCrypto {
     }
 
     /// Current ratchet root key — the session's post-handshake shared secret.
-    /// Used to seed `ContactKeyRotation.deriveNextSeed` at session close. Deterministic
-    /// across iOS ↔ Android for a given session.
+    /// Used to seed `ContactKeyRotation.deriveNextSeed` at session close.
     func sessionSecret() throws -> Data {
         guard case .ready(let ratchet, _) = state else { throw Error.notInitialized }
         return ratchet.currentRootKey
@@ -203,7 +291,6 @@ actor GhostChatCrypto {
         return try JSONEncoder().encode(bundle)
     }
 
-    /// Rehydrate a session from a previously exported blob.
     func restore(from data: Data) throws {
         let bundle = try JSONDecoder().decode(GhostCryptoExport.self, from: data)
         let ratchet = try DoubleRatchet(importing: bundle.ratchetState)

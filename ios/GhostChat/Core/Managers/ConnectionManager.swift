@@ -1,4 +1,5 @@
 import Foundation
+import GhostCrypto
 
 /// Orchestrates SignalingClient + GhostRTC + GhostChatCrypto through a single state machine.
 /// Owns the per-session `rtc` and `crypto` instances; recreates them on every fresh connect.
@@ -267,6 +268,11 @@ final class ConnectionManager: ObservableObject {
                 try? await completeHandshake(with: pkt)
                 return
             }
+            if type == "pq-exchange",
+               let pkt = try? JSONDecoder().decode(PqExchangePacket.self, from: raw) {
+                try? await completePqHandshake(with: pkt)
+                return
+            }
         }
         if let candidate = json["candidate"] as? String {
             let mid = json["sdpMid"] as? String
@@ -302,9 +308,10 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func startKeyExchangeOverDataChannel() async {
-        guard let crypto, let rtc else { return }
+        guard let crypto, let rtc, let role else { return }
         do {
-            let pkt = try await crypto.beginHandshake()
+            let ratchetRole: RatchetRole = (role == .host) ? .host : .guest
+            let pkt = try await crypto.beginHandshake(role: ratchetRole)
             let data = try JSONEncoder().encode(pkt)
             try rtc.send(data)
         } catch {
@@ -313,14 +320,30 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func completeHandshake(with peerPkt: KeyExchangePacket) async throws {
-        guard let crypto, let role else { return }
-        if role == .host {
-            try await crypto.completeAsHost(peer: peerPkt)
-        } else {
-            try await crypto.completeAsGuest(peer: peerPkt)
-        }
-        state = .encrypted
+        guard let crypto, let role, let rtc else { return }
         peerIdentity = peerPkt.identityKey
+        if role == .host {
+            let ready = try await crypto.completeAsHost(peer: peerPkt)
+            if ready {
+                state = .encrypted
+                safetyNumber = try? await crypto.safetyNumber()
+            }
+            // Otherwise HOST sits in awaitingPq until a PqExchangePacket arrives.
+        } else {
+            let pqOut = try await crypto.completeAsGuest(peer: peerPkt)
+            state = .encrypted
+            safetyNumber = try? await crypto.safetyNumber()
+            if let pqOut {
+                let data = try JSONEncoder().encode(pqOut)
+                try rtc.send(data)
+            }
+        }
+    }
+
+    private func completePqHandshake(with pkt: PqExchangePacket) async throws {
+        guard let crypto else { return }
+        try await crypto.completePQ(pqCiphertext: pkt.pqCiphertext)
+        state = .encrypted
         safetyNumber = try? await crypto.safetyNumber()
     }
 
@@ -329,6 +352,12 @@ final class ConnectionManager: ObservableObject {
         if let pkt = try? JSONDecoder().decode(KeyExchangePacket.self, from: data),
            pkt.type == "key-exchange" {
             try? await completeHandshake(with: pkt)
+            return
+        }
+        // Phase 7: HOST may receive a PqExchangePacket right after GUEST processes our key-exchange.
+        if let pqPkt = try? JSONDecoder().decode(PqExchangePacket.self, from: data),
+           pqPkt.type == "pq-exchange" {
+            try? await completePqHandshake(with: pqPkt)
             return
         }
         // Otherwise expect encrypted wire — decrypt via Double Ratchet.

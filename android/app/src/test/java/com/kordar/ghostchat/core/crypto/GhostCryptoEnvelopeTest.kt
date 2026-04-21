@@ -26,10 +26,14 @@ class GhostCryptoEnvelopeTest {
     }
 
     private suspend fun handshake(host: GhostChatCrypto, guest: GhostChatCrypto) {
-        val hostPkt = host.beginHandshake()
-        val guestPkt = guest.beginHandshake()
+        val hostPkt = host.beginHandshake(RatchetRole.HOST)
+        val guestPkt = guest.beginHandshake(RatchetRole.GUEST)
+        val pqOut = guest.completeAsGuest(peer = hostPkt)
         host.completeAsHost(peer = guestPkt)
-        guest.completeAsGuest(peer = hostPkt)
+        if (pqOut != null) {
+            val ct = java.util.Base64.getDecoder().decode(pqOut.pqCiphertext)
+            host.completePQ(ct)
+        }
     }
 
     @Test

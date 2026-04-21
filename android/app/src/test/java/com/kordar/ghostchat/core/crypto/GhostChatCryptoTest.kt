@@ -8,18 +8,22 @@ import org.junit.Test
 
 class GhostChatCryptoTest {
 
+    private suspend fun handshake(host: GhostChatCrypto, guest: GhostChatCrypto) {
+        val hostPkt = host.beginHandshake(RatchetRole.HOST)
+        val guestPkt = guest.beginHandshake(RatchetRole.GUEST)
+        val pqOut = guest.completeAsGuest(peer = hostPkt)
+        host.completeAsHost(peer = guestPkt)
+        if (pqOut != null) {
+            val ciphertext = java.util.Base64.getDecoder().decode(pqOut.pqCiphertext)
+            host.completePQ(ciphertext)
+        }
+    }
+
     @Test
     fun `two-party session exchanges encrypted messages`() = runTest {
-        val hostIdentity = IdentityKeyService(InMemoryKeystore())
-        val guestIdentity = IdentityKeyService(InMemoryKeystore())
-        val host = GhostChatCrypto(hostIdentity)
-        val guest = GhostChatCrypto(guestIdentity)
-
-        val hostPkt = host.beginHandshake()
-        val guestPkt = guest.beginHandshake()
-
-        host.completeAsHost(peer = guestPkt)
-        guest.completeAsGuest(peer = hostPkt)
+        val host = GhostChatCrypto(IdentityKeyService(InMemoryKeystore()))
+        val guest = GhostChatCrypto(IdentityKeyService(InMemoryKeystore()))
+        handshake(host, guest)
 
         val cipher = host.encrypt("hello guest")
         assertThat(guest.decrypt(cipher)).isEqualTo("hello guest")
@@ -30,15 +34,9 @@ class GhostChatCryptoTest {
 
     @Test
     fun `safety number matches on both sides`() = runTest {
-        val hostIdentity = IdentityKeyService(InMemoryKeystore())
-        val guestIdentity = IdentityKeyService(InMemoryKeystore())
-        val host = GhostChatCrypto(hostIdentity)
-        val guest = GhostChatCrypto(guestIdentity)
-
-        val hostPkt = host.beginHandshake()
-        val guestPkt = guest.beginHandshake()
-        host.completeAsHost(guestPkt)
-        guest.completeAsGuest(hostPkt)
+        val host = GhostChatCrypto(IdentityKeyService(InMemoryKeystore()))
+        val guest = GhostChatCrypto(IdentityKeyService(InMemoryKeystore()))
+        handshake(host, guest)
 
         assertThat(host.safetyNumber()).isEqualTo(guest.safetyNumber())
     }
@@ -46,14 +44,9 @@ class GhostChatCryptoTest {
     @Test
     fun `export and restore keeps session decryptable`() = runTest {
         val hostIdentity = IdentityKeyService(InMemoryKeystore())
-        val guestIdentity = IdentityKeyService(InMemoryKeystore())
         val host = GhostChatCrypto(hostIdentity)
-        val guest = GhostChatCrypto(guestIdentity)
-
-        val hostPkt = host.beginHandshake()
-        val guestPkt = guest.beginHandshake()
-        host.completeAsHost(guestPkt)
-        guest.completeAsGuest(hostPkt)
+        val guest = GhostChatCrypto(IdentityKeyService(InMemoryKeystore()))
+        handshake(host, guest)
 
         val first = host.encrypt("one")
         assertThat(guest.decrypt(first)).isEqualTo("one")
@@ -80,15 +73,11 @@ class GhostChatCryptoTest {
 
     @Test
     fun `begin twice after handshake throws AlreadyHandshook`() = runTest {
-        val hostIdentity = IdentityKeyService(InMemoryKeystore())
-        val guestIdentity = IdentityKeyService(InMemoryKeystore())
-        val host = GhostChatCrypto(hostIdentity)
-        val guest = GhostChatCrypto(guestIdentity)
-        val hostPkt = host.beginHandshake()
-        val guestPkt = guest.beginHandshake()
-        host.completeAsHost(guestPkt)
+        val host = GhostChatCrypto(IdentityKeyService(InMemoryKeystore()))
+        val guest = GhostChatCrypto(IdentityKeyService(InMemoryKeystore()))
+        handshake(host, guest)
         try {
-            host.beginHandshake()
+            host.beginHandshake(RatchetRole.HOST)
             throw AssertionError("should have thrown AlreadyHandshook")
         } catch (e: GhostChatCrypto.Error.AlreadyHandshook) {
             // expected

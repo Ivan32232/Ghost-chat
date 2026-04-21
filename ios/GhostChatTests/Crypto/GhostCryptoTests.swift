@@ -10,10 +10,13 @@ final class GhostChatCryptoTests: XCTestCase {
     }
 
     private func handshake(_ host: GhostChatCrypto, _ guest: GhostChatCrypto) async throws {
-        let hostPkt = try await host.beginHandshake()
-        let guestPkt = try await guest.beginHandshake()
+        let hostPkt = try await host.beginHandshake(role: .host)
+        let guestPkt = try await guest.beginHandshake(role: .guest)
+        let pqOut = try await guest.completeAsGuest(peer: hostPkt)
         try await host.completeAsHost(peer: guestPkt)
-        try await guest.completeAsGuest(peer: hostPkt)
+        if let pq = pqOut {
+            try await host.completePQ(pqCiphertext: pq.pqCiphertext)
+        }
     }
 
     // MARK: - Handshake
@@ -28,18 +31,20 @@ final class GhostChatCryptoTests: XCTestCase {
 
     func test_beginHandshake_returnsValidPacket() async throws {
         let (host, idHost, _, _) = pair()
-        let pkt = try await host.beginHandshake()
+        let pkt = try await host.beginHandshake(role: .host)
         XCTAssertEqual(pkt.type, "key-exchange")
         XCTAssertEqual(pkt.publicKey.count, 65)
         XCTAssertEqual(pkt.publicKey[0], 0x04)
         XCTAssertEqual(pkt.identityKey, try idHost.publicKeyX963)
         XCTAssertEqual(pkt.v, 3)
+        // iOS: PostQuantum.isSupported = false → no pqKey advertised.
         XCTAssertNil(pkt.pqKey)
+        XCTAssertEqual(pkt.pqSupported, false)
     }
 
     func test_completeBeforeBegin_throws() async throws {
         let (host, _, guest, _) = pair()
-        let guestPkt = try await guest.beginHandshake()
+        let guestPkt = try await guest.beginHandshake(role: .guest)
         do {
             try await host.completeAsHost(peer: guestPkt)
             XCTFail("should have thrown")
@@ -50,14 +55,7 @@ final class GhostChatCryptoTests: XCTestCase {
 
     func test_invalidPeerPacketType_throws() async throws {
         let (host, _, _, _) = pair()
-        _ = try await host.beginHandshake()
-        let bogus = KeyExchangePacket(
-            publicKey: Data(count: 65),
-            identityKey: Data(count: 65),
-            v: 3
-        )
-        var mangled = try JSONDecoder().decode(KeyExchangePacket.self, from: JSONEncoder().encode(bogus))
-        _ = mangled
+        _ = try await host.beginHandshake(role: .host)
         // Build one with a wrong type directly via raw JSON:
         let raw = #"{"type":"bogus","publicKey":"","identityKey":"","v":3}"#
         let bad = try JSONDecoder().decode(KeyExchangePacket.self, from: Data(raw.utf8))

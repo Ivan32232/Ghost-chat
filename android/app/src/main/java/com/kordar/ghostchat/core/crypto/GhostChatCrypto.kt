@@ -12,15 +12,18 @@ import kotlin.math.abs
  * Stateful wrapper around a single [DoubleRatchet] session. Mirrors the iOS `actor
  * GhostChatCrypto` — all mutating methods are behind a [Mutex] to serialize access.
  *
- * Lifecycle:
- *   1. [beginHandshake] → returns the packet to send to the peer
- *   2. On peer's packet → [completeAsHost] / [completeAsGuest]
- *   3. [encrypt] / [decrypt] while `isReady`
- *   4. [exportState] to persist for saved contacts, [restore] on reopen
- *
- * Phase 7: every message is wrapped in a [MessageEnvelope] `{m,t,c,id}` before padding +
- * encryption. Receivers extract `env.t` and pass it to [ReplayGuard]'s ±5 min window. Clock
- * is injectable for tests via the [clock] constructor param.
+ * Lifecycle (Phase 7, post ML-KEM integration):
+ *   1. [beginHandshake] takes a role. HOST generates an ML-KEM768 keypair and ships its
+ *      public key in `pqKey`; GUEST does not advertise a key.
+ *   2. On peer's [KeyExchangePacket]:
+ *      - GUEST → [completeAsGuest] returns an optional [PqExchangePacket]. When HOST
+ *        advertised a Kyber public key *and* we can encapsulate, the returned packet
+ *        carries the ciphertext the HOST needs to decapsulate.
+ *      - HOST → [completeAsHost] returns `true` if the session is ready (ECDH-only path);
+ *        returns `false` if we're now awaiting a PqExchangePacket from the peer.
+ *   3. HOST only: [completePQ] decapsulates and finishes the handshake.
+ *   4. Once ready, [encrypt] / [decrypt] — envelope-wrapped, timestamp-guarded.
+ *   5. [exportState] / [restore] for saved-contact persistence.
  */
 class GhostChatCrypto(
     private val identity: IdentityKeyService,
@@ -32,11 +35,22 @@ class GhostChatCrypto(
         data object NotInitialized     : Error("crypto not initialized")
         data object AlreadyHandshook   : Error("crypto already handshook")
         data object InvalidPeerPacket  : Error("invalid peer packet")
+        data object UnexpectedState    : Error("unexpected state for this operation")
     }
 
     private sealed class State {
         data object Uninitialized : State()
-        data class HandshakeInProgress(val ephemeral: Bc.ECKeyPair) : State()
+        data class HandshakeInProgress(
+            val ephemeral: Bc.ECKeyPair,
+            val mlkemPrivate: ByteArray?
+        ) : State()
+        data class AwaitingPq(
+            val ourEphemeral: Bc.ECKeyPair,
+            val mlkemPrivate: ByteArray,
+            val peerEcdhPubBytes: ByteArray,
+            val ecdhSharedSecret: ByteArray,
+            val peerIdentity: ByteArray
+        ) : State()
         data class Ready(val ratchet: DoubleRatchet, val peerIdentity: ByteArray) : State()
     }
 
@@ -47,50 +61,119 @@ class GhostChatCrypto(
     val isReady: Boolean
         get() = state is State.Ready
 
-    suspend fun beginHandshake(): KeyExchangePacket = mutex.withLock {
+    /** `true` while we've sent our ECDH packet and are waiting on the GUEST's PqExchangePacket. */
+    val isAwaitingPq: Boolean
+        get() = state is State.AwaitingPq
+
+    suspend fun beginHandshake(role: RatchetRole): KeyExchangePacket = mutex.withLock {
         when (state) {
             is State.Ready -> throw Error.AlreadyHandshook
             else -> Unit
         }
         val ephemeral = Bc.generateKeyPair()
-        state = State.HandshakeInProgress(ephemeral)
+        var mlkemPriv: ByteArray? = null
+        var pqKeyB64: String? = null
+        if (role == RatchetRole.HOST && PostQuantum.IS_SUPPORTED) {
+            val kp = PostQuantum.generateKeyPair()
+            mlkemPriv = kp.privateKey
+            pqKeyB64 = Base64.getEncoder().encodeToString(kp.publicKey)
+        }
+        state = State.HandshakeInProgress(ephemeral, mlkemPriv)
         KeyExchangePacket(
-            publicKey   = ephemeral.publicKeyBytes.toBase64(),
-            identityKey = identity.publicKeyX963.toBase64()
+            publicKey    = Base64.getEncoder().encodeToString(ephemeral.publicKeyBytes),
+            identityKey  = Base64.getEncoder().encodeToString(identity.publicKeyX963),
+            pqKey        = pqKeyB64,
+            pqSupported  = PostQuantum.IS_SUPPORTED
         )
     }
 
-    suspend fun completeAsHost(peer: KeyExchangePacket) = complete(peer, RatchetRole.HOST)
-
-    suspend fun completeAsGuest(peer: KeyExchangePacket) = complete(peer, RatchetRole.GUEST)
-
-    private suspend fun complete(peer: KeyExchangePacket, role: RatchetRole) = mutex.withLock {
-        val ephemeral = (state as? State.HandshakeInProgress)?.ephemeral
-            ?: throw Error.NotInitialized
+    /** HOST-side completion. Returns true if session is ready, false if awaiting PQ ciphertext. */
+    suspend fun completeAsHost(peer: KeyExchangePacket): Boolean = mutex.withLock {
+        val s = state as? State.HandshakeInProgress ?: throw Error.NotInitialized
         if (peer.type != "key-exchange") throw Error.InvalidPeerPacket
 
-        val peerPubBytes   = peer.publicKey.fromBase64()
-        val peerIdentityX963 = peer.identityKey.fromBase64()
+        val peerPubBytes = Base64.getDecoder().decode(peer.publicKey)
+        val peerIdentityX963 = Base64.getDecoder().decode(peer.identityKey)
         val peerPub = Bc.publicKeyFromBytes(peerPubBytes)
+        val ecdhSS = Bc.ecdhSharedSecret(s.ephemeral.privateKey, peerPub)
 
-        val shared = Bc.ecdhSharedSecret(ephemeral.privateKey, peerPub)
-        val rootKey = Bc.deriveInitialRootKey(shared)
+        val peerSupportsPQ = peer.pqSupported == true
+        if (s.mlkemPrivate != null && peerSupportsPQ) {
+            state = State.AwaitingPq(
+                ourEphemeral    = s.ephemeral,
+                mlkemPrivate    = s.mlkemPrivate,
+                peerEcdhPubBytes = peerPubBytes,
+                ecdhSharedSecret = ecdhSS,
+                peerIdentity    = peerIdentityX963
+            )
+            return@withLock false
+        }
 
+        // ECDH-only path.
+        val sessionKey = PostQuantum.hybridDeriveSharedKey(ecdhSS, pqSharedSecret = null)
         val ratchet = DoubleRatchet(
-            role = role,
-            sharedKey = rootKey,
-            ourKeyPair = ephemeral,
-            theirPublicKey = if (role == RatchetRole.HOST) peerPub else null
+            role = RatchetRole.HOST,
+            sharedKey = sessionKey,
+            ourKeyPair = s.ephemeral,
+            theirPublicKey = peerPub
         )
         state = State.Ready(ratchet, peerIdentityX963)
+        true
+    }
+
+    /** Finish the HOST handshake by decapsulating the GUEST's ML-KEM ciphertext. */
+    suspend fun completePQ(pqCiphertext: ByteArray) = mutex.withLock {
+        val s = state as? State.AwaitingPq ?: throw Error.UnexpectedState
+        val pqSS = PostQuantum.decapsulate(pqCiphertext, s.mlkemPrivate)
+        val sessionKey = PostQuantum.hybridDeriveSharedKey(s.ecdhSharedSecret, pqSS)
+        val peerPub = Bc.publicKeyFromBytes(s.peerEcdhPubBytes)
+        val ratchet = DoubleRatchet(
+            role = RatchetRole.HOST,
+            sharedKey = sessionKey,
+            ourKeyPair = s.ourEphemeral,
+            theirPublicKey = peerPub
+        )
+        state = State.Ready(ratchet, s.peerIdentity)
+    }
+
+    /**
+     * GUEST-side completion. Returns a [PqExchangePacket] to forward to the HOST iff the
+     * HOST advertised a Kyber key and we can encapsulate (PostQuantum.IS_SUPPORTED).
+     */
+    suspend fun completeAsGuest(peer: KeyExchangePacket): PqExchangePacket? = mutex.withLock {
+        val s = state as? State.HandshakeInProgress ?: throw Error.NotInitialized
+        if (peer.type != "key-exchange") throw Error.InvalidPeerPacket
+
+        val peerPubBytes = Base64.getDecoder().decode(peer.publicKey)
+        val peerIdentityX963 = Base64.getDecoder().decode(peer.identityKey)
+        val peerPub = Bc.publicKeyFromBytes(peerPubBytes)
+        val ecdhSS = Bc.ecdhSharedSecret(s.ephemeral.privateKey, peerPub)
+
+        var pqSS: ByteArray? = null
+        var pqOut: PqExchangePacket? = null
+        val peerPqKey = peer.pqKey
+        if (peerPqKey != null && PostQuantum.IS_SUPPORTED) {
+            val peerPqKeyBytes = Base64.getDecoder().decode(peerPqKey)
+            val encap = PostQuantum.encapsulate(peerPqKeyBytes)
+            pqSS = encap.sharedSecret
+            pqOut = PqExchangePacket(
+                pqCiphertext = Base64.getEncoder().encodeToString(encap.ciphertext)
+            )
+        }
+
+        val sessionKey = PostQuantum.hybridDeriveSharedKey(ecdhSS, pqSharedSecret = pqSS)
+        val ratchet = DoubleRatchet(
+            role = RatchetRole.GUEST,
+            sharedKey = sessionKey,
+            ourKeyPair = s.ephemeral,
+            theirPublicKey = null
+        )
+        state = State.Ready(ratchet, peerIdentityX963)
+        pqOut
     }
 
     // MARK: - Encrypt / Decrypt (envelope-wrapped)
 
-    /**
-     * Encrypt chat text or control JSON by first wrapping in a [MessageEnvelope] with
-     * the sender's current timestamp and a monotonic per-session counter.
-     */
     suspend fun encrypt(plaintext: String): String = mutex.withLock {
         val ready = state as? State.Ready ?: throw Error.NotInitialized
         sendCounter += 1
@@ -103,22 +186,11 @@ class GhostChatCrypto(
         ready.ratchet.encrypt(MessageEnvelope.encode(env)).wireBase64
     }
 
-    /**
-     * Decrypt a wire-format base64 string. Runs ReplayGuard on nonce+counter before
-     * decrypt (cheap dedup), then post-decrypt checks the envelope's timestamp window.
-     * Returns `env.m`.
-     */
     suspend fun decrypt(wireBase64: String): String = decryptEnvelope(wireBase64).m
 
-    /**
-     * Decrypt and return the full [MessageEnvelope] (test hook; production callers use
-     * [decrypt] which surfaces only `env.m`).
-     */
     suspend fun decryptEnvelope(wireBase64: String): MessageEnvelope = mutex.withLock {
         val ready = state as? State.Ready ?: throw Error.NotInitialized
 
-        // Cheap first-line defence: nonce + counter LRU before decrypt. `timestampMs = null`
-        // here — the real timestamp lives inside the envelope and is checked post-decrypt.
         runCatching {
             val wireBytes = Base64.getDecoder().decode(wireBase64)
             val parsed = WireFormat.parseMessage(wireBytes)
@@ -126,18 +198,15 @@ class GhostChatCrypto(
             replayGuard.admit(parsed.nonce, counter = header.n, timestampMs = null, now = clock.nowMs())
         }.onFailure { cause ->
             if (cause is ReplayError) throw cause
-            // Malformed wire: let the ratchet decide, don't double-report.
         }
 
         val envJson = ready.ratchet.decrypt(wireBase64)
         val env = MessageEnvelope.decode(envJson)
 
-        // Post-decrypt timestamp check.
         val now = clock.nowMs()
         if (abs(now - env.t) > ReplayGuard.DEFAULT_TIMESTAMP_WINDOW_MS) {
             throw ReplayError.TimestampOutOfWindow
         }
-
         env
     }
 
@@ -146,7 +215,6 @@ class GhostChatCrypto(
     suspend fun safetyNumber(): String = mutex.withLock {
         val ready = state as? State.Ready ?: throw Error.NotInitialized
         val myRaw = identity.publicKeyRaw
-        // peerIdentity is a 65-byte x963 — drop 0x04 prefix to match iOS safety number input
         val peerRaw = ready.peerIdentity.copyOfRange(1, ready.peerIdentity.size)
         return Bc.safetyNumber(myRaw, peerRaw)
     }
@@ -156,11 +224,6 @@ class GhostChatCrypto(
         ready.peerIdentity.copyOf()
     }
 
-    /**
-     * Current ratchet root key — the session's post-handshake shared secret.
-     * Used to seed [ContactKeyRotation.deriveNextSeed] at session close. Deterministic
-     * across iOS ↔ Android for a given session.
-     */
     suspend fun sessionSecret(): ByteArray = mutex.withLock {
         val ready = state as? State.Ready ?: throw Error.NotInitialized
         ready.ratchet.currentRootKey
@@ -171,8 +234,8 @@ class GhostChatCrypto(
     suspend fun exportState(): ByteArray = mutex.withLock {
         val ready = state as? State.Ready ?: throw Error.NotInitialized
         val blob = GhostCryptoExport(
-            ratchetState = ready.ratchet.exportedState.toBase64(),
-            peerIdentity = ready.peerIdentity.toBase64()
+            ratchetState = Base64.getEncoder().encodeToString(ready.ratchet.exportedState),
+            peerIdentity = Base64.getEncoder().encodeToString(ready.peerIdentity)
         )
         Json.encodeToString(GhostCryptoExport.serializer(), blob).toByteArray(Charsets.UTF_8)
     }
@@ -182,14 +245,7 @@ class GhostChatCrypto(
             GhostCryptoExport.serializer(),
             String(data, Charsets.UTF_8)
         )
-        val ratchet = DoubleRatchet(blob.ratchetState.fromBase64())
-        state = State.Ready(ratchet, blob.peerIdentity.fromBase64())
+        val ratchet = DoubleRatchet(Base64.getDecoder().decode(blob.ratchetState))
+        state = State.Ready(ratchet, Base64.getDecoder().decode(blob.peerIdentity))
     }
 }
-
-// java.util.Base64 (JVM 1.8+, Android API 26+) — matches iOS `base64EncodedString()` default.
-private fun ByteArray.toBase64(): String =
-    Base64.getEncoder().encodeToString(this)
-
-private fun String.fromBase64(): ByteArray =
-    Base64.getDecoder().decode(this)
