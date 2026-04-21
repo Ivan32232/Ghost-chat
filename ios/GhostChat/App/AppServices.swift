@@ -56,6 +56,10 @@ final class AppServices {
             identity: identity,
             keychain: keychain
         )
+
+        // Wire ContactManager into ConnectionManager so `leave()` can trigger a
+        // deterministic contact-key rotation using the just-ended session's secret.
+        self.connection.contactManager = self.contacts
         self.messages = MessageManager(store: messageStore)
         self.calls = CallManager()
         self.settings = SettingsManager(keychain: keychain)

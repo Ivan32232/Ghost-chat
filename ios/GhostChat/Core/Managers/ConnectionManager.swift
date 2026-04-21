@@ -28,6 +28,14 @@ final class ConnectionManager: ObservableObject {
     @Published private(set) var safetyNumber: String?
     @Published private(set) var peerIdentity: Data?
 
+    /// Set when this session is bound to a saved contact. On `leave()`, a deterministic
+    /// key rotation is triggered against `contactManager` using the session's shared secret.
+    var currentContactId: String?
+
+    /// Strong reference into the app-wide `ContactManager`. Nil if rotations are disabled
+    /// (e.g. unit tests that don't care about saved contacts).
+    weak var contactManager: ContactManager?
+
     let incomingText: AsyncStream<String>
     let incomingFile: AsyncStream<FileTransferService.IncomingFile>
     let fileTransferAborted: AsyncStream<String>
@@ -178,8 +186,43 @@ final class ConnectionManager: ObservableObject {
     }
 
     func leave() {
+        // Capture before reset() nukes `crypto` and `currentContactId`.
+        let cid = currentContactId
+        let cryptoRef = crypto
+        let mgrRef = contactManager
+
         try? signaling?.leaveRoom()
         reset()
+
+        // Fire-and-forget rotation. Rotation is best-effort: if the crypto actor has
+        // already been torn down or the contact was deleted, silently drop.
+        if let cid, let cryptoRef, let mgrRef {
+            Task { @MainActor in
+                if let secret = try? await cryptoRef.sessionSecret() {
+                    try? mgrRef.rotateKeys(contactId: cid, sessionSecret: secret)
+                }
+            }
+        }
+    }
+
+    /// Test hook: synchronous variant of `leave()` that awaits the rotation step so
+    /// assertions can observe the rotated contact state.
+    func leaveAndAwaitRotation() async {
+        let cid = currentContactId
+        let cryptoRef = crypto
+        let mgrRef = contactManager
+        try? signaling?.leaveRoom()
+        reset()
+        if let cid, let cryptoRef, let mgrRef,
+           let secret = try? await cryptoRef.sessionSecret() {
+            try? mgrRef.rotateKeys(contactId: cid, sessionSecret: secret)
+        }
+    }
+
+    /// Test hook: inject a pre-built crypto actor so tests can exercise `leaveAndAwaitRotation()`
+    /// without running the full signaling + WebRTC + handshake pipeline.
+    func _test_injectReadyCrypto(_ crypto: GhostChatCrypto) {
+        self.crypto = crypto
     }
 
     private func reset() {

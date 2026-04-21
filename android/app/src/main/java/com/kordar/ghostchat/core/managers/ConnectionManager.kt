@@ -87,6 +87,15 @@ class ConnectionManager(
     private var rtc: GhostRTC? = null
     private var crypto: GhostChatCrypto? = null
     private var role: Role? = null
+
+    /**
+     * Set when this session is bound to a saved contact. On [leave], a deterministic key
+     * rotation is triggered against [contactManager] using the session's shared secret.
+     */
+    var currentContactId: String? = null
+
+    /** App-wide [ContactManager]. Nil when rotations are disabled (unit tests). */
+    var contactManager: ContactManager? = null
     private var fileTransfer: FileTransferService = FileTransferService()
     private val chunkTimeout = ChunkTimeoutTracker().also {
         // onTimeout: 30 s with no chunk → ask peer to retransmit what's missing.
@@ -196,8 +205,47 @@ class ConnectionManager(
     }
 
     fun leave() {
+        // Capture before reset() nukes crypto and currentContactId.
+        val cid = currentContactId
+        val cryptoRef = crypto
+        val mgrRef = contactManager
+
         signaling?.leaveRoom()
         reset()
+
+        // Fire-and-forget rotation — best-effort, silently drops if refs are gone.
+        if (cid != null && cryptoRef != null && mgrRef != null) {
+            scope.launch {
+                runCatching {
+                    val secret = cryptoRef.sessionSecret()
+                    mgrRef.rotateKeys(cid, secret)
+                }
+            }
+        }
+    }
+
+    /**
+     * Test hook: synchronous variant of [leave] that awaits the rotation step so
+     * assertions can observe the rotated contact state.
+     */
+    suspend fun leaveAndAwaitRotation() {
+        val cid = currentContactId
+        val cryptoRef = crypto
+        val mgrRef = contactManager
+        signaling?.leaveRoom()
+        reset()
+        if (cid != null && cryptoRef != null && mgrRef != null) {
+            runCatching {
+                val secret = cryptoRef.sessionSecret()
+                mgrRef.rotateKeys(cid, secret)
+            }
+        }
+    }
+
+    /** Test hook: inject a pre-built crypto session without running signaling + WebRTC. */
+    @Suppress("FunctionName")
+    fun _testInjectReadyCrypto(c: GhostChatCrypto) {
+        this.crypto = c
     }
 
     private fun reset() {

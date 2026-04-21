@@ -79,7 +79,8 @@ object CoreModule {
         @ApplicationContext ctx: Context,
         identity: IdentityKeyService,
         push: PushManager,
-        turnService: TURNService
+        turnService: TURNService,
+        contactManager: ContactManager
     ): ConnectionManager = ConnectionManager(
         context = ctx,
         signalingUrl = AppConfig.SERVER_WSS,
@@ -87,7 +88,7 @@ object CoreModule {
         identity = identity,
         push = push,
         turnService = turnService
-    )
+    ).also { it.contactManager = contactManager }
 
     @Provides @Singleton
     fun provideMessageManager(store: MessageStore): MessageManager = MessageManager(store)
