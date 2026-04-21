@@ -66,11 +66,13 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         LSRequiresIPhoneOS: true
-        ITSAppUsesNonExemptEncryption: false
+        ITSAppUsesNonExemptEncryption: true
+        SentryDSN: ""
         NSFaceIDUsageDescription: Unlock Ghost Chat with biometrics
         NSMicrophoneUsageDescription: Record voice messages and make voice calls
         NSCameraUsageDescription: Attach photos to messages
         NSPhotoLibraryUsageDescription: Attach photos to messages
+        NSPhotoLibraryAddUsageDescription: Save received photos to your library
         UIBackgroundModes:
           - voip
           - audio

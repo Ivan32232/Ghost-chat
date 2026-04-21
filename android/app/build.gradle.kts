@@ -137,6 +137,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
 
+    // Sentry — crash reporting, strict PII scrubbing in GhostChatApplication.onCreate.
+    implementation("io.sentry:sentry-android:7.18.1")
+
     // Telecom / ConnectionService — using the native android.telecom package directly;
     // androidx.core:core-telecom wrapper isn't needed for self-managed calls.
 

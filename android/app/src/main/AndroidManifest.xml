@@ -34,6 +34,15 @@
         android:usesCleartextTraffic="false"
         tools:targetApi="35">
 
+        <!-- Sentry — DSN empty by default, init is a no-op until user supplies one -->
+        <meta-data android:name="io.sentry.dsn" android:value="" />
+        <meta-data android:name="io.sentry.traces-sample-rate" android:value="0" />
+        <meta-data android:name="io.sentry.send-default-pii" android:value="false" />
+        <meta-data android:name="io.sentry.auto-session-tracking.enable" android:value="false" />
+        <meta-data android:name="io.sentry.session-tracking.enable" android:value="false" />
+        <meta-data android:name="io.sentry.breadcrumbs.activity-lifecycle" android:value="false" />
+        <meta-data android:name="io.sentry.breadcrumbs.user-interaction" android:value="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
