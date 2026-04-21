@@ -397,6 +397,74 @@ A passing test is the only proof code works.
 
 ---
 
+### Phase 7 — Polish + Production Readiness (быстрая справка)
+- ML-KEM768 hybrid handshake интегрирован через signaling: HOST шлёт `pqKey` в `KeyExchangePacket`, GUEST encapsulates → шлёт `pqCiphertext` в отдельном `PqExchangePacket`. HOST decapsulates → `hybridDeriveSharedKey`. Hybrid KDF = `HKDF(ecdh || pq, salt="ghost-chat-v1-pq", info="ghost-dr-root", 32)`. iOS advertises `pqSupported=false` (PostQuantum stubs пока CryptoKit.MLKEM768 не в Xcode) → грейсфул дегрейд до ECDH-only для iOS-iOS и iOS-Android пар. Android-Android — полный real hybrid через BouncyCastle 1.82.
+- Auto-rotation on leave: `ConnectionManager.leave()` триггерит `ContactManager.rotateKeys(currentContactId, crypto.sessionSecret())` в fire-and-forget Task / coroutine. Добавлены `currentContactId` + `contactManager` на обе ConnectionManager-ы. Test hook: `leaveAndAwaitRotation()` для детерминированных ассершнов.
+- Timestamp envelope: `encrypt()` оборачивает plaintext в `MessageEnvelope {c,id,m,t}` (sorted-key JSON, byte-identical iOS↔Android) до padding. `decrypt()` извлекает `env.t` → `ReplayGuard.admit(..., timestampMs: env.t)` → reject `TimestampOutOfWindow` за пределами ±5 min. `GhostClock` injectable для тестов (ManualClock).
+- Sentry: инициализация в `AppDelegate.application(_:didFinishLaunching…)` (iOS) / `GhostChatApplication.onCreate` (Android). DSN пустой по умолчанию (SDK no-ops); заливается пользователем в `Info.plist` / `AndroidManifest`. `beforeSend` чистит `user`, `request`, `device`, `app` context.
+- UI polish: `GhostType` (iOS) / `GhostTypography` (Android) — semantic font roles (titleLarge rounded-semibold, bubbleBody default-15, monoNumber monospaced). `BubbleShape`/`bubbleShape(isMe:)` — tapered corner (sharp на стороне sender). Haptic pulse на send (iOS `UIImpactFeedbackGenerator(.light)`). `SoundLibrary` звуки реальные (placeholder AAC/OGG beeps сгенерированы через ffmpeg/afconvert) и wired в `MessageManager.send/received`.
+- Material3 deprecations: Divider → HorizontalDivider, `.menuAnchor()` → `.menuAnchor(MenuAnchorType.PrimaryEditable, enabled=true)`, `Icons.Outlined.VolumeUp/Down` → `Icons.AutoMirrored.Outlined.*`. `BAD_DIVIDER` / `BAD_MENU` grep в verify-скрипте — защита от регресса.
+- Android ConnectionService: `DefaultIncomingPushHandler` (вместо NoOp) → `TelecomManager.addNewIncomingCall` + регистрация `PhoneAccount` (self-managed). `GhostConnectionService` extends `ConnectionService`, обрабатывает `onAnswer/onReject/onDisconnect/onAbort` → `CallManager.answered/end`. Manifest: `<service ... BIND_TELECOM_CONNECTION_SERVICE>`.
+- App Store: `ITSAppUsesNonExemptEncryption = true`, `AppIcon.appiconset` (1024×1024 sourced из `icon_ghost_chat.png`), `NSPhotoLibraryAddUsageDescription`, `SentryDSN` key. Google Play: `proguard-rules.pro` со всеми keeps (BC, SQLCipher, WebRTC, Firebase, Sentry, kotlinx-serialization, Hilt, native methods, Ghost Chat models).
+- Localization: `scripts/check-localization-parity.cjs` валидирует iOS xcstrings ↔ Android EN/RU parity (59/59/59 at Phase 7 close).
+- ConnectionManager split: выделены `ConnectionHandshake` (KeyExchange/PqExchange lifecycle) + `ConnectionFileTransferRouter` (file-start/chunk/complete/retransmit routing) — оставшиеся 396 LOC iOS / 394 LOC Android (≤400).
+
+**Phase 7 lessons learned:**
+- Swift строгое сравнение `@Published private(set) var` не позволяет cross-file extensions записывать в property. Обход через `_set(state:)` / `_set(safetyNumber:)` internal setter methods + `cryptoRef`/`rtcRef`/`roleRef` геттеры.
+- Kotlin `GenericShape` принимает `(Size, LayoutDirection) -> Unit`, не `(Size, Density)`. Density надо либо захватить снаружи, либо пересчитать dp→px через постоянный множитель (xxhdpi=3x хорошо аппроксимирует).
+- `PhoneAccount.builder()` — static Android API, возвращает null в unit-test окружении. Для юнит-теста `DefaultIncomingPushHandler`: замокать `TelecomManager.getPhoneAccount(any)` → `mock()` так, что ветка регистрации скипается.
+- Hilt `@Binds` для интерфейса (`IncomingPushHandler`) требует **abstract class** модуля, не object. Конкретный `DefaultIncomingPushHandler` заменяет старый `NoOp` — старый remain только для тестов.
+- iOS Contact model НЕ имеет `isPinned` (только `isMuted`). Android Contact тоже. iOS DB version 8, Android DB version 9 (в память записано "9/10" — было неверно, проверить перед релизом).
+- `CryptoUtils.deriveInitialRootKey` оставляем неизменным для SPM-уровня тестов. `PostQuantum.hybridDeriveSharedKey` — новый app-уровень путь; берёт другую HKDF соль (`ghost-chat-v1-pq`), поэтому ЛЮБОЙ Phase-7+ клиент не может говорить с Phase-6- клиентом — это pre-TestFlight wire break, осознанный.
+- `@Published` в iOS не любит, когда extension из другого файла пытается писать — нужны internal setter-методы.
+- `JSONEncoder.envelope` (iOS) + manual sorted `JsonObject` (Android) → byte-identical JSON. kotlinx.serialization default encoder порядок ключей не гарантирует; нужен manual buildJsonObject.
+- FCM Push → ConnectionService интеграция: регистрация PhoneAccount должна быть idempotent; используем `telecom.getPhoneAccount(handle)` для check-first-then-register.
+- ffmpeg / afconvert toolchain для звуковых ассетов. `ffmpeg -f lavfi -i sine=...` → .wav → `afconvert -f caff -d ima4` для iOS, `ffmpeg ... -codec:a libvorbis` для Android.
+- `MessageEnvelope.t` даёт нам application-level timestamp, НО nonce replay guard и counter window всё ещё работают на wire-level. Три слоя защиты: nonce LRU → counter window → timestamp window.
+
+**Phase 7 success criteria (все ✓):**
+- [x] `verify_phase_7.sh` exit code 0 (21 шаг PASSED, 0 FAIL)
+- [x] iOS полный suite 265/265 (+14 от Phase 6), 0 failures, 1 skipped
+- [x] Android :app:testDebugUnitTest 201+/201+, 0 failures
+- [x] Android :crypto:test 23/23 после envelope+PQ
+- [x] Android :app:assembleDebug BUILD SUCCESSFUL (~156 MB APK)
+- [x] Android :app:lintDebug BUILD SUCCESSFUL (no Divider/menuAnchor/VolumeUp deprecations)
+- [x] ChatViewModel iOS 152 LOC, Android 158 LOC (≤ 300); каждый исходник ≤ 400
+- [x] Cross-platform pqHandshake + messageEnvelope vectors генерируются + Node-verified
+- [x] Sentry init на iOS + Android с PII scrubbing в `beforeSend`
+- [x] `ITSAppUsesNonExemptEncryption=true` + AppIcon.appiconset + NSPhotoLibraryAddUsageDescription
+- [x] ProGuard rules полные (BouncyCastle, SQLCipher, WebRTC, Firebase, Sentry, kotlinx-serialization, Hilt, native)
+- [x] Android `<service>` ConnectionService зарегистрирован в manifest с `BIND_TELECOM_CONNECTION_SERVICE`
+- [x] iOS ConnectionManager.leave() + Android ConnectionManager.leave() → rotateKeys triggered
+- [x] iOS+Android GhostChatCrypto envelope-wrapped encrypt/decrypt + timestamp enforcement
+- [x] Localization parity (iOS xcstrings / Android EN / Android RU): 59/59/59
+- [x] Placeholder sound assets (ringtone/message-in/message-out/failed) на обе платформы
+- [x] Нет Log.* / print() с key material
+
+**Phase 7 — manual verification required (cannot automate):**
+- Real-device ML-KEM handshake Android ↔ Android over live DataChannel (реальный Kyber-768 encap/decap через живое соединение)
+- iOS ↔ Android: graceful degrade до ECDH-only (iOS advertises `pqSupported=false`)
+- Clock-shifted replay: один девайс clock +6 min → второй reject с `ReplayError.timestampOutOfWindow`
+- FCM `type=call` data message при closed app → Android `GhostConnectionService` всплывает system incoming-call UI; accept → `CallManager.answered()`
+- Real-device haptics + звуковые cue audible (placeholder beeps — заменить перед public launch)
+- Sentry DSN populated → crash debug build → event в Sentry dashboard с scrubbed PII
+- App Store Connect upload (manual Archive через Xcode) + Play Internal Testing track upload (release keystore ставит пользователь отдельно)
+- Visual parity bubble shape / typography на реальных устройствах (simulator скрывает некоторые pixel-level артефакты)
+
+---
+
+## Deferred from Phase 7 (→ Phase 7.5 / public launch)
+- Real production sound assets (сейчас — 220/440/660/880 Hz placeholder тоны, 4KB каждый)
+- Waveform rendering для voice messages (VoiceRecorder уже собирает amplitudes, но wire format и storage для них отложены — требуется ControlMessage.fileStart расширение + SQLCipher schema bump)
+- ChatBubble анимации (`.transition` iOS / `AnimatedVisibility` Android) — отложил для focus, цель достигнута без них
+- R8 minification в release build (`isMinifyEnabled=false`) — включится когда пользователь создаст release keystore. Правила готовы.
+- Sentry DSN — пустой; заливается вручную перед каждым билдом TestFlight / Play.
+- iOS PostQuantum `generateKeyPair/encapsulate/decapsulate` — stubs; заработают когда Xcode toolchain подтянет `CryptoKit.MLKEM768` (ожидаемо в iOS 26.x SDK).
+- Full ML-KEM ратчет key rotation между сессиями (сейчас rotation — только ECDH контакт keys). PQ rotation — Phase 8.
+- Real Telecom audio focus / hold-unhold / conference в GhostConnectionService (сейчас — minimum viable: только answer/reject/disconnect).
+
+---
+
 # Claude / AI Senior Engineer Prompt (Plan Mode)
 
 Before writing any code, review the plan thoroughly.  
