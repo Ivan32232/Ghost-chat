@@ -54,6 +54,39 @@ final class ContactManager: ObservableObject {
         DatabaseService.deleteFile()
         refresh()
     }
+
+    /// Rotate a saved contact's keys using the just-ended session's shared secret.
+    ///
+    /// Both peers derive the same new keypair from the same `sessionSecret` via
+    /// `ContactKeyRotation.deriveNextSeed` — no wire exchange needed. The prior
+    /// `publicKey` slides into `previousKey`, and `previousKey` slides into
+    /// `fallbackKey`, giving us 3 generations of continuity across occasional
+    /// state desync.
+    ///
+    /// The new private scalar is stored in Keychain under a per-contact label so
+    /// the next connect can use it for the ECDH handshake. Returns `true` when
+    /// the rotation actually ran (contact existed); `false` otherwise.
+    @discardableResult
+    func rotateKeys(contactId: String, sessionSecret: Data) throws -> Bool {
+        guard var contact = try store.fetch(id: contactId) else { return false }
+        let privateKeyKeychainId = "contact.priv.\(contactId)"
+        let currentPrivate = (try keychain.get(privateKeyKeychainId)) ?? Data()
+        let rotated = ContactKeyRotation.rotate(
+            sessionSecret: sessionSecret,
+            currentPrivate: currentPrivate,
+            previousPublic: contact.publicKey,
+            fallbackPublic: contact.previousKey,
+            counter: contact.rotationCounter
+        )
+        try keychain.set(rotated.newPrivate, for: privateKeyKeychainId)
+        contact.publicKey = rotated.newPublicX963
+        contact.previousKey = rotated.previousPublicX963
+        contact.fallbackKey = rotated.fallbackPublicX963
+        contact.rotationCounter = rotated.counter
+        try store.save(contact)
+        refresh()
+        return true
+    }
 }
 
 /// Helper required because `hexString` on `Data` is declared in an internal extension

@@ -49,6 +49,81 @@ final class ContactManagerTests: XCTestCase {
         _ = peerX963
     }
 
+    // MARK: - Key rotation (Phase 6)
+
+    func test_rotateKeys_firstRotation_slidesPublicIntoPrevious_noFallback() throws {
+        let (mgr, contactStore, _, _, keychain) = try makeSubject()
+        let peer = P256.KeyAgreement.PrivateKey()
+        let firstPublic = peer.publicKey.x963Representation
+        let c = Contact(
+            id: "c1", label: "Alice",
+            identityKey: Data([0x04]) + Data(repeating: 0x01, count: 64),
+            publicKey: firstPublic,
+            rotationCounter: 0,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        try mgr.save(c)
+        let didRun = try mgr.rotateKeys(contactId: "c1",
+                                         sessionSecret: Data(repeating: 0x42, count: 32))
+        XCTAssertTrue(didRun)
+        let updated = try XCTUnwrap(contactStore.fetch(id: "c1"))
+        XCTAssertEqual(updated.rotationCounter, 1)
+        XCTAssertEqual(updated.previousKey, firstPublic)
+        XCTAssertNil(updated.fallbackKey)
+        XCTAssertNotEqual(updated.publicKey, firstPublic)
+        // Private scalar stored in the keychain
+        let stored = try XCTUnwrap(try keychain.get("contact.priv.c1"))
+        XCTAssertEqual(stored.count, 32)
+    }
+
+    func test_rotateKeys_secondRotation_slidesPreviousIntoFallback() throws {
+        let (mgr, contactStore, _, _, _) = try makeSubject()
+        let firstPeer = P256.KeyAgreement.PrivateKey()
+        let c = Contact(
+            id: "c1", label: "Bob",
+            identityKey: Data([0x04]) + Data(repeating: 0x02, count: 64),
+            publicKey: firstPeer.publicKey.x963Representation,
+            rotationCounter: 0,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        try mgr.save(c)
+        try mgr.rotateKeys(contactId: "c1", sessionSecret: Data(repeating: 0x42, count: 32))
+        let g1 = try XCTUnwrap(contactStore.fetch(id: "c1"))
+        try mgr.rotateKeys(contactId: "c1", sessionSecret: Data(repeating: 0x43, count: 32))
+        let g2 = try XCTUnwrap(contactStore.fetch(id: "c1"))
+        XCTAssertEqual(g2.rotationCounter, 2)
+        XCTAssertEqual(g2.fallbackKey, firstPeer.publicKey.x963Representation)
+        XCTAssertEqual(g2.previousKey, g1.publicKey)
+        XCTAssertNotEqual(g2.publicKey, g1.publicKey)
+    }
+
+    func test_rotateKeys_noSuchContact_returnsFalse() throws {
+        let (mgr, _, _, _, _) = try makeSubject()
+        XCTAssertFalse(try mgr.rotateKeys(contactId: "does-not-exist",
+                                          sessionSecret: Data(count: 32)))
+    }
+
+    func test_rotateKeys_deterministicAcrossPeers() throws {
+        // Both peers running with the same session secret must produce the same new
+        // public key — that's what enables zero-exchange rotation.
+        let (mgrA, storeA, _, _, _) = try makeSubject()
+        let (mgrB, storeB, _, _, _) = try makeSubject()
+        let init0 = P256.KeyAgreement.PrivateKey()
+        let idKey = Data([0x04]) + Data(repeating: 0x05, count: 64)
+        try mgrA.save(Contact(id: "x", label: "", identityKey: idKey,
+                              publicKey: init0.publicKey.x963Representation,
+                              createdAt: Date(timeIntervalSince1970: 1)))
+        try mgrB.save(Contact(id: "x", label: "", identityKey: idKey,
+                              publicKey: init0.publicKey.x963Representation,
+                              createdAt: Date(timeIntervalSince1970: 1)))
+        let secret = Data(repeating: 0xAA, count: 32)
+        try mgrA.rotateKeys(contactId: "x", sessionSecret: secret)
+        try mgrB.rotateKeys(contactId: "x", sessionSecret: secret)
+        let a = try XCTUnwrap(storeA.fetch(id: "x"))
+        let b = try XCTUnwrap(storeB.fetch(id: "x"))
+        XCTAssertEqual(a.publicKey, b.publicKey)
+    }
+
     func test_panicWipe_clearsEverything() throws {
         let (mgr, contactStore, _, identity, keychain) = try makeSubject()
         try mgr.save(Contact(label: "x", identityKey: Data([0x01]), publicKey: Data([0x02]),

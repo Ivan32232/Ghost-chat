@@ -67,5 +67,40 @@ class ContactManager(
         refresh()
     }
 
+    /**
+     * Rotate a saved contact's keys using the just-ended session's shared secret.
+     *
+     * Both peers derive the same new keypair from the same [sessionSecret] via
+     * [com.kordar.ghostchat.core.crypto.ContactKeyRotation.deriveNextSeed] —
+     * no wire exchange needed. The prior `publicKey` slides into `previousKey`,
+     * and `previousKey` slides into `fallbackKey`, giving us 3 generations of
+     * continuity across occasional state desync.
+     *
+     * The new private scalar is stored in the keystore under a per-contact label
+     * so the next connect can use it for the ECDH handshake. Returns `true` when
+     * the rotation actually ran (contact existed); `false` otherwise. Mirror of
+     * iOS `ContactManager.rotateKeys(contactId:sessionSecret:)`.
+     */
+    fun rotateKeys(contactId: String, sessionSecret: ByteArray): Boolean {
+        val contact = store.fetch(contactId) ?: return false
+        val privateKeyKeychainId = "contact.priv.$contactId"
+        val currentPrivate = keystore.get(privateKeyKeychainId) ?: ByteArray(0)
+        val rotated = com.kordar.ghostchat.core.crypto.ContactKeyRotation.rotate(
+            sessionSecret = sessionSecret,
+            currentPrivate = currentPrivate,
+            previousPublic = contact.publicKey,
+            fallbackPublic = contact.previousKey,
+            counter = contact.rotationCounter
+        )
+        keystore.set(privateKeyKeychainId, rotated.newPrivate)
+        contact.publicKey = rotated.newPublicX963
+        contact.previousKey = rotated.previousPublicX963
+        contact.fallbackKey = rotated.fallbackPublicX963
+        contact.rotationCounter = rotated.counter
+        store.save(contact)
+        refresh()
+        return true
+    }
+
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 }
