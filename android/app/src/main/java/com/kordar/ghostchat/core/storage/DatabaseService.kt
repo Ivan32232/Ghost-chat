@@ -88,11 +88,15 @@ class DatabaseService private constructor(
             return fresh
         }
 
-        /** Irrecoverably deletes the DB file and its WAL/SHM/journal siblings. */
+        /**
+         * Irrecoverably deletes the DB file and its WAL/SHM/journal siblings. Used by
+         * panic wipe — overwrites each file with zeros in 64 KiB chunks before
+         * unlinking (via [com.kordar.ghostchat.core.security.SecureWipe.wipeDatabase]) so
+         * the file blocks are no longer on disk as plaintext of the encrypted DB pages.
+         */
         fun deleteFile(context: Context) {
             val base = context.filesDir
-            listOf(DB_FILE_NAME, "$DB_FILE_NAME-wal", "$DB_FILE_NAME-shm", "$DB_FILE_NAME-journal")
-                .forEach { File(base, it).takeIf { f -> f.exists() }?.delete() }
+            com.kordar.ghostchat.core.security.SecureWipe.wipeDatabase(File(base, DB_FILE_NAME))
         }
 
         private var loaded = false

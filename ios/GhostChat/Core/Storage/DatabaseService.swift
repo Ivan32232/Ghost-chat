@@ -173,14 +173,15 @@ final class DatabaseService {
 
     // MARK: - Nuke
 
-    /// Irrecoverably deletes the DB file and its WAL/SHM siblings. Used by panic wipe.
+    /// Irrecoverably deletes the DB file and its WAL/SHM/journal siblings. Used by
+    /// panic wipe — overwrites each file with zeros in 64 KiB chunks before unlinking
+    /// (via `SecureWipe.wipeDatabase`) so the file blocks are no longer on disk as
+    /// plaintext of the encrypted DB pages.
     static func deleteFile() {
         let fm = FileManager.default
         guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
-        ["ghostchat.db", "ghostchat.db-wal", "ghostchat.db-shm", "ghostchat.db-journal"].forEach { name in
-            let url = base.appendingPathComponent(name)
-            try? fm.removeItem(at: url)
-        }
+        let dbPath = base.appendingPathComponent("ghostchat.db").path
+        SecureWipe.wipeDatabase(at: dbPath)
     }
 
     // MARK: - Private
