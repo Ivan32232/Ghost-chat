@@ -50,9 +50,11 @@ actor GhostChatCrypto {
 
     private var state: InternalState = .uninitialized
     private let identity: IdentityKeyService
+    private let replayGuard: ReplayGuard
 
-    init(identity: IdentityKeyService) {
+    init(identity: IdentityKeyService, replayGuard: ReplayGuard = ReplayGuard()) {
         self.identity = identity
+        self.replayGuard = replayGuard
     }
 
     // MARK: - Handshake
@@ -111,6 +113,17 @@ actor GhostChatCrypto {
 
     func decrypt(_ wireBase64: String) throws -> String {
         guard case .ready(var ratchet, let peer) = state else { throw Error.notInitialized }
+
+        // Defence-in-depth: parse the wire to extract nonce + counter, then run the
+        // ReplayGuard BEFORE the ratchet. The guard throws on nonce replay, out-of-
+        // window counter, or (when the plaintext envelope has a `t` field we can
+        // read — currently unused, reserved for a future wire bump) stale timestamp.
+        if let wireData = Data(base64Encoded: wireBase64),
+           let parsed = try? WireFormat.parseMessage(wireData),
+           let header = try? WireFormat.parseHeader(parsed.header) {
+            try replayGuard.admit(nonce: parsed.nonce, counter: header.n, timestampMs: nil)
+        }
+
         let out = try ratchet.decrypt(wireBase64: wireBase64)
         state = .ready(ratchet: ratchet, peerIdentity: peer)
         return out

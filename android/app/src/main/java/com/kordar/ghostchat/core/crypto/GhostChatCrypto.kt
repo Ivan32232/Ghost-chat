@@ -16,7 +16,10 @@ import java.util.Base64
  *   3. [encrypt] / [decrypt] while `isReady`
  *   4. [exportState] to persist for saved contacts, [restore] on reopen
  */
-class GhostChatCrypto(private val identity: IdentityKeyService) {
+class GhostChatCrypto(
+    private val identity: IdentityKeyService,
+    private val replayGuard: ReplayGuard = ReplayGuard()
+) {
 
     sealed class Error(message: String) : RuntimeException(message) {
         data object NotInitialized     : Error("crypto not initialized")
@@ -81,6 +84,21 @@ class GhostChatCrypto(private val identity: IdentityKeyService) {
 
     suspend fun decrypt(wireBase64: String): String = mutex.withLock {
         val ready = state as? State.Ready ?: throw Error.NotInitialized
+
+        // Defence-in-depth: parse the wire to extract nonce + counter, then run the
+        // ReplayGuard BEFORE the ratchet. The guard throws on nonce replay, out-of-
+        // window counter, or (when the plaintext envelope has a `t` field we can
+        // read — currently unused, reserved for a future wire bump) stale timestamp.
+        runCatching {
+            val wireBytes = java.util.Base64.getDecoder().decode(wireBase64)
+            val parsed = WireFormat.parseMessage(wireBytes)
+            val header = WireFormat.parseHeader(parsed.header)
+            replayGuard.admit(parsed.nonce, counter = header.n, timestampMs = null)
+        }.onFailure { cause ->
+            if (cause is ReplayError) throw cause
+            // Malformed wire: let the ratchet decide, don't double-report.
+        }
+
         ready.ratchet.decrypt(wireBase64)
     }
 
