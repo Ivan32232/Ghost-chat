@@ -40,6 +40,47 @@ class DoubleRatchet(
     private val maxSkip = 100
     private var lastDHr: ByteArray? = null
 
+    /**
+     * Re-hydrate a ratchet that was previously serialised via [exportedState].
+     * Used to persist per-contact sessions in SQLCipher across app restarts.
+     */
+    constructor(
+        stateBytes: ByteArray,
+        keyGen: KeyPairGenerator = RandomKeyPairGenerator()
+    ) : this(
+        role = RatchetRole.HOST,       // placeholder — values overwritten below
+        sharedKey = ByteArray(32),
+        ourKeyPair = CryptoUtils.generateKeyPair(),
+        theirPublicKey = null,
+        keyGen = keyGen
+    ) {
+        val snap = DoubleRatchetState.deserialize(stateBytes)
+        dhs = CryptoUtils.keyPairFromPrivateBytes(snap.dhsPrivateBytes)
+        dhr = snap.dhrRaw?.let { CryptoUtils.publicKeyFromBytes(it) }
+        rk = snap.rk.copyOf()
+        cks = snap.cks?.copyOf()
+        ckr = snap.ckr?.copyOf()
+        ns = snap.ns; nr = snap.nr; pn = snap.pn
+        lastDHr = snap.lastDHr?.copyOf()
+        mkSkipped.clear()
+        mkSkipped.putAll(snap.mkSkipped)
+    }
+
+    /** Serialised opaque ratchet state suitable for persistence in SQLCipher. */
+    val exportedState: ByteArray
+        get() = DoubleRatchetState.serialize(
+            DoubleRatchetState.Snapshot(
+                dhsPrivateBytes = dhs.privateKeyBytes,
+                dhrRaw = lastDHr?.copyOf(), // current remote DH raw if any
+                rk = rk.copyOf(),
+                cks = cks?.copyOf(),
+                ckr = ckr?.copyOf(),
+                ns = ns, nr = nr, pn = pn,
+                lastDHr = lastDHr?.copyOf(),
+                mkSkipped = mkSkipped.mapValues { it.value.copyOf() }
+            )
+        )
+
     init {
         when (role) {
             RatchetRole.HOST -> {
