@@ -29,6 +29,7 @@ final class ConnectionManager: ObservableObject {
 
     let incomingText: AsyncStream<String>
     let incomingFile: AsyncStream<FileTransferService.IncomingFile>
+    let fileTransferAborted: AsyncStream<String>
 
     private let signalingURL: URL
     private let apiBaseURL: URL
@@ -42,9 +43,11 @@ final class ConnectionManager: ObservableObject {
     private var crypto: GhostChatCrypto?
     private var role: Role?
     private var fileTransfer: FileTransferService = FileTransferService()
+    private let chunkTimeout = ChunkTimeoutTracker()
 
     private var incomingContinuation: AsyncStream<String>.Continuation?
     private var fileContinuation: AsyncStream<FileTransferService.IncomingFile>.Continuation?
+    private var abortContinuation: AsyncStream<String>.Continuation?
     private var tasks: [Task<Void, Never>] = []
 
     init(
@@ -66,6 +69,31 @@ final class ConnectionManager: ObservableObject {
         var fileCont: AsyncStream<FileTransferService.IncomingFile>.Continuation!
         self.incomingFile = AsyncStream { fileCont = $0 }
         self.fileContinuation = fileCont
+        var abortCont: AsyncStream<String>.Continuation!
+        self.fileTransferAborted = AsyncStream { abortCont = $0 }
+        self.abortContinuation = abortCont
+        wireChunkTimeoutHandlers()
+    }
+
+    private func wireChunkTimeoutHandlers() {
+        // onTimeout: 30 s with no chunk → ask peer to retransmit the ones we're missing.
+        chunkTimeout.onTimeout = { [weak self] fileId in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let missing = self.fileTransfer.missingChunks(fileId: fileId) ?? []
+                if !missing.isEmpty {
+                    try? await self.sendControl(.fileRetransmit(fileId: fileId, indices: missing))
+                }
+            }
+        }
+        // onAbort: 3 retries exhausted → drop the incomplete inbound, surface to UI.
+        chunkTimeout.onAbort = { [weak self] fileId in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.fileTransfer.cancelInbound(fileId: fileId)
+                self.abortContinuation?.yield(fileId)
+            }
+        }
     }
 
     // MARK: - Connect flows
@@ -162,6 +190,8 @@ final class ConnectionManager: ObservableObject {
         rtc = nil
         crypto = nil
         fileTransfer = FileTransferService()
+        // Drop any armed chunk timers — new session gets a fresh set.
+        chunkTimeout.cancelAll()
         roomId = nil
         safetyNumber = nil
         peerIdentity = nil
@@ -323,17 +353,23 @@ final class ConnectionManager: ObservableObject {
                 fileId: fileId, name: name, size: size,
                 mimeType: mimeType, totalChunks: totalChunks
             )
+            chunkTimeout.arm(fileId: fileId)
 
         case .fileChunk(let fileId, let index, let data):
             _ = fileTransfer.handleChunk(fileId: fileId, index: index, base64Data: data)
+            chunkTimeout.progressed(fileId: fileId)
 
         case .fileComplete(let fileId, let sha256):
             let event = fileTransfer.handleComplete(fileId: fileId, expectedSha256Hex: sha256)
             switch event {
             case .completed(let file):
+                chunkTimeout.cancel(fileId: fileId)
                 fileContinuation?.yield(file)
             case .missing(_, let indices):
                 try? await sendControl(.fileRetransmit(fileId: fileId, indices: indices))
+            case .integrityFailure:
+                chunkTimeout.cancel(fileId: fileId)
+                abortContinuation?.yield(fileId)
             default:
                 break
             }

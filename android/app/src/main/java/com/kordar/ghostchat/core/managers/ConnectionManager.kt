@@ -4,6 +4,7 @@ import android.content.Context
 import com.kordar.ghostchat.core.crypto.GhostChatCrypto
 import com.kordar.ghostchat.core.crypto.IdentityKeyService
 import com.kordar.ghostchat.core.crypto.KeyExchangePacket
+import com.kordar.ghostchat.core.files.ChunkTimeoutTracker
 import com.kordar.ghostchat.core.files.FileTransferService
 import com.kordar.ghostchat.core.network.SignalingClient
 import com.kordar.ghostchat.core.network.SignalingEvent
@@ -74,12 +75,35 @@ class ConnectionManager(
     )
     val incomingFile: SharedFlow<FileTransferService.IncomingFile> = _incomingFile.asSharedFlow()
 
+    private val _fileTransferAborted = MutableSharedFlow<String>(
+        replay = 0, extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val fileTransferAborted: SharedFlow<String> = _fileTransferAborted.asSharedFlow()
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var signaling: SignalingClient? = null
     private var rtc: GhostRTC? = null
     private var crypto: GhostChatCrypto? = null
     private var role: Role? = null
     private var fileTransfer: FileTransferService = FileTransferService()
+    private val chunkTimeout = ChunkTimeoutTracker().also {
+        // onTimeout: 30 s with no chunk → ask peer to retransmit what's missing.
+        it.onTimeout = { fileId ->
+            val missing = fileTransfer.missingChunks(fileId) ?: emptyList()
+            if (missing.isNotEmpty()) {
+                scope.launch {
+                    runCatching {
+                        sendControl(ControlMessage.FileRetransmit(fileId, missing))
+                    }
+                }
+            }
+        }
+        // onAbort: 3 retries exhausted → drop the incomplete inbound, surface to UI.
+        it.onAbort = { fileId ->
+            fileTransfer.cancelInbound(fileId)
+            _fileTransferAborted.tryEmit(fileId)
+        }
+    }
     private val watchers = mutableListOf<Job>()
 
     companion object {
@@ -181,6 +205,7 @@ class ConnectionManager(
         rtc?.close();           rtc = null
         crypto = null
         fileTransfer = FileTransferService()
+        chunkTimeout.cancelAll()
         _roomId.value = null
         _safetyNumber.value = null
         _peerIdentity.value = null
@@ -309,22 +334,34 @@ class ConnectionManager(
 
     private suspend fun handleControl(ctrl: ControlMessage) {
         when (ctrl) {
-            is ControlMessage.FileStart -> fileTransfer.handleStart(
-                fileId = ctrl.fileId, name = ctrl.name, size = ctrl.size,
-                mimeType = ctrl.mimeType, totalChunks = ctrl.totalChunks
-            )
+            is ControlMessage.FileStart -> {
+                fileTransfer.handleStart(
+                    fileId = ctrl.fileId, name = ctrl.name, size = ctrl.size,
+                    mimeType = ctrl.mimeType, totalChunks = ctrl.totalChunks
+                )
+                chunkTimeout.arm(ctrl.fileId)
+            }
 
-            is ControlMessage.FileChunk -> fileTransfer.handleChunk(
-                fileId = ctrl.fileId, index = ctrl.index, base64Data = ctrl.data
-            )
+            is ControlMessage.FileChunk -> {
+                fileTransfer.handleChunk(
+                    fileId = ctrl.fileId, index = ctrl.index, base64Data = ctrl.data
+                )
+                chunkTimeout.progressed(ctrl.fileId)
+            }
 
             is ControlMessage.FileComplete -> {
                 val ev = fileTransfer.handleComplete(ctrl.fileId, ctrl.sha256)
                 when (ev) {
-                    is FileTransferService.Event.Completed ->
+                    is FileTransferService.Event.Completed -> {
+                        chunkTimeout.cancel(ctrl.fileId)
                         _incomingFile.tryEmit(ev.file)
+                    }
                     is FileTransferService.Event.Missing ->
                         runCatching { sendControl(ControlMessage.FileRetransmit(ctrl.fileId, ev.indices)) }
+                    is FileTransferService.Event.IntegrityFailure -> {
+                        chunkTimeout.cancel(ctrl.fileId)
+                        _fileTransferAborted.tryEmit(ctrl.fileId)
+                    }
                     else -> Unit
                 }
             }
