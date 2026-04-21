@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ghost Chat</string>
+
+    <string name="welcome_create">Создать Ghost Chat</string>
+    <string name="welcome_join">Войти по ссылке</string>
+    <string name="welcome_join_placeholder">Вставьте ссылку или ID</string>
+    <string name="welcome_contacts">Сохранённые контакты</string>
+    <string name="welcome_settings">Настройки</string>
+    <string name="welcome_share_link">Поделиться ссылкой</string>
+    <string name="welcome_copy_link">Копировать ссылку</string>
+
+    <string name="chat_send">Отправить</string>
+    <string name="chat_type_message">Сообщение</string>
+    <string name="chat_connecting">Соединение…</string>
+    <string name="chat_connected">Сквозное шифрование</string>
+    <string name="chat_disconnected">Отключено</string>
+    <string name="chat_save_contact">Сохранить контакт</string>
+    <string name="chat_leave">Выйти</string>
+    <string name="chat_call">Позвонить</string>
+    <string name="chat_reply">Ответить</string>
+    <string name="chat_typing">Печатает…</string>
+    <string name="chat_safety_number">Номер безопасности</string>
+
+    <string name="call_incoming">Входящий звонок</string>
+    <string name="call_accept">Ответить</string>
+    <string name="call_decline">Отклонить</string>
+    <string name="call_end">Завершить</string>
+    <string name="call_mute">Выкл. микрофон</string>
+    <string name="call_unmute">Вкл. микрофон</string>
+    <string name="call_speaker">Динамик</string>
+    <string name="call_earpiece">Разговорный</string>
+
+    <string name="contacts_title">Контакты</string>
+    <string name="contacts_search">Поиск</string>
+    <string name="contacts_empty">Нет сохранённых контактов</string>
+    <string name="contacts_delete">Удалить</string>
+    <string name="contacts_rename">Переименовать</string>
+    <string name="contacts_notes">Заметки</string>
+
+    <string name="settings_title">Настройки</string>
+    <string name="settings_privacy_mode">Режим приватности (TURN)</string>
+    <string name="settings_biometric">Биометрическая блокировка</string>
+    <string name="settings_auto_lock">Автоблокировка</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_sound">Звук</string>
+    <string name="settings_message_ttl">Авто-удаление сообщений</string>
+    <string name="settings_wipe">Стереть все данные</string>
+    <string name="settings_security_dashboard">Панель безопасности</string>
+    <string name="settings_about">О приложении</string>
+
+    <string name="ttl_thirty_seconds">30 секунд</string>
+    <string name="ttl_one_minute">1 минута</string>
+    <string name="ttl_five_minutes">5 минут</string>
+    <string name="ttl_fifteen_minutes">15 минут</string>
+    <string name="ttl_one_hour">1 час</string>
+
+    <string name="lock_enter_pin">Введите PIN</string>
+    <string name="lock_unlock_biometric">Разблокировать Ghost Chat</string>
+    <string name="lock_invalid_pin">Неверный PIN</string>
+
+    <string name="security_screenshot_alert">Собеседник сделал скриншот</string>
+    <string name="security_recording_alert">Собеседник записывает экран</string>
+
+    <string name="error_connection_failed">Не удалось подключиться</string>
+    <string name="error_invalid_room">Неверная ссылка на комнату</string>
+    <string name="error_cert_pinning_failed">Проверка подлинности сервера не удалась</string>
+
+    <string name="action_cancel">Отмена</string>
+    <string name="action_done">Готово</string>
+    <string name="action_save">Сохранить</string>
+</resources>
