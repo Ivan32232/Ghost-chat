@@ -34,8 +34,8 @@
         android:usesCleartextTraffic="false"
         tools:targetApi="35">
 
-        <!-- Sentry — DSN empty by default, init is a no-op until user supplies one -->
-        <meta-data android:name="io.sentry.dsn" android:value="" />
+        <!-- Sentry — DSN wired for production crash reporting; beforeSend strips PII in code -->
+        <meta-data android:name="io.sentry.dsn" android:value="https://1c3fdc43dc2ebd1d9d7291e2b4116fd0@o4511203459203072.ingest.de.sentry.io/4511212512870480" />
         <meta-data android:name="io.sentry.traces-sample-rate" android:value="0" />
         <meta-data android:name="io.sentry.send-default-pii" android:value="false" />
         <meta-data android:name="io.sentry.auto-session-tracking.enable" android:value="false" />

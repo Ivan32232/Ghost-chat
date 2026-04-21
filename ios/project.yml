@@ -68,7 +68,7 @@ targets:
           - UIInterfaceOrientationPortrait
         LSRequiresIPhoneOS: true
         ITSAppUsesNonExemptEncryption: true
-        SentryDSN: ""
+        SentryDSN: "https://9226f5b329e2eba5319102b3e49efe43@o4511203459203072.ingest.de.sentry.io/4511212466339920"
         NSFaceIDUsageDescription: Unlock Ghost Chat with biometrics
         NSMicrophoneUsageDescription: Record voice messages and make voice calls
         NSCameraUsageDescription: Attach photos to messages

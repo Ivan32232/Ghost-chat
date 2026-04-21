@@ -36,7 +36,27 @@ android {
     }
 
     signingConfigs {
-        // Debug signing comes from AGP default debug keystore — no release signing checked in.
+        create("release") {
+            // Source of truth: deploy/keys/ghost-chat-release.jks (gitignored).
+            // Password can be overridden via env vars (GHOSTCHAT_KEYSTORE_PASSWORD / _KEY_PASSWORD)
+            // for CI, otherwise falls back to the checked-in developer file next to the keystore.
+            val keystoreFile = rootProject.file("../deploy/keys/ghost-chat-release.jks")
+            val passwordFile = rootProject.file("../deploy/keys/ghost-chat-release.password.txt")
+            val envStore = System.getenv("GHOSTCHAT_KEYSTORE_PASSWORD")
+            val envKey   = System.getenv("GHOSTCHAT_KEY_PASSWORD")
+            val filePwd  = if (passwordFile.exists())
+                passwordFile.readText().lineSequence()
+                    .firstOrNull { it.startsWith("Store pass:") }
+                    ?.substringAfter(":")?.trim()
+            else null
+
+            if (keystoreFile.exists()) {
+                storeFile     = keystoreFile
+                storePassword = envStore ?: filePwd
+                keyAlias      = "ghostchat"
+                keyPassword   = envKey ?: filePwd
+            }
+        }
     }
 
     buildTypes {
@@ -46,6 +66,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val releaseConfig = signingConfigs.getByName("release")
+            if (releaseConfig.storeFile?.exists() == true) {
+                signingConfig = releaseConfig
+            }
         }
         debug {
             isMinifyEnabled = false
