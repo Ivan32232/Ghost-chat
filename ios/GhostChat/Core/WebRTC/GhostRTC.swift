@@ -157,6 +157,16 @@ final class GhostRTC: NSObject {
         }
     }
 
+    /// SCTP send-buffer queue depth in bytes. `ConnectionManager` uses this
+    /// for backpressure when streaming file chunks — pauses sends above ~16 KiB.
+    var bufferedAmount: UInt64 {
+        dataChannel?.bufferedAmount ?? 0
+    }
+
+    var isDataChannelOpen: Bool {
+        dataChannel?.readyState == .open
+    }
+
     // MARK: - Private helpers
 
     private func makeIceServers() -> [RTCIceServer] {

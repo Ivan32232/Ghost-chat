@@ -31,7 +31,7 @@ final class ControlMessageTests: XCTestCase {
     func test_capabilities() throws { try roundTrip(.capabilities(features: ["file", "voice", "pq"])) }
     func test_fileStart() throws { try roundTrip(.fileStart(fileId: "fid", name: "a.jpg", size: 1024, mimeType: "image/jpeg", totalChunks: 1)) }
     func test_fileChunk() throws { try roundTrip(.fileChunk(fileId: "fid", index: 0, data: "base64data==")) }
-    func test_fileComplete() throws { try roundTrip(.fileComplete(fileId: "fid")) }
+    func test_fileComplete() throws { try roundTrip(.fileComplete(fileId: "fid", sha256: String(repeating: "a", count: 64))) }
     func test_fileRetransmit() throws { try roundTrip(.fileRetransmit(fileId: "fid", indices: [1, 3, 5])) }
     func test_messageDelete() throws { try roundTrip(.messageDelete(messageId: "m1")) }
     func test_messageEdit() throws { try roundTrip(.messageEdit(messageId: "m1", newText: "edited")) }
@@ -56,7 +56,7 @@ final class ControlMessageTests: XCTestCase {
         XCTAssertEqual(try jsonObject(.notifyToken(token: "x"))["type"] as? String, "notify-token")
         XCTAssertEqual(try jsonObject(.fileStart(fileId: "f", name: "n", size: 0, mimeType: "x", totalChunks: 1))["type"] as? String, "file-start")
         XCTAssertEqual(try jsonObject(.fileChunk(fileId: "f", index: 0, data: ""))["type"] as? String, "file-chunk")
-        XCTAssertEqual(try jsonObject(.fileComplete(fileId: "f"))["type"] as? String, "file-complete")
+        XCTAssertEqual(try jsonObject(.fileComplete(fileId: "f", sha256: String(repeating: "0", count: 64)))["type"] as? String, "file-complete")
         XCTAssertEqual(try jsonObject(.fileRetransmit(fileId: "f", indices: []))["type"] as? String, "file-retransmit")
         XCTAssertEqual(try jsonObject(.messageDelete(messageId: "m"))["type"] as? String, "message-delete")
         XCTAssertEqual(try jsonObject(.messageEdit(messageId: "m", newText: ""))["type"] as? String, "message-edit")
@@ -67,6 +67,13 @@ final class ControlMessageTests: XCTestCase {
         let json = try jsonObject(.messageAck(counter: 7))
         XCTAssertEqual(json["c"] as? Int, 7)
         XCTAssertNil(json["counter"])
+    }
+
+    func test_fileComplete_carriesHexSha256() throws {
+        let hex = "deadbeefcafebabefeedfacec0ffee00112233445566778899aabbccddeeff00"
+        let json = try jsonObject(.fileComplete(fileId: "f", sha256: hex))
+        XCTAssertEqual(json["fileId"] as? String, "f")
+        XCTAssertEqual(json["sha256"] as? String, hex)
     }
 
     // MARK: - Error paths

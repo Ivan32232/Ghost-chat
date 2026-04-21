@@ -48,6 +48,48 @@ final class MessageManager: ObservableObject {
         return message
     }
 
+    /// Create a local "sending…" bubble for an outgoing attachment. The caller
+    /// is expected to call `markDelivered(id:)` once `ConnectionManager.sendFile`
+    /// resolves.
+    func sendFile(fileId: String, name: String, size: Int, mimeType: String, localPath: String?) -> ChatMessage {
+        let type: MessageType = (mimeType == "audio/mp4" && name.hasPrefix("voice-")) ? .voice : .file
+        var message = ChatMessage(
+            contactId: activeContactId ?? "",
+            sender: .me,
+            text: "",
+            type: type,
+            isDelivered: false,
+            isPending: true,
+            fileName: name,
+            fileSize: size,
+            fileMimeType: mimeType,
+            fileLocalPath: localPath,
+            fileId: fileId
+        )
+        message = finalize(message, ttl: defaultTTL)
+        return message
+    }
+
+    /// Record an incoming attachment once the chunked transfer is assembled.
+    func receivedFile(fileId: String, name: String, size: Int, mimeType: String, localPath: String?) -> ChatMessage {
+        let type: MessageType = (mimeType == "audio/mp4" && name.hasPrefix("voice-")) ? .voice : .file
+        var message = ChatMessage(
+            contactId: activeContactId ?? "",
+            sender: .peer,
+            text: "",
+            type: type,
+            isDelivered: true,
+            isPending: false,
+            fileName: name,
+            fileSize: size,
+            fileMimeType: mimeType,
+            fileLocalPath: localPath,
+            fileId: fileId
+        )
+        message = finalize(message, ttl: defaultTTL)
+        return message
+    }
+
     func system(_ text: String) {
         let m = ChatMessage(
             contactId: activeContactId ?? "",

@@ -280,6 +280,79 @@ A passing test is the only proof code works.
 
 ---
 
+### Phase 5 — File Transfer + Voice Messages (быстрая справка)
+- FileTransferService — чистая state-машина, 100% покрыта тестами
+- 2KB chunks, 16KB backpressure, SHA-256 integrity
+- Voice messages: AAC m4a 44100Hz mono 64kbps, min 0.3s
+- Full-screen image viewer с sampled decode (≤2048px)
+- Cross-platform SHA-256 байт-в-байт идентичен
+- Per-chunk 30s timeout НЕ реализован — отложен Phase 6
+- Waveform заглушка — Phase 7
+- Hard cap 100MB на файл (streaming не реализован)
+- Весь файл грузится в память — для видео нужен streaming (Phase 7)
+
+### Phase 5 — File Transfer + Voice Messages
+
+**Структура:**
+- `Core/Files/FileTransferService.{swift,kt}` — чистая state-машина: `prepareOutbound(data,name,mime)` → (fileStart, [fileChunk]…, fileComplete). `handleStart/handleChunk/handleComplete` с SHA-256 проверкой. `retransmitMessages(fileId, indices)` возвращает ранее построенные chunk-сообщения для file-retransmit. Chunk = 2048 байт raw. Никакой криптухи / IO внутри — только состояние.
+- `Core/Files/FileCatalog.{swift,kt}` — реестр поддерживаемых MIME: images (jpg/jpeg/png/gif/heic/webp), video (mp4/mov), audio (mp3/m4a/aac/wav), docs (pdf/doc/docx/txt/zip). Парность между платформами проверяется скриптом.
+- `Core/Managers/ConnectionManager`: добавлено `sendControl(ControlMessage)`, `sendFile(data,name,mime) -> fileId`, `incomingFile` (AsyncStream / SharedFlow), `awaitSendSlot()` — backpressure при `dataChannel.bufferedAmount > 16 КБ` (каждые 10 мс). handleControl роутит file-start/chunk/complete/retransmit.
+- `Features/Chat/ChatViewModel`: `sendAttachment(data,name,mime)`, `startVoiceRecording` / `stopVoiceRecordingAndSend` / `cancelVoiceRecording`, подписка на `connection.incomingFile`, запись временных файлов в tmp/cacheDir.
+- `Features/Chat/ChatBubble`: рендерит text/voice/image/file варианты. Image тапается → open FullScreenImageView.
+- `Features/Chat/ChatInputBar.swift` (iOS) / inline InputBar в `ChatScreen.kt` (Android): кнопка attach (PhotosPicker / PickVisualMedia для фото + DocumentPicker / OpenDocument для файлов), hold-to-record мик.
+- `Features/Chat/FullScreenImageView.{swift,kt}`: pinch/zoom + drag, sampled decode до 2048px (iOS — CGImageSource thumbnails, Android — BitmapFactory inSampleSize).
+
+**Wire format дополнение:**
+- `ControlMessage.fileComplete` теперь несёт `sha256` (64 hex chars). Формула: сэндер считает SHA-256 всего файла до нарезки, ресивер после сборки сверяет. Integrity fail → `Event.integrityFailure`, файл удаляется из state.
+
+**Кросс-платформенный test vector:**
+- `bytes[i] = (i*31 + 7) mod 256`, i = 0..3999. Ожидаемый SHA-256 = `2e781e3762b7c315ce53c7e3645f59b2e4c037db30c6bec3a195e0751bd62722`. Проверяется в iOS `test_crossPlatformVector_deterministicHashForFixedInput` и Android `cross-platform vector sha256 matches iOS`, плюс независимо пересчитывается через Node в verify_phase_5.sh.
+
+**Lessons learned (Phase 5):**
+- **JSON роутинг encrypted сообщений:** на принимающей стороне ConnectionManager сначала decrypt → пытается `JSONDecoder().decode(ControlMessage)`. Если получается — это control (с `_ctrl: true`), иначе — plain text. Для Android `ControlMessage.decode` кидает `MissingCtrlMarker` для не-control, оборачиваем в `runCatching`.
+- **Base64 byte-identical между iOS/Android:** iOS `Data.base64EncodedString()` и Java `Base64.getEncoder().encodeToString(bytes)` производят байт-идентичный RFC 4648 output (padding=true, без line wrap). НЕ использовать `android.util.Base64.DEFAULT` — он вставляет `\n` каждые 76 символов и не совпадает.
+- **Backpressure через `dataChannel.bufferedAmount`:** iOS Swift property `UInt64`, Android Kotlin функция `bufferedAmount(): Long`. Spec threshold = 16 КБ. Внутри send-цикла для чанков: `while bufferedAmount > 16384: sleep 10 ms`. Без этого SCTP очередь растёт, переполнение → падение DC. Поднимал на 1 MB файлах — без backpressure очередь выходит за 1 МБ, с backpressure держится ~18-20 КБ.
+- **`PickVisualMedia.ImageOnly` + `OpenDocument`:** Android 13+ даёт доступ без READ_EXTERNAL_STORAGE. `OpenDocument` принимает массив MIME, `image/*`, `audio/*`, `application/pdf` и т.д.
+- **Long-press на mic кнопке (Compose):** `pointerInput` с `detectTapGestures(onLongPress = startVoice, onPress = { tryAwaitRelease(); stopVoice() })`. Если использовать только `onLongPress` без `onPress` — не видим релиз.
+- **Sampled bitmap decode:** iOS использует `CGImageSourceCreateThumbnailAtIndex` с `kCGImageSourceThumbnailMaxPixelSize=2048`, Android — два прохода: `inJustDecodeBounds=true` → вычисляем `inSampleSize` (power of 2, чтобы longer side ≤ 2048) → `BitmapFactory.decodeFile(path, opts)`. Без sample decode 50MP jpg кладёт процесс на OOM.
+- **Xcode simulator preflight flake:** два подряд `xcodebuild ... test` на одном симе иногда даёт `Application failed preflight checks`. verify_phase_5.sh бутит sim заранее через `simctl boot` + `bootstatus -b`, и при этой ошибке делает одну попытку с shutdown+boot.
+- **SHA-256 in fileComplete (не fileStart):** спец говорит "integrity hash on completion" — поставил в `fileComplete`, потому что семантика "transfer done + verify" читается яснее. Sender всё равно обязан считать SHA до отправки, так что ранний аборт невозможен в любом варианте.
+- **Retransmit state:** `outbound[fileId] = chunkMessages` хранится в FileTransferService до `forgetOutbound(fileId)`. Сейчас reset() на ConnectionManager полностью пересоздаёт сервис — outbound обнуляется только при leave-room. На 100MB файле это ~50K объектов в map, но живут они только на время сессии, что приемлемо.
+- **`FileTransferService.chunked` возвращает `[]` для пустого файла** — totalChunks=0, но fileStart + fileComplete всё равно шлются. Receiver handle: `(0..<0)` range пустой → missing=[] → hash=SHA-256("") = `e3b0c44...b855` → completed с data=Data(). 0-byte roundtrip покрыт тестом.
+- **Kotlin не поддерживает внешние/внутренние имена параметров (как в Swift).** Переименовал `mimeType(forFilename filename:)` → `mimeType(filename:)`.
+
+**Phase 5 success criteria (все ✓):**
+- [x] iOS: 197 unit тестов, 0 failures (20 FileTransferServiceTests + 3 retransmit + 8 FileCatalogTests + 3 новых ControlMessage = +34 новых тестов к Phase 3/4 baseline)
+- [x] Android: 125 unit тестов, 0 failures (20+3 FileTransferServiceTest + 8 FileCatalogTest + 2 ControlMessage sha256 = +33 тестов)
+- [x] Cross-platform SHA-256 вектор совпадает байт-в-байт (проверено Node-пересчётом)
+- [x] iOS `xcodebuild build` + `xcodebuild test` → BUILD/TEST SUCCEEDED
+- [x] Android `:app:assembleDebug` + `:app:testDebugUnitTest` + `:app:lintDebug` BUILD SUCCESSFUL
+- [x] Chunk size = 2048, backpressure = 16 KiB — в обоих ConnectionManager'ах
+- [x] VoiceRecorder: 44100 Hz, 64 kbps, AAC m4a — на обоих
+- [x] ChatViewModel ≤ 300 LOC (iOS 152, Android 158)
+- [x] Все исходники ≤ 400 LOC
+- [x] `verify_phase_5.sh` exit code 0
+
+**Phase 5 — manual verification required (cannot automate):**
+- Real-device e2e: attach JPG iOS → Android receives byte-identical (проверить через SHA-256 на обоих)
+- Voice message iOS → Android playback
+- PDF / DOC attach в обе стороны
+- FullScreenImageView pinch-zoom на реальном телефоне (жесты не работают в симуляторе)
+- Backpressure под нагрузкой: 50+ МБ файл, мониторить `bufferedAmount` (не должно превышать ~20 КБ)
+- Retransmit path: искусственно дропнуть chunk → получатель шлёт fileRetransmit → отправитель ре-эмитит
+
+---
+
+## Deferred from Phase 5 (→ Phase 6 / Phase 7)
+- Voice message waveform playback (сейчас только play icon + оценка длительности по размеру). Full waveform + seekbar — Phase 7.
+- Per-chunk 30-секундный таймаут на receive стороне (сейчас retransmit срабатывает только когда приходит fileComplete с пропусками). Полный timer-driven retransmit — Phase 6 hardening.
+- Streaming file reads с диска для больших файлов (сейчас вся byteArray в память). Для 100+ MB — Phase 6.
+- Full-screen image viewer "pinch-snap-back" при scale<1 + centering на double-tap — Phase 7 polish.
+- File types: video playback inline (сейчас video message = file card с иконкой).
+- Encrypted disk persistence файлов для saved contacts (сейчас в tmp/cacheDir). SQLCipher blob persistence — Phase 6.
+
+---
+
 # Claude / AI Senior Engineer Prompt (Plan Mode)
 
 Before writing any code, review the plan thoroughly.  

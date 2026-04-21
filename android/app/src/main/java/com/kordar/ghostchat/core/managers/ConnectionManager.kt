@@ -4,6 +4,7 @@ import android.content.Context
 import com.kordar.ghostchat.core.crypto.GhostChatCrypto
 import com.kordar.ghostchat.core.crypto.IdentityKeyService
 import com.kordar.ghostchat.core.crypto.KeyExchangePacket
+import com.kordar.ghostchat.core.files.FileTransferService
 import com.kordar.ghostchat.core.network.SignalingClient
 import com.kordar.ghostchat.core.network.SignalingEvent
 import com.kordar.ghostchat.core.network.TURNCredentials
@@ -12,7 +13,9 @@ import com.kordar.ghostchat.core.push.PushManager
 import com.kordar.ghostchat.core.webrtc.GhostRTC
 import com.kordar.ghostchat.core.webrtc.GhostRTCEvent
 import com.kordar.ghostchat.models.ConnectionState
+import com.kordar.ghostchat.models.ControlMessage
 import com.kordar.ghostchat.models.Role
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,12 +69,25 @@ class ConnectionManager(
     )
     val incomingText: SharedFlow<String> = _incomingText.asSharedFlow()
 
+    private val _incomingFile = MutableSharedFlow<FileTransferService.IncomingFile>(
+        replay = 0, extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val incomingFile: SharedFlow<FileTransferService.IncomingFile> = _incomingFile.asSharedFlow()
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var signaling: SignalingClient? = null
     private var rtc: GhostRTC? = null
     private var crypto: GhostChatCrypto? = null
     private var role: Role? = null
+    private var fileTransfer: FileTransferService = FileTransferService()
     private val watchers = mutableListOf<Job>()
+
+    companion object {
+        /** Backpressure: pause file sends while the SCTP buffer holds > 16 KiB. */
+        const val BACKPRESSURE_THRESHOLD_BYTES: Long = 16L * 1024
+        /** 100 MiB hard cap on attachments. */
+        const val MAX_FILE_BYTES: Int = 100 * 1024 * 1024
+    }
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -127,6 +143,32 @@ class ConnectionManager(
         rtc.send(wire.toByteArray(Charsets.UTF_8))
     }
 
+    /** Encode, encrypt, send a [ControlMessage] over the DataChannel. */
+    suspend fun sendControl(ctrl: ControlMessage) {
+        val crypto = crypto ?: error("crypto not initialized")
+        val rtc = rtc ?: error("rtc not initialized")
+        check(_state.value == ConnectionState.ENCRYPTED) { "not encrypted yet" }
+        val jsonStr = ControlMessage.encode(ctrl)
+        val wire = crypto.encrypt(jsonStr)
+        rtc.send(wire.toByteArray(Charsets.UTF_8))
+    }
+
+    /** Chunk `data`, stream it as encrypted file-chunk control messages with
+     *  backpressure, then send file-complete. Returns the fileId. */
+    suspend fun sendFile(data: ByteArray, name: String, mimeType: String): String {
+        check(_state.value == ConnectionState.ENCRYPTED) { "not encrypted yet" }
+        require(data.size <= MAX_FILE_BYTES) { "file too large: ${data.size}" }
+
+        val out = fileTransfer.prepareOutbound(data, name, mimeType)
+        sendControl(out.startMessage)
+        for (chunk in out.chunkMessages) {
+            awaitSendSlot()
+            sendControl(chunk)
+        }
+        sendControl(out.completeMessage)
+        return out.fileId
+    }
+
     fun leave() {
         signaling?.leaveRoom()
         reset()
@@ -138,11 +180,19 @@ class ConnectionManager(
         signaling?.disconnect(); signaling = null
         rtc?.close();           rtc = null
         crypto = null
+        fileTransfer = FileTransferService()
         _roomId.value = null
         _safetyNumber.value = null
         _peerIdentity.value = null
         role = null
         _state.value = ConnectionState.DISCONNECTED
+    }
+
+    /** Pauses (via suspend) while the DataChannel buffer is above threshold. */
+    private suspend fun awaitSendSlot() {
+        while ((rtc?.bufferedAmount() ?: 0L) > BACKPRESSURE_THRESHOLD_BYTES) {
+            delay(10)
+        }
     }
 
     // MARK: - Event loops
@@ -246,8 +296,50 @@ class ConnectionManager(
         runCatching { KeyExchangePacket.decode(text) }.getOrNull()?.let { pkt ->
             if (pkt.type == "key-exchange") { completeHandshake(pkt); return }
         }
-        runCatching { crypto.decrypt(text) }.onSuccess { plaintext ->
+        val plaintext = runCatching { crypto.decrypt(text) }.getOrNull() ?: return
+
+        // Try to parse as control message first; fallback to plain text.
+        val ctrl = runCatching { ControlMessage.decode(plaintext) }.getOrNull()
+        if (ctrl != null) {
+            handleControl(ctrl)
+        } else {
             _incomingText.tryEmit(plaintext)
+        }
+    }
+
+    private suspend fun handleControl(ctrl: ControlMessage) {
+        when (ctrl) {
+            is ControlMessage.FileStart -> fileTransfer.handleStart(
+                fileId = ctrl.fileId, name = ctrl.name, size = ctrl.size,
+                mimeType = ctrl.mimeType, totalChunks = ctrl.totalChunks
+            )
+
+            is ControlMessage.FileChunk -> fileTransfer.handleChunk(
+                fileId = ctrl.fileId, index = ctrl.index, base64Data = ctrl.data
+            )
+
+            is ControlMessage.FileComplete -> {
+                val ev = fileTransfer.handleComplete(ctrl.fileId, ctrl.sha256)
+                when (ev) {
+                    is FileTransferService.Event.Completed ->
+                        _incomingFile.tryEmit(ev.file)
+                    is FileTransferService.Event.Missing ->
+                        runCatching { sendControl(ControlMessage.FileRetransmit(ctrl.fileId, ev.indices)) }
+                    else -> Unit
+                }
+            }
+
+            is ControlMessage.FileRetransmit -> {
+                val msgs = fileTransfer.retransmitMessages(ctrl.fileId, ctrl.indices)
+                for (m in msgs) {
+                    awaitSendSlot()
+                    runCatching { sendControl(m) }
+                }
+            }
+
+            // Other control types land in their own phases — ignore here so
+            // they don't get mistaken for text messages.
+            else -> Unit
         }
     }
 

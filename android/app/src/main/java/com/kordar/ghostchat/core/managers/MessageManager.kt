@@ -59,6 +59,58 @@ class MessageManager(
         return finalize(m, defaultTtl)
     }
 
+    /** Create a local "sending…" bubble for an outgoing attachment. */
+    fun sendFile(
+        fileId: String,
+        name: String,
+        size: Int,
+        mimeType: String,
+        localPath: String?
+    ): ChatMessage {
+        val type = if (mimeType == "audio/mp4" && name.startsWith("voice-"))
+            MessageType.VOICE else MessageType.FILE
+        val m = ChatMessage(
+            contactId = activeContactId ?: "",
+            sender = Sender.ME,
+            text = "",
+            type = type,
+            isDelivered = false,
+            isPending = true,
+            fileName = name,
+            fileSize = size,
+            fileMimeType = mimeType,
+            fileLocalPath = localPath,
+            fileId = fileId
+        )
+        return finalize(m, defaultTtl)
+    }
+
+    /** Record an incoming attachment once the chunked transfer assembles. */
+    fun receivedFile(
+        fileId: String,
+        name: String,
+        size: Int,
+        mimeType: String,
+        localPath: String?
+    ): ChatMessage {
+        val type = if (mimeType == "audio/mp4" && name.startsWith("voice-"))
+            MessageType.VOICE else MessageType.FILE
+        val m = ChatMessage(
+            contactId = activeContactId ?: "",
+            sender = Sender.PEER,
+            text = "",
+            type = type,
+            isDelivered = true,
+            isPending = false,
+            fileName = name,
+            fileSize = size,
+            fileMimeType = mimeType,
+            fileLocalPath = localPath,
+            fileId = fileId
+        )
+        return finalize(m, defaultTtl)
+    }
+
     fun system(text: String) {
         finalize(
             ChatMessage(

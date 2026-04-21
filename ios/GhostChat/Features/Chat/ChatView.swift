@@ -11,6 +11,7 @@ struct ChatView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var showCall = false
+    @State private var previewImageURL: URL?
 
     var body: some View {
         ZStack {
@@ -19,7 +20,16 @@ struct ChatView: View {
                 header
                 statusBanner
                 messagesList
-                inputBar
+                ChatInputBar(
+                    vm: vm,
+                    placeholder: localization.localized("chat.type_message"),
+                    canSend: connection.state == .encrypted
+                )
+            }
+            if let url = previewImageURL {
+                FullScreenImageView(url: url, onClose: { previewImageURL = nil })
+                    .transition(.opacity)
+                    .zIndex(10)
             }
         }
         .onAppear {
@@ -84,7 +94,9 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(messages.messages) { message in
-                        ChatBubble(message: message).id(message.id)
+                        ChatBubble(message: message, onPreviewImage: { url in
+                            withAnimation { previewImageURL = url }
+                        }).id(message.id)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -96,23 +108,6 @@ struct ChatView: View {
                 }
             }
         }
-    }
-
-    private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField(localization.localized("chat.type_message"), text: $vm.draft)
-                .padding(12)
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
-                .foregroundStyle(.white)
-            Button {
-                Task { await vm.send() }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .resizable().frame(width: 36, height: 36)
-                    .foregroundStyle(.white)
-            }
-        }
-        .padding(12)
     }
 
     // MARK: - Derived

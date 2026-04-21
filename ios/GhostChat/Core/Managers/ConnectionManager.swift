@@ -11,7 +11,16 @@ final class ConnectionManager: ObservableObject {
     enum Error: Swift.Error, Equatable {
         case notConnected
         case unexpectedState
+        case fileTooLarge(Int)
     }
+
+    /// Backpressure threshold — pause file sends when the SCTP send buffer
+    /// exceeds 16 KiB. Matches the spec and the Android mirror.
+    static let backpressureThresholdBytes: UInt64 = 16 * 1024
+
+    /// Hard cap on attachment size (100 MiB). Above this we refuse to send rather
+    /// than spend tens of seconds chunking + encrypting on the main actor.
+    static let maxFileBytes = 100 * 1024 * 1024
 
     @Published private(set) var state: ConnectionState = .disconnected
     @Published private(set) var roomId: String?
@@ -19,6 +28,7 @@ final class ConnectionManager: ObservableObject {
     @Published private(set) var peerIdentity: Data?
 
     let incomingText: AsyncStream<String>
+    let incomingFile: AsyncStream<FileTransferService.IncomingFile>
 
     private let signalingURL: URL
     private let apiBaseURL: URL
@@ -31,8 +41,10 @@ final class ConnectionManager: ObservableObject {
     private var rtc: GhostRTC?
     private var crypto: GhostChatCrypto?
     private var role: Role?
+    private var fileTransfer: FileTransferService = FileTransferService()
 
     private var incomingContinuation: AsyncStream<String>.Continuation?
+    private var fileContinuation: AsyncStream<FileTransferService.IncomingFile>.Continuation?
     private var tasks: [Task<Void, Never>] = []
 
     init(
@@ -48,9 +60,12 @@ final class ConnectionManager: ObservableObject {
         self.push = push
         self.pinning = pinning
         self.turn = TURNService(baseURL: apiBaseURL, pinning: pinning)
-        var cont: AsyncStream<String>.Continuation!
-        self.incomingText = AsyncStream { cont = $0 }
-        self.incomingContinuation = cont
+        var textCont: AsyncStream<String>.Continuation!
+        self.incomingText = AsyncStream { textCont = $0 }
+        self.incomingContinuation = textCont
+        var fileCont: AsyncStream<FileTransferService.IncomingFile>.Continuation!
+        self.incomingFile = AsyncStream { fileCont = $0 }
+        self.fileContinuation = fileCont
     }
 
     // MARK: - Connect flows
@@ -104,6 +119,35 @@ final class ConnectionManager: ObservableObject {
         try rtc.send(Data(wire.utf8))
     }
 
+    /// Send a raw control message (encoded as JSON, encrypted, sent over the
+    /// DataChannel). Callers must only invoke once the session is `.encrypted`.
+    func sendControl(_ ctrl: ControlMessage) async throws {
+        guard let crypto, let rtc else { throw Error.unexpectedState }
+        guard state == .encrypted else { throw Error.notConnected }
+        let json = try JSONEncoder().encode(ctrl)
+        guard let text = String(data: json, encoding: .utf8) else { throw Error.unexpectedState }
+        let wire = try await crypto.encrypt(text)
+        try rtc.send(Data(wire.utf8))
+    }
+
+    /// Chunk `data`, stream each chunk as an encrypted `file-chunk` control
+    /// message with backpressure, then send `file-complete`. Returns the
+    /// locally-minted `fileId` so the caller can track progress / show a bubble.
+    @discardableResult
+    func sendFile(data: Data, name: String, mimeType: String) async throws -> String {
+        guard state == .encrypted else { throw Error.notConnected }
+        guard data.count <= Self.maxFileBytes else { throw Error.fileTooLarge(data.count) }
+
+        let out = try fileTransfer.prepareOutbound(data: data, name: name, mimeType: mimeType)
+        try await sendControl(out.startMessage)
+        for chunk in out.chunkMessages {
+            try await awaitSendSlot()
+            try await sendControl(chunk)
+        }
+        try await sendControl(out.completeMessage)
+        return out.fileId
+    }
+
     func leave() {
         try? signaling?.leaveRoom()
         reset()
@@ -117,11 +161,22 @@ final class ConnectionManager: ObservableObject {
         signaling = nil
         rtc = nil
         crypto = nil
+        fileTransfer = FileTransferService()
         roomId = nil
         safetyNumber = nil
         peerIdentity = nil
         role = nil
         state = .disconnected
+    }
+
+    /// Sleep briefly while the DataChannel's outgoing SCTP buffer is over the
+    /// backpressure threshold. Resolves as soon as the buffer drains — or if
+    /// the session tears down.
+    private func awaitSendSlot() async throws {
+        while let rtc, rtc.bufferedAmount > Self.backpressureThresholdBytes {
+            if Task.isCancelled { throw CancellationError() }
+            try await Task.sleep(nanoseconds: 10_000_000)  // 10 ms
+        }
     }
 
     // MARK: - Loops
@@ -240,16 +295,63 @@ final class ConnectionManager: ObservableObject {
     }
 
     private func handleDataChannelMessage(_ data: Data) async {
-        // Try key exchange packet first
+        // Try key exchange packet first (plaintext JSON, sent right after DC open).
         if let pkt = try? JSONDecoder().decode(KeyExchangePacket.self, from: data),
            pkt.type == "key-exchange" {
             try? await completeHandshake(with: pkt)
             return
         }
-        // Otherwise expect encrypted wire
+        // Otherwise expect encrypted wire — decrypt via Double Ratchet.
         guard let wire = String(data: data, encoding: .utf8) else { return }
-        if let text = try? await crypto?.decrypt(wire) {
-            incomingContinuation?.yield(text)
+        guard let plaintext = try? await crypto?.decrypt(wire) else { return }
+        let plainData = Data(plaintext.utf8)
+
+        // Control messages (`_ctrl: true`) get routed to the control handler.
+        if let ctrl = try? JSONDecoder().decode(ControlMessage.self, from: plainData) {
+            await handleControl(ctrl)
+            return
+        }
+
+        // Fallback: deliver as a plain text chat message.
+        incomingContinuation?.yield(plaintext)
+    }
+
+    private func handleControl(_ ctrl: ControlMessage) async {
+        switch ctrl {
+        case .fileStart(let fileId, let name, let size, let mimeType, let totalChunks):
+            _ = fileTransfer.handleStart(
+                fileId: fileId, name: name, size: size,
+                mimeType: mimeType, totalChunks: totalChunks
+            )
+
+        case .fileChunk(let fileId, let index, let data):
+            _ = fileTransfer.handleChunk(fileId: fileId, index: index, base64Data: data)
+
+        case .fileComplete(let fileId, let sha256):
+            let event = fileTransfer.handleComplete(fileId: fileId, expectedSha256Hex: sha256)
+            switch event {
+            case .completed(let file):
+                fileContinuation?.yield(file)
+            case .missing(_, let indices):
+                try? await sendControl(.fileRetransmit(fileId: fileId, indices: indices))
+            default:
+                break
+            }
+
+        case .fileRetransmit(let fileId, let indices):
+            let messages = fileTransfer.retransmitMessages(fileId: fileId, indices: indices)
+            for msg in messages {
+                try? await awaitSendSlot()
+                try? await sendControl(msg)
+            }
+
+        case .renegotiate, .callRequest, .callResponse, .callEnd,
+             .securityAlert, .messageAck, .messageRead, .ready,
+             .pushToken, .notifyToken, .typing, .capabilities,
+             .messageDelete, .messageEdit, .messagePin:
+            // These control types will be handled in their own phases; for
+            // Phase 5 we silently ignore so they don't get confused for text.
+            break
         }
     }
 

@@ -208,6 +208,12 @@ class GhostRTC(
         return dc.send(buf)
     }
 
+    /** SCTP send-buffer queue depth in bytes. Used by [ConnectionManager] for
+     *  backpressure when streaming file chunks — pauses sends above ~16 KiB. */
+    fun bufferedAmount(): Long = dataChannel?.bufferedAmount() ?: 0L
+
+    fun isDataChannelOpen(): Boolean = dataChannel?.state() == DataChannel.State.OPEN
+
     // MARK: - Private
 
     private fun makeIceServers(): List<PeerConnection.IceServer> {

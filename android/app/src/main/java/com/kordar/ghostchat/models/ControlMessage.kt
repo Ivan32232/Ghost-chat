@@ -90,7 +90,7 @@ sealed class ControlMessage {
         override val wireType: String = "file-chunk"
     }
 
-    data class FileComplete(val fileId: String) : ControlMessage() {
+    data class FileComplete(val fileId: String, val sha256: String) : ControlMessage() {
         override val wireType: String = "file-complete"
     }
 
@@ -154,7 +154,10 @@ sealed class ControlMessage {
                     put("index",  JsonPrimitive(message.index))
                     put("data",   JsonPrimitive(message.data))
                 }
-                is FileComplete    -> put("fileId", JsonPrimitive(message.fileId))
+                is FileComplete    -> {
+                    put("fileId", JsonPrimitive(message.fileId))
+                    put("sha256", JsonPrimitive(message.sha256))
+                }
                 is FileRetransmit  -> {
                     put("fileId",  JsonPrimitive(message.fileId))
                     put("indices", JsonArray(message.indices.map { JsonPrimitive(it) }))
@@ -201,7 +204,7 @@ sealed class ControlMessage {
                     index  = obj.int("index"),
                     data   = obj.string("data")
                 )
-                "file-complete"    -> FileComplete(obj.string("fileId"))
+                "file-complete"    -> FileComplete(obj.string("fileId"), obj.string("sha256"))
                 "file-retransmit"  -> FileRetransmit(
                     fileId  = obj.string("fileId"),
                     indices = obj.intList("indices")

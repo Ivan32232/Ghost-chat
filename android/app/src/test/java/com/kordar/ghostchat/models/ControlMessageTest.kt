@@ -40,7 +40,7 @@ class ControlMessageTest {
                 mimeType = "image/png", totalChunks = 10
             ),
             ControlMessage.FileChunk(fileId = "f1", index = 3, data = "AAAA"),
-            ControlMessage.FileComplete(fileId = "f1"),
+            ControlMessage.FileComplete(fileId = "f1", sha256 = "a".repeat(64)),
             ControlMessage.FileRetransmit(fileId = "f1", indices = listOf(2, 5, 7)),
             ControlMessage.MessageDelete(messageId = "msg1"),
             ControlMessage.MessageEdit(messageId = "msg1", newText = "hi"),
@@ -77,5 +77,24 @@ class ControlMessageTest {
         val m = ControlMessage.decode(iosSample) as ControlMessage.MessagePin
         assertThat(m.messageId).isEqualTo("abc")
         assertThat(m.pinned).isTrue()
+    }
+
+    @Test
+    fun `fileComplete carries hex sha256`() {
+        val hex = "deadbeefcafebabefeedfacec0ffee00112233445566778899aabbccddeeff00"
+        val encoded = ControlMessage.encode(ControlMessage.FileComplete(fileId = "f", sha256 = hex))
+        val obj = json.parseToJsonElement(encoded).jsonObject
+        assertThat(obj["fileId"]?.jsonPrimitive?.content).isEqualTo("f")
+        assertThat(obj["sha256"]?.jsonPrimitive?.content).isEqualTo(hex)
+        val back = ControlMessage.decode(encoded) as ControlMessage.FileComplete
+        assertThat(back.sha256).isEqualTo(hex)
+    }
+
+    @Test
+    fun `ios fileComplete wire sample decodes`() {
+        val iosSample = """{"_ctrl":true,"type":"file-complete","fileId":"f1","sha256":"cafe"}"""
+        val m = ControlMessage.decode(iosSample) as ControlMessage.FileComplete
+        assertThat(m.fileId).isEqualTo("f1")
+        assertThat(m.sha256).isEqualTo("cafe")
     }
 }

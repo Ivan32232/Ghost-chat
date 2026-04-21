@@ -18,7 +18,7 @@ enum ControlMessage: Equatable {
     case capabilities(features: [String])
     case fileStart(fileId: String, name: String, size: Int, mimeType: String, totalChunks: Int)
     case fileChunk(fileId: String, index: Int, data: String)
-    case fileComplete(fileId: String)
+    case fileComplete(fileId: String, sha256: String)
     case fileRetransmit(fileId: String, indices: [Int])
     case messageDelete(messageId: String)
     case messageEdit(messageId: String, newText: String)
@@ -63,7 +63,7 @@ extension ControlMessage: Codable {
         case type
         case sdp, accepted, alert, c, token, isTyping, features
         case fileId, name, size, mimeType, totalChunks
-        case index, data, indices
+        case index, data, indices, sha256
         case messageId, newText, pinned
     }
 
@@ -112,7 +112,10 @@ extension ControlMessage: Codable {
                 data:   try c.decode(String.self, forKey: .data)
             )
         case "file-complete":
-            self = .fileComplete(fileId: try c.decode(String.self, forKey: .fileId))
+            self = .fileComplete(
+                fileId: try c.decode(String.self, forKey: .fileId),
+                sha256: try c.decode(String.self, forKey: .sha256)
+            )
         case "file-retransmit":
             self = .fileRetransmit(
                 fileId:  try c.decode(String.self, forKey: .fileId),
@@ -166,8 +169,9 @@ extension ControlMessage: Codable {
             try c.encode(fileId, forKey: .fileId)
             try c.encode(index,  forKey: .index)
             try c.encode(data,   forKey: .data)
-        case .fileComplete(let fileId):
+        case .fileComplete(let fileId, let sha256):
             try c.encode(fileId, forKey: .fileId)
+            try c.encode(sha256, forKey: .sha256)
         case .fileRetransmit(let fileId, let indices):
             try c.encode(fileId,  forKey: .fileId)
             try c.encode(indices, forKey: .indices)
