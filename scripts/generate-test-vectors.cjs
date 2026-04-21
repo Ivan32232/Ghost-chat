@@ -546,6 +546,55 @@ vectors.session = {
   messages: sessionMessages
 };
 
+// --- Phase 6: contact key rotation (deterministic HKDF) ---
+{
+  const shared = Buffer.alloc(32, 0xAA);
+  const derived = hkdfSha256(shared, Buffer.from('ghost-rot-v1'), Buffer.from('ghost-rot-seed'), 32);
+  vectors.contactRotation = {
+    description: 'HKDF-derived next-generation keypair seed, deterministic across iOS ↔ Android.',
+    sessionSecret: hex(shared),
+    salt: 'ghost-rot-v1',
+    info: 'ghost-rot-seed',
+    length: 32,
+    derivedSeed: hex(derived)
+  };
+}
+
+// --- Phase 6: ML-KEM hybrid root-key derivation (no actual KEM — just the combine step) ---
+{
+  const ecdhSS = Buffer.alloc(32, 0xAB);
+  const pqSS   = Buffer.alloc(32, 0xCD);
+  const withPQ = hkdfSha256(
+    Buffer.concat([ecdhSS, pqSS]),
+    Buffer.from('ghost-chat-v1-pq'),
+    Buffer.from('ghost-dr-root'),
+    32
+  );
+  const noPQ = hkdfSha256(
+    ecdhSS,
+    Buffer.from('ghost-chat-v1-pq'),
+    Buffer.from('ghost-dr-root'),
+    32
+  );
+  vectors.pqHybrid = {
+    description: 'HKDF combine of ECDH shared secret + optional ML-KEM shared secret.',
+    ecdhSharedSecret: hex(ecdhSS),
+    pqSharedSecret: hex(pqSS),
+    salt: 'ghost-chat-v1-pq',
+    info: 'ghost-dr-root',
+    combinedWithPQ: hex(withPQ),
+    combinedWithoutPQ: hex(noPQ)
+  };
+}
+
+// --- Phase 6: ReplayGuard boundary values (no crypto — just human reference) ---
+vectors.replayGuard = {
+  description: 'Timestamp and counter window parameters for ReplayGuard. Informational only.',
+  timestampWindowMs: 5 * 60 * 1000,
+  counterWindow: 1000,
+  nonceTrackWindowMs: 10 * 60 * 1000
+};
+
 // --- Output ---
 const output = JSON.stringify(vectors, null, 2);
 const fs = require('fs');
@@ -557,4 +606,6 @@ console.log(`ECDH shared secret: ${vectors.ecdh.sharedSecret.slice(0, 16)}...`);
 console.log(`Initial root key: ${vectors.initialRootKey.rootKey.slice(0, 16)}...`);
 console.log(`Safety number: ${vectors.safetyNumber.fingerprint}`);
 console.log(`Session messages: ${sessionMessages.length}`);
+console.log(`Contact rotation seed: ${vectors.contactRotation.derivedSeed.slice(0, 16)}...`);
+console.log(`PQ hybrid (with PQ): ${vectors.pqHybrid.combinedWithPQ.slice(0, 16)}...`);
 console.log('All self-checks passed.');

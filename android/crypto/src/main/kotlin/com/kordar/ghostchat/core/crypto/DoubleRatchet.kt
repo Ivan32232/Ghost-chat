@@ -66,6 +66,13 @@ class DoubleRatchet(
         mkSkipped.putAll(snap.mkSkipped)
     }
 
+    /**
+     * Current root key (32 bytes). Used as the session shared secret for per-contact
+     * key rotation at session close. Does NOT mutate the ratchet.
+     */
+    val currentRootKey: ByteArray
+        get() = rk.copyOf()
+
     /** Serialised opaque ratchet state suitable for persistence in SQLCipher. */
     val exportedState: ByteArray
         get() = DoubleRatchetState.serialize(

@@ -93,6 +93,12 @@ public struct DoubleRatchet {
         }
     }
 
+    // MARK: - Introspection
+
+    /// Current ratchet root key (32 bytes). Used as the session shared secret for
+    /// per-contact key rotation at session close. Does NOT mutate the ratchet.
+    public var currentRootKey: Data { rk.rawData }
+
     // MARK: - Encrypt
 
     /// Encrypt plaintext and return wire-format base64 string.

@@ -99,6 +99,16 @@ class GhostChatCrypto(private val identity: IdentityKeyService) {
         ready.peerIdentity.copyOf()
     }
 
+    /**
+     * Current ratchet root key — the session's post-handshake shared secret.
+     * Used to seed [ContactKeyRotation.deriveNextSeed] at session close. Deterministic
+     * across iOS ↔ Android for a given session.
+     */
+    suspend fun sessionSecret(): ByteArray = mutex.withLock {
+        val ready = state as? State.Ready ?: throw Error.NotInitialized
+        ready.ratchet.currentRootKey
+    }
+
     // MARK: - State persistence
 
     suspend fun exportState(): ByteArray = mutex.withLock {

@@ -130,6 +130,14 @@ actor GhostChatCrypto {
         return peerIdentity
     }
 
+    /// Current ratchet root key — the session's post-handshake shared secret.
+    /// Used to seed `ContactKeyRotation.deriveNextSeed` at session close. Deterministic
+    /// across iOS ↔ Android for a given session.
+    func sessionSecret() throws -> Data {
+        guard case .ready(let ratchet, _) = state else { throw Error.notInitialized }
+        return ratchet.currentRootKey
+    }
+
     // MARK: - State persistence
 
     func exportState() throws -> Data {

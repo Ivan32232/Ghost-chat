@@ -172,5 +172,28 @@
         "wireBase64": "AAAASQCAtvs5dSyJ+E45o/cBzSdyUY/jZC9zC0OQVTZ/g85B+jigdlze4C6WaQf7JvDLHcsgMgZQgQ3MLo+xW7h2eWaIAAAAAQAAAACxAAAAAAAAAAAAAABU6VtShRJ0rF1PJryQva8O4gfWyqAEDV7jCdTHN8Gla78FVVznC6KZ/vy/xAu+xqLGCRgL6Xjz+ZExU/GTgcBme9CUQO7zzqb1MsjcxjnNeHYMtfTLOiBIfkhbFEe2c5Xei7H9qa729KKa+w1q6MVaOoos0cQWWfPFb7E92q/GMQxMkw7LWzf9zGiZXtHXZqXdyEXOhowznfb6DcGLuGzzoZsLu4IHu2UJbg3wXYGPA6p2sogFVgO2C3FkO2ogXQG+3RlD7S71DELCS+Y/cq3uqJWJrmTTlYBPePzegp3I8jH8XbkufZa+PTonJjkqdW2lpcYwB73BNMhrhNZTtRR/s1deGWBprc1KVKDRwqkqBA=="
       }
     ]
+  },
+  "contactRotation": {
+    "description": "HKDF-derived next-generation keypair seed, deterministic across iOS ↔ Android.",
+    "sessionSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "salt": "ghost-rot-v1",
+    "info": "ghost-rot-seed",
+    "length": 32,
+    "derivedSeed": "1f4f27ab8ba143449e1d4de39c3752b9e11538152f8876f1482c550c2b7dd65e"
+  },
+  "pqHybrid": {
+    "description": "HKDF combine of ECDH shared secret + optional ML-KEM shared secret.",
+    "ecdhSharedSecret": "abababababababababababababababababababababababababababababababab",
+    "pqSharedSecret": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "salt": "ghost-chat-v1-pq",
+    "info": "ghost-dr-root",
+    "combinedWithPQ": "207fad0312271a11364d7c3184693501082f1f614ff632987ba8e763df762eae",
+    "combinedWithoutPQ": "11edf4ea0a6fb4e02b042841e5e72f2c8415cfca1ab9a815b0ffe6fb4fc69e4a"
+  },
+  "replayGuard": {
+    "description": "Timestamp and counter window parameters for ReplayGuard. Informational only.",
+    "timestampWindowMs": 300000,
+    "counterWindow": 1000,
+    "nonceTrackWindowMs": 600000
   }
 }
