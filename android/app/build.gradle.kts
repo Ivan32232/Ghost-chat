@@ -7,6 +7,17 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+hilt {
+    enableAggregatingTask = true
+}
+
+ksp {
+    arg("dagger.hilt.android.internal.disableAndroidSuperclassValidation", "true")
+    arg("dagger.fastInit", "enabled")
+    arg("dagger.hilt.android.internal.projectType", "APP")
+    arg("dagger.hilt.internal.useAggregatingRootProcessor", "false")
+}
+
 android {
     namespace = "com.kordar.ghostchat"
     compileSdk = 35
@@ -60,7 +71,8 @@ android {
             "META-INF/LGPL2.1",
             "META-INF/INDEX.LIST",
             "META-INF/DEPENDENCIES",
-            "META-INF/io.netty.versions.properties"
+            "META-INF/io.netty.versions.properties",
+            "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         )
     }
 
@@ -103,9 +115,9 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
     // Hilt
-    implementation("com.google.dagger:hilt-android:2.52")
+    implementation("com.google.dagger:hilt-android:2.54")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-    ksp("com.google.dagger:hilt-android-compiler:2.52")
+    ksp("com.google.dagger:hilt-android-compiler:2.54")
 
     // OkHttp
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
