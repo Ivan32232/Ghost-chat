@@ -19,7 +19,17 @@ struct SecurityDashboardView: View {
                 row(label: "Protocol", value: "Signal Double Ratchet")
                 row(label: "Curve", value: "P-256 (CryptoKit)")
                 row(label: "AEAD", value: "AES-256-GCM")
-                row(label: "PQ", value: "Deferred to Phase 6")
+                row(label: "PQ", value: "ECDH only")
+            }
+            Section("Device integrity") {
+                let report = JailbreakDetector.detect()
+                row(label: "Jailbreak check",
+                    value: report.status == .safe ? "Safe" : "Suspicious")
+                if report.status != .safe {
+                    ForEach(report.markers, id: \.self) { marker in
+                        row(label: "", value: marker, monospaced: true)
+                    }
+                }
             }
         }
         .scrollContentBackground(.hidden)

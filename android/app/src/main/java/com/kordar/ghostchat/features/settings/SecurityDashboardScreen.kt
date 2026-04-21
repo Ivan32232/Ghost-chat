@@ -14,14 +14,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.kordar.ghostchat.core.managers.ConnectionManager
 import com.kordar.ghostchat.core.network.CertificatePinning
+import com.kordar.ghostchat.core.security.RootDetector
 
 @Composable
 fun SecurityDashboardScreen(
@@ -31,6 +34,8 @@ fun SecurityDashboardScreen(
     val state by connection.state.collectAsState()
     val roomId by connection.roomId.collectAsState()
     val safetyNumber by connection.safetyNumber.collectAsState()
+    val context = LocalContext.current
+    val rootReport = remember(context) { RootDetector().detect(context) }
 
     Column(
         modifier = Modifier
@@ -55,7 +60,20 @@ fun SecurityDashboardScreen(
         StatRow("Protocol", "Signal Double Ratchet")
         StatRow("Curve",    "P-256 (BouncyCastle)")
         StatRow("AEAD",     "AES-256-GCM")
-        StatRow("PQ",       "Deferred to Phase 6")
+        StatRow("PQ", "ECDH only")
+
+        Spacer(Modifier.padding(top = 12.dp))
+        SectionTitle("Device integrity")
+        StatRow(
+            "Root check",
+            if (rootReport.status == com.kordar.ghostchat.core.security.RootStatus.SAFE)
+                "Safe"
+            else
+                "Suspicious"
+        )
+        for (marker in rootReport.markers) {
+            StatRow("", marker, monospace = true)
+        }
     }
 }
 
