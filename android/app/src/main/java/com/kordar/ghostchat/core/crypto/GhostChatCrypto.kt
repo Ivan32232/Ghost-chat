@@ -5,6 +5,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import java.util.Base64
+import java.util.UUID
+import kotlin.math.abs
 
 /**
  * Stateful wrapper around a single [DoubleRatchet] session. Mirrors the iOS `actor
@@ -15,10 +17,15 @@ import java.util.Base64
  *   2. On peer's packet → [completeAsHost] / [completeAsGuest]
  *   3. [encrypt] / [decrypt] while `isReady`
  *   4. [exportState] to persist for saved contacts, [restore] on reopen
+ *
+ * Phase 7: every message is wrapped in a [MessageEnvelope] `{m,t,c,id}` before padding +
+ * encryption. Receivers extract `env.t` and pass it to [ReplayGuard]'s ±5 min window. Clock
+ * is injectable for tests via the [clock] constructor param.
  */
 class GhostChatCrypto(
     private val identity: IdentityKeyService,
-    private val replayGuard: ReplayGuard = ReplayGuard()
+    private val replayGuard: ReplayGuard = ReplayGuard(),
+    private val clock: GhostClock = SystemClock
 ) {
 
     sealed class Error(message: String) : RuntimeException(message) {
@@ -35,6 +42,7 @@ class GhostChatCrypto(
 
     private val mutex = Mutex()
     private var state: State = State.Uninitialized
+    private var sendCounter: Long = 0L
 
     val isReady: Boolean
         get() = state is State.Ready
@@ -77,29 +85,60 @@ class GhostChatCrypto(
         state = State.Ready(ratchet, peerIdentityX963)
     }
 
+    // MARK: - Encrypt / Decrypt (envelope-wrapped)
+
+    /**
+     * Encrypt chat text or control JSON by first wrapping in a [MessageEnvelope] with
+     * the sender's current timestamp and a monotonic per-session counter.
+     */
     suspend fun encrypt(plaintext: String): String = mutex.withLock {
         val ready = state as? State.Ready ?: throw Error.NotInitialized
-        ready.ratchet.encrypt(plaintext).wireBase64
+        sendCounter += 1
+        val env = MessageEnvelope(
+            m  = plaintext,
+            t  = clock.nowMs(),
+            c  = sendCounter,
+            id = UUID.randomUUID().toString()
+        )
+        ready.ratchet.encrypt(MessageEnvelope.encode(env)).wireBase64
     }
 
-    suspend fun decrypt(wireBase64: String): String = mutex.withLock {
+    /**
+     * Decrypt a wire-format base64 string. Runs ReplayGuard on nonce+counter before
+     * decrypt (cheap dedup), then post-decrypt checks the envelope's timestamp window.
+     * Returns `env.m`.
+     */
+    suspend fun decrypt(wireBase64: String): String = decryptEnvelope(wireBase64).m
+
+    /**
+     * Decrypt and return the full [MessageEnvelope] (test hook; production callers use
+     * [decrypt] which surfaces only `env.m`).
+     */
+    suspend fun decryptEnvelope(wireBase64: String): MessageEnvelope = mutex.withLock {
         val ready = state as? State.Ready ?: throw Error.NotInitialized
 
-        // Defence-in-depth: parse the wire to extract nonce + counter, then run the
-        // ReplayGuard BEFORE the ratchet. The guard throws on nonce replay, out-of-
-        // window counter, or (when the plaintext envelope has a `t` field we can
-        // read — currently unused, reserved for a future wire bump) stale timestamp.
+        // Cheap first-line defence: nonce + counter LRU before decrypt. `timestampMs = null`
+        // here — the real timestamp lives inside the envelope and is checked post-decrypt.
         runCatching {
-            val wireBytes = java.util.Base64.getDecoder().decode(wireBase64)
+            val wireBytes = Base64.getDecoder().decode(wireBase64)
             val parsed = WireFormat.parseMessage(wireBytes)
             val header = WireFormat.parseHeader(parsed.header)
-            replayGuard.admit(parsed.nonce, counter = header.n, timestampMs = null)
+            replayGuard.admit(parsed.nonce, counter = header.n, timestampMs = null, now = clock.nowMs())
         }.onFailure { cause ->
             if (cause is ReplayError) throw cause
             // Malformed wire: let the ratchet decide, don't double-report.
         }
 
-        ready.ratchet.decrypt(wireBase64)
+        val envJson = ready.ratchet.decrypt(wireBase64)
+        val env = MessageEnvelope.decode(envJson)
+
+        // Post-decrypt timestamp check.
+        val now = clock.nowMs()
+        if (abs(now - env.t) > ReplayGuard.DEFAULT_TIMESTAMP_WINDOW_MS) {
+            throw ReplayError.TimestampOutOfWindow
+        }
+
+        env
     }
 
     // MARK: - Safety number
