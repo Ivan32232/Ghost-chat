@@ -80,5 +80,16 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Self-managed Telecom ConnectionService (Phase 7): drives the system
+             incoming-call UI on Android 10+ when an FCM call arrives. -->
+        <service
+            android:name=".core.managers.GhostConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

@@ -1,6 +1,7 @@
 package com.kordar.ghostchat.core.push
 
 import com.kordar.ghostchat.core.AppConfig
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -14,12 +15,19 @@ object PushModule {
     @Provides
     @Singleton
     fun providePushManager(): PushManager = PushManager(baseUrl = AppConfig.SERVER_HTTPS)
+}
 
-    /**
-     * Defaults to [IncomingPushHandler.NoOp]. Replaced in Stage 11 by a real binding that
-     * forwards FCM data messages to CallManager's ConnectionService.
-     */
-    @Provides
+/**
+ * Phase 7: bind [IncomingPushHandler] to the real [DefaultIncomingPushHandler] that
+ * bridges FCM data messages to CallManager + TelecomManager (system call UI).
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class PushBindingModule {
+
+    @Binds
     @Singleton
-    fun provideIncomingPushHandler(): IncomingPushHandler = IncomingPushHandler.NoOp
+    abstract fun bindIncomingPushHandler(
+        impl: DefaultIncomingPushHandler
+    ): IncomingPushHandler
 }
