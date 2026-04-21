@@ -140,8 +140,13 @@ dependencies {
     // Telecom / ConnectionService — using the native android.telecom package directly;
     // androidx.core:core-telecom wrapper isn't needed for self-managed calls.
 
-    // BouncyCastle (already via :crypto, explicit here makes the classpath obvious)
-    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    // BouncyCastle 1.82 — bumped from 1.78.1 for ML-KEM768 PQ support (Phase 6).
+    // Explicit here (in addition to :crypto) so the classpath is obvious at a glance.
+    implementation("org.bouncycastle:bcprov-jdk18on:1.82")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
+
+    // RootBeer — root detection (Phase 6). Purely advisory; app never blocks rooted devices.
+    implementation("com.scottyab:rootbeer-lib:0.1.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

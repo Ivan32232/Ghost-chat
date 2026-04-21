@@ -3,7 +3,8 @@ plugins {
 }
 
 dependencies {
-    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.82")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("com.google.code.gson:gson:2.11.0")
 }
