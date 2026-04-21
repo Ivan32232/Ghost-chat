@@ -195,5 +195,27 @@
     "timestampWindowMs": 300000,
     "counterWindow": 1000,
     "nonceTrackWindowMs": 600000
+  },
+  "pqHandshake": {
+    "description": "Hybrid session-key derivation after ML-KEM handshake. Pins the combine step; the KEM itself is exercised by platform tests because Kyber is not deterministic from fixed seeds in Node.",
+    "ecdhSharedSecret": "abababababababababababababababababababababababababababababababab",
+    "pqSharedSecret": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "hybridSalt": "ghost-chat-v1-pq",
+    "hybridInfo": "ghost-dr-root",
+    "expectedSessionKey": "207fad0312271a11364d7c3184693501082f1f614ff632987ba8e763df762eae",
+    "expectedSessionKeyEcdhOnly": "11edf4ea0a6fb4e02b042841e5e72f2c8415cfca1ab9a815b0ffe6fb4fc69e4a"
+  },
+  "messageEnvelope": {
+    "description": "Plaintext envelope wrapping every chat/control message. Sorted JSON keys, then padded via the Phase-2 MessagePadding algorithm before encryption.",
+    "fields": {
+      "m": "hello",
+      "t": 1713100800000,
+      "c": 7,
+      "id": "env-1"
+    },
+    "canonicalJson": "{\"c\":7,\"id\":\"env-1\",\"m\":\"hello\",\"t\":1713100800000}",
+    "paddedHex": "3030363865794a6a496a6f334c434a705a434936496d5675646930784969776962534936496d686c6247787649697769644349364d5463784d7a45774d4467774d4441774d48303d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "paddedLength": 256,
+    "isMultipleOf256": true
   }
 }

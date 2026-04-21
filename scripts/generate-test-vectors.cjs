@@ -595,6 +595,55 @@ vectors.replayGuard = {
   nonceTrackWindowMs: 10 * 60 * 1000
 };
 
+// --- Phase 7: ML-KEM hybrid handshake combine step, with pinned shared secrets ---
+// Kyber encapsulation itself is not seedable deterministically from fixed inputs in Node,
+// so we pin the COMBINE step (HKDF over concat(ecdh, pq)). Both sides independently run
+// PostQuantum.hybridDeriveSharedKey and must land on `expectedSessionKey`.
+{
+  const ecdhSS = Buffer.alloc(32, 0xAB); // matches pqHybrid above
+  const pqSS   = Buffer.alloc(32, 0xCD);
+  const expectedSessionKey = hkdfSha256(
+    Buffer.concat([ecdhSS, pqSS]),
+    Buffer.from('ghost-chat-v1-pq'),
+    Buffer.from('ghost-dr-root'),
+    32
+  );
+  const expectedSessionKeyEcdhOnly = hkdfSha256(
+    ecdhSS,
+    Buffer.from('ghost-chat-v1-pq'),
+    Buffer.from('ghost-dr-root'),
+    32
+  );
+  vectors.pqHandshake = {
+    description: 'Hybrid session-key derivation after ML-KEM handshake. Pins the combine step; ' +
+                 'the KEM itself is exercised by platform tests because Kyber is not deterministic from ' +
+                 'fixed seeds in Node.',
+    ecdhSharedSecret: hex(ecdhSS),
+    pqSharedSecret: hex(pqSS),
+    hybridSalt: 'ghost-chat-v1-pq',
+    hybridInfo: 'ghost-dr-root',
+    expectedSessionKey: hex(expectedSessionKey),
+    expectedSessionKeyEcdhOnly: hex(expectedSessionKeyEcdhOnly)
+  };
+}
+
+// --- Phase 7: Message envelope {m, t, c, id} — padded form. Sorted keys in JSON. ---
+{
+  // Envelope is sorted-key JSON: c, id, m, t.
+  const envJson = '{"c":7,"id":"env-1","m":"hello","t":1713100800000}';
+  // Pad using the same zero-fill algorithm as Phase-2 messagePadding test vector.
+  const paddedEnv = padMessage(envJson);
+  vectors.messageEnvelope = {
+    description: 'Plaintext envelope wrapping every chat/control message. Sorted JSON keys, then ' +
+                 'padded via the Phase-2 MessagePadding algorithm before encryption.',
+    fields: { m: 'hello', t: 1713100800000, c: 7, id: 'env-1' },
+    canonicalJson: envJson,
+    paddedHex: hex(paddedEnv),
+    paddedLength: paddedEnv.length,
+    isMultipleOf256: paddedEnv.length % 256 === 0
+  };
+}
+
 // --- Output ---
 const output = JSON.stringify(vectors, null, 2);
 const fs = require('fs');
@@ -608,4 +657,6 @@ console.log(`Safety number: ${vectors.safetyNumber.fingerprint}`);
 console.log(`Session messages: ${sessionMessages.length}`);
 console.log(`Contact rotation seed: ${vectors.contactRotation.derivedSeed.slice(0, 16)}...`);
 console.log(`PQ hybrid (with PQ): ${vectors.pqHybrid.combinedWithPQ.slice(0, 16)}...`);
+console.log(`PQ handshake combine: ${vectors.pqHandshake.expectedSessionKey.slice(0, 16)}...`);
+console.log(`Envelope padded length: ${vectors.messageEnvelope.paddedLength} (mult256=${vectors.messageEnvelope.isMultipleOf256})`);
 console.log('All self-checks passed.');
