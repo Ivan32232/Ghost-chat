@@ -88,13 +88,9 @@ class ConnectionManager(
     private var crypto: GhostChatCrypto? = null
     private var role: Role? = null
 
-    /**
-     * Set when this session is bound to a saved contact. On [leave], a deterministic key
-     * rotation is triggered against [contactManager] using the session's shared secret.
-     */
+    /** Session-bound saved-contact id. `leave()` uses this to trigger key rotation. */
     var currentContactId: String? = null
-
-    /** App-wide [ContactManager]. Nil when rotations are disabled (unit tests). */
+    /** App-wide [ContactManager]. Null when rotations are disabled (unit tests). */
     var contactManager: ContactManager? = null
     private var fileTransfer: FileTransferService = FileTransferService()
     private val chunkTimeout = ChunkTimeoutTracker().also {
@@ -343,52 +339,18 @@ class ConnectionManager(
         }
     }
 
-    private suspend fun startKeyExchangeOverDataChannel() {
-        val crypto = crypto ?: return
-        val rtc = rtc ?: return
-        val role = role ?: return
-        runCatching {
-            val ratchetRole = if (role == Role.HOST) RatchetRole.HOST else RatchetRole.GUEST
-            val pkt = crypto.beginHandshake(ratchetRole)
-            rtc.send(KeyExchangePacket.encode(pkt).toByteArray(Charsets.UTF_8))
-        }.onFailure { _state.value = ConnectionState.DISCONNECTED }
-    }
+    private val handshake = ConnectionHandshake(
+        cryptoProvider    = { crypto },
+        rtcProvider       = { rtc },
+        roleProvider      = { role },
+        stateFlow         = _state,
+        safetyNumberFlow  = _safetyNumber,
+        peerIdentityFlow  = _peerIdentity
+    )
 
-    private suspend fun completeHandshake(pkt: KeyExchangePacket?) {
-        val role = role ?: return
-        val crypto = crypto ?: return
-        val rtc = rtc ?: return
-        pkt ?: return
-        runCatching {
-            if (role == Role.HOST) {
-                val ready = crypto.completeAsHost(pkt)
-                _peerIdentity.value = java.util.Base64.getDecoder().decode(pkt.identityKey)
-                if (ready) {
-                    _state.value = ConnectionState.ENCRYPTED
-                    _safetyNumber.value = runCatching { crypto.safetyNumber() }.getOrNull()
-                }
-                // Otherwise HOST sits in AwaitingPq until a PqExchangePacket arrives.
-            } else {
-                val pqOut = crypto.completeAsGuest(pkt)
-                _peerIdentity.value = java.util.Base64.getDecoder().decode(pkt.identityKey)
-                _state.value = ConnectionState.ENCRYPTED
-                _safetyNumber.value = runCatching { crypto.safetyNumber() }.getOrNull()
-                if (pqOut != null) {
-                    rtc.send(PqExchangePacket.encode(pqOut).toByteArray(Charsets.UTF_8))
-                }
-            }
-        }
-    }
-
-    private suspend fun completePqHandshake(pkt: PqExchangePacket) {
-        val crypto = crypto ?: return
-        runCatching {
-            val ct = java.util.Base64.getDecoder().decode(pkt.pqCiphertext)
-            crypto.completePQ(ct)
-            _state.value = ConnectionState.ENCRYPTED
-            _safetyNumber.value = runCatching { crypto.safetyNumber() }.getOrNull()
-        }
-    }
+    private suspend fun startKeyExchangeOverDataChannel() = handshake.startKeyExchangeOverDataChannel()
+    private suspend fun completeHandshake(pkt: KeyExchangePacket?) = handshake.completeHandshake(pkt)
+    private suspend fun completePqHandshake(pkt: PqExchangePacket) = handshake.completePq(pkt)
 
     private suspend fun handleDataChannelMessage(data: ByteArray) {
         val crypto = crypto ?: return
@@ -411,53 +373,16 @@ class ConnectionManager(
         }
     }
 
-    private suspend fun handleControl(ctrl: ControlMessage) {
-        when (ctrl) {
-            is ControlMessage.FileStart -> {
-                fileTransfer.handleStart(
-                    fileId = ctrl.fileId, name = ctrl.name, size = ctrl.size,
-                    mimeType = ctrl.mimeType, totalChunks = ctrl.totalChunks
-                )
-                chunkTimeout.arm(ctrl.fileId)
-            }
+    private val fileRouter = ConnectionFileTransferRouter(
+        fileTransfer        = { fileTransfer },
+        chunkTimeout        = chunkTimeout,
+        incomingFile        = _incomingFile,
+        fileTransferAborted = _fileTransferAborted,
+        sendControl         = { ctrl -> sendControl(ctrl) },
+        awaitSendSlot       = { awaitSendSlot() }
+    )
 
-            is ControlMessage.FileChunk -> {
-                fileTransfer.handleChunk(
-                    fileId = ctrl.fileId, index = ctrl.index, base64Data = ctrl.data
-                )
-                chunkTimeout.progressed(ctrl.fileId)
-            }
-
-            is ControlMessage.FileComplete -> {
-                val ev = fileTransfer.handleComplete(ctrl.fileId, ctrl.sha256)
-                when (ev) {
-                    is FileTransferService.Event.Completed -> {
-                        chunkTimeout.cancel(ctrl.fileId)
-                        _incomingFile.tryEmit(ev.file)
-                    }
-                    is FileTransferService.Event.Missing ->
-                        runCatching { sendControl(ControlMessage.FileRetransmit(ctrl.fileId, ev.indices)) }
-                    is FileTransferService.Event.IntegrityFailure -> {
-                        chunkTimeout.cancel(ctrl.fileId)
-                        _fileTransferAborted.tryEmit(ctrl.fileId)
-                    }
-                    else -> Unit
-                }
-            }
-
-            is ControlMessage.FileRetransmit -> {
-                val msgs = fileTransfer.retransmitMessages(ctrl.fileId, ctrl.indices)
-                for (m in msgs) {
-                    awaitSendSlot()
-                    runCatching { sendControl(m) }
-                }
-            }
-
-            // Other control types land in their own phases — ignore here so
-            // they don't get mistaken for text messages.
-            else -> Unit
-        }
-    }
+    private suspend fun handleControl(ctrl: ControlMessage) = fileRouter.route(ctrl)
 
     private fun emitSignal(payload: JsonObject) {
         val raw = json.encodeToString(JsonElement.serializer(), payload)

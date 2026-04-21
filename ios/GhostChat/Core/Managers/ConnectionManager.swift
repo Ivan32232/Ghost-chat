@@ -28,6 +28,14 @@ final class ConnectionManager: ObservableObject {
     @Published private(set) var safetyNumber: String?
     @Published private(set) var peerIdentity: Data?
 
+    // Extension access hooks (see ConnectionHandshake.swift, ConnectionFileTransferRouter.swift).
+    func _set(state: ConnectionState) { self.state = state }
+    func _set(safetyNumber: String?) { self.safetyNumber = safetyNumber }
+    func _set(peerIdentity: Data?) { self.peerIdentity = peerIdentity }
+    var cryptoRef: GhostChatCrypto? { crypto }
+    var rtcRef: GhostRTC? { rtc }
+    var roleRef: Role? { role }
+
     /// Set when this session is bound to a saved contact. On `leave()`, a deterministic
     /// key rotation is triggered against `contactManager` using the session's shared secret.
     var currentContactId: String?
@@ -51,12 +59,12 @@ final class ConnectionManager: ObservableObject {
     private var rtc: GhostRTC?
     private var crypto: GhostChatCrypto?
     private var role: Role?
-    private var fileTransfer: FileTransferService = FileTransferService()
-    private let chunkTimeout = ChunkTimeoutTracker()
+    var fileTransfer: FileTransferService = FileTransferService()
+    let chunkTimeout = ChunkTimeoutTracker()
 
     private var incomingContinuation: AsyncStream<String>.Continuation?
-    private var fileContinuation: AsyncStream<FileTransferService.IncomingFile>.Continuation?
-    private var abortContinuation: AsyncStream<String>.Continuation?
+    var fileContinuation: AsyncStream<FileTransferService.IncomingFile>.Continuation?
+    var abortContinuation: AsyncStream<String>.Continuation?
     private var tasks: [Task<Void, Never>] = []
 
     init(
@@ -350,46 +358,6 @@ final class ConnectionManager: ObservableObject {
         }
     }
 
-    private func startKeyExchangeOverDataChannel() async {
-        guard let crypto, let rtc, let role else { return }
-        do {
-            let ratchetRole: RatchetRole = (role == .host) ? .host : .guest
-            let pkt = try await crypto.beginHandshake(role: ratchetRole)
-            let data = try JSONEncoder().encode(pkt)
-            try rtc.send(data)
-        } catch {
-            state = .disconnected
-        }
-    }
-
-    private func completeHandshake(with peerPkt: KeyExchangePacket) async throws {
-        guard let crypto, let role, let rtc else { return }
-        peerIdentity = peerPkt.identityKey
-        if role == .host {
-            let ready = try await crypto.completeAsHost(peer: peerPkt)
-            if ready {
-                state = .encrypted
-                safetyNumber = try? await crypto.safetyNumber()
-            }
-            // Otherwise HOST sits in awaitingPq until a PqExchangePacket arrives.
-        } else {
-            let pqOut = try await crypto.completeAsGuest(peer: peerPkt)
-            state = .encrypted
-            safetyNumber = try? await crypto.safetyNumber()
-            if let pqOut {
-                let data = try JSONEncoder().encode(pqOut)
-                try rtc.send(data)
-            }
-        }
-    }
-
-    private func completePqHandshake(with pkt: PqExchangePacket) async throws {
-        guard let crypto else { return }
-        try await crypto.completePQ(pqCiphertext: pkt.pqCiphertext)
-        state = .encrypted
-        safetyNumber = try? await crypto.safetyNumber()
-    }
-
     private func handleDataChannelMessage(_ data: Data) async {
         // Try key exchange packet first (plaintext JSON, sent right after DC open).
         if let pkt = try? JSONDecoder().decode(KeyExchangePacket.self, from: data),
@@ -418,50 +386,8 @@ final class ConnectionManager: ObservableObject {
         incomingContinuation?.yield(plaintext)
     }
 
-    private func handleControl(_ ctrl: ControlMessage) async {
-        switch ctrl {
-        case .fileStart(let fileId, let name, let size, let mimeType, let totalChunks):
-            _ = fileTransfer.handleStart(
-                fileId: fileId, name: name, size: size,
-                mimeType: mimeType, totalChunks: totalChunks
-            )
-            chunkTimeout.arm(fileId: fileId)
-
-        case .fileChunk(let fileId, let index, let data):
-            _ = fileTransfer.handleChunk(fileId: fileId, index: index, base64Data: data)
-            chunkTimeout.progressed(fileId: fileId)
-
-        case .fileComplete(let fileId, let sha256):
-            let event = fileTransfer.handleComplete(fileId: fileId, expectedSha256Hex: sha256)
-            switch event {
-            case .completed(let file):
-                chunkTimeout.cancel(fileId: fileId)
-                fileContinuation?.yield(file)
-            case .missing(_, let indices):
-                try? await sendControl(.fileRetransmit(fileId: fileId, indices: indices))
-            case .integrityFailure:
-                chunkTimeout.cancel(fileId: fileId)
-                abortContinuation?.yield(fileId)
-            default:
-                break
-            }
-
-        case .fileRetransmit(let fileId, let indices):
-            let messages = fileTransfer.retransmitMessages(fileId: fileId, indices: indices)
-            for msg in messages {
-                try? await awaitSendSlot()
-                try? await sendControl(msg)
-            }
-
-        case .renegotiate, .callRequest, .callResponse, .callEnd,
-             .securityAlert, .messageAck, .messageRead, .ready,
-             .pushToken, .notifyToken, .typing, .capabilities,
-             .messageDelete, .messageEdit, .messagePin:
-            // These control types will be handled in their own phases; for
-            // Phase 5 we silently ignore so they don't get confused for text.
-            break
-        }
-    }
+    private func handleControl(_ ctrl: ControlMessage) async { await routeFileControl(ctrl) }
+    func awaitSendSlotForRoute() async throws { try await awaitSendSlot() }
 
     private func emitSignal(_ payload: [String: Any]) {
         guard let raw = try? JSONSerialization.data(withJSONObject: payload) else { return }
