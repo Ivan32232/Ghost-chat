@@ -12,7 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -115,7 +116,7 @@ fun SettingsScreen(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageExpanded) },
                 colors = darkColors(),
                 modifier = Modifier
-                    .menuAnchor()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
                     .fillMaxWidth()
             )
             DropdownMenu(
@@ -140,7 +141,7 @@ fun SettingsScreen(
             onChange = { viewModel.settings.setSoundEnabled(it) }
         )
 
-        Divider(color = Color.White.copy(alpha = 0.1f))
+        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
         TextButton(onClick = { confirmWipe = true }) {
             Text(stringResource(R.string.settings_wipe), color = Color(0xFFE53935), fontWeight = FontWeight.SemiBold)
@@ -209,7 +210,7 @@ private fun <T> DropdownRow(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = darkColors(),
                 modifier = Modifier
-                    .menuAnchor()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
                     .fillMaxWidth()
             )
             DropdownMenu(expanded = expanded, onDismissRequest = { onToggleExpanded(false) }) {

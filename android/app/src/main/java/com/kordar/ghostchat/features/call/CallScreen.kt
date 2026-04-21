@@ -14,8 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CallEnd
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MicOff
-import androidx.compose.material.icons.outlined.VolumeDown
-import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material.icons.automirrored.outlined.VolumeDown
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -101,7 +101,7 @@ fun CallScreen(
                 onClick = { calls.end(); onDismiss() }
             )
             CircleButton(
-                icon = if (speaker) Icons.Outlined.VolumeUp else Icons.Outlined.VolumeDown,
+                icon = if (speaker) Icons.AutoMirrored.Outlined.VolumeUp else Icons.AutoMirrored.Outlined.VolumeDown,
                 tint = Color.White.copy(alpha = 0.2f),
                 contentDescription = stringResource(if (speaker) R.string.call_earpiece else R.string.call_speaker),
                 onClick = { calls.setSpeaker(!speaker) }
