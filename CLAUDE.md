@@ -353,6 +353,50 @@ A passing test is the only proof code works.
 
 ---
 
+### Phase 6 — Security Hardening (быстрая справка)
+- Contact key rotation: HKDF(sharedSecret, salt="ghost-rot-v1", info="ghost-rot-seed") → обе стороны выводят одинаковый следующий keypair без wire-обмена. 3 поколения (current/previous/fallback) в SQLCipher. Детерминированно байт-в-байт iOS ↔ Android.
+- Per-chunk 30s timeout + 3 retry: `ChunkTimeoutTracker` в `ConnectionManager`, не в `FileTransferService` (сервис остался чистой state-machine). progressed() сбрасывает retry counter; 3 timeout'а подряд → `onAbort` → cancel inbound.
+- Secure wipe: 64 KiB zero-fill + fsync + unlink через `SecureWipe` модуль. `DatabaseService.deleteFile` теперь проходит через `wipeDatabase` (main + WAL + SHM + journal).
+- Jailbreak/Root detection: detection-only, никогда не блокирует. iOS — path checks + fork() через `@_silgen_name` (обход availability marker). Android — RootBeer 0.1.0 + fallback path list.
+- ReplayGuard: nonce LRU (10k entries) + counter window (1000) + ±5 min timestamp window. Встроен в `GhostChatCrypto.decrypt` ДО ratchet.decrypt. Timestamp check сейчас всегда nil (wire не несёт `t` поле) — зарезервировано.
+- ML-KEM768 PQ hybrid: Android — полная реализация через BouncyCastle 1.82 (MLKEMKeyPairGenerator/Generator/Extractor). iOS — стабы под `@available(iOS 26, *)` (CryptoKit.MLKEM768 ждёт SDK). `hybridDeriveSharedKey` = HKDF(ecdh || mlkem?, salt="ghost-chat-v1-pq", info="ghost-dr-root") — байт-в-байт идентично.
+- BouncyCastle 1.78.1 → 1.82 (ML-KEM требование). 23/23 :crypto тестов зелёные после bump.
+
+**Lessons learned (Phase 6):**
+- Swift `fork()` помечен `@available(*, unavailable)` для iOS sandbox. Обход через `@_silgen_name("fork")` для jailbreak detector. На симуляторе `#if targetEnvironment(simulator)` исключает вызов.
+- `runBlocking<Unit> { ... }` — JUnit требует void return type; expression-body `= runBlocking { ... }` оставляет тип последнего выражения. Либо явно `runBlocking<Unit>`, либо block body.
+- SQLCipher JNI в JVM unit test не загружается. `ContactManagerRotationTest` на Android через mockito-kotlin (мок `ContactStore` + `DatabaseService`), не через реальную БД.
+- iOS simulator preflight flake после нескольких test runs. `xcrun simctl erase <UDID>` + reboot перед retry. verify_phase_6.sh делает shutdown+erase+boot при детекции "Application failed preflight checks".
+- BC 1.82 имеет ML-KEM через `org.bouncycastle.pqc.crypto.mlkem.*` пакет. `MLKEMKeyPairGenerator`/`MLKEMGenerator.generateEncapsulated`/`MLKEMExtractor.extractSecret`. `MLKEMParameters.ml_kem_768` для 768-параметра.
+- `RandomAccessFile.fd.sync()` на Android — обязательный flush перед deleting. Без него overwrite может не попасть на диск до unlink.
+- Kotlin `LinkedHashMap` сохраняет insertion order → для `ReplayGuard.cleanupExpiredNonces` iterating + break на первой не-просроченной записи работает корректно.
+- BC 1.82 ML-KEM класс `BCMLKEMPublicKeyParameters`/`BCMLKEMPrivateKeyParameters` (в `pqc.crypto.mlkem`), НЕ `provider.asymmetric.mlkem` (это JCA provider wrapper). Low-level API удобнее для прямого byte-exchange.
+- iOS `@_silgen_name` directive работает с Darwin `fork()` и обходит Swift availability аннотации. Для других unavailable C функций (typedef'ed `@available(*, unavailable)`) это единственный способ вызвать их из Swift.
+
+**Phase 6 — deferred / manual verification:**
+- Full ML-KEM handshake через signaling requires two-round protocol bump (HOST sends pqKey → GUEST encapsulates → GUEST sends pqCiphertext back). Wire поля уже зарезервированы, `PostQuantum` модуль функционален. Интеграция — Phase 7.
+- Контакт key rotation call site: `ContactManager.rotateKeys()` готов, но не вызывается автоматически при `ConnectionManager.leave()`. Требует добавления `currentContactId` в ConnectionManager + callback. Сейчас ChatViewModel может вызывать явно.
+- Timestamp в ReplayGuard сейчас `null` — wire format не несёт `t` поле в plaintext envelope. Wrapping message payload в `{m, t, c, id}` envelope = Phase 7 protocol bump.
+- Real-device jailbreak/root detection sanity check.
+- SQLCipher encryption proof test на Android требует androidTest (реальный эмулятор), не unit (JNI не грузится в Robolectric).
+
+**Phase 6 success criteria (все ✓):**
+- [x] `verify_phase_6.sh` exit code 0 (20/20 steps PASSED)
+- [x] iOS full suite 251/251, 0 failures (+42 от Phase 5 baseline)
+- [x] Android :app:testDebugUnitTest 184/184, 0 failures (+59 от Phase 5)
+- [x] Android :crypto:test 23/23 после BC 1.82 bump
+- [x] Android :app:assembleDebug BUILD SUCCESSFUL (~143 MB APK)
+- [x] Android :app:lintDebug BUILD SUCCESSFUL
+- [x] ChatViewModel iOS 152 LOC, Android 158 LOC (≤ 300)
+- [x] Каждый исходник ≤ 400 LOC
+- [x] Cross-platform HKDF vectors совпадают (Node recomputed)
+- [x] SecureWipe wired into DatabaseService.deleteFile (обе платформы)
+- [x] ReplayGuard wired into GhostChatCrypto.decrypt (обе платформы)
+- [x] BC 1.82 + RootBeer 0.1.0 в classpath Android
+- [x] Нет Log.* / print() с key material
+
+---
+
 # Claude / AI Senior Engineer Prompt (Plan Mode)
 
 Before writing any code, review the plan thoroughly.  
