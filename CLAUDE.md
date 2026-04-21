@@ -212,6 +212,74 @@ A passing test is the only proof code works.
 
 ---
 
+### Phase 4 — Android App
+- Зеркало iOS 1:1. core/ + features/ + models/ идентичная структура
+- ChatViewModel 81 LOC (лимит 300)
+- SQLCipher реальный с первого дня (net.zetetic:sqlcipher-android)
+- SPKI пины байт-в-байт идентичны iOS
+- Hilt DI, OkHttp WebSocket, BouncyCastle 1.78.1
+- ConnectionService skeleton — incoming call UI доделать в Phase 7
+- FCM IncomingPushHandler — NoOp заглушка, bridge в Phase 7
+- APK 137 МБ (WebRTC + SQLCipher native libs)
+- Material3 deprecation warnings — HorizontalDivider, menuAnchor —
+  исправить в Phase 7
+
+**Phase 4 structure:**
+- `android/app/` — новый `com.android.application` модуль (AGP 8.7.3, Kotlin 2.1, minSdk 28, targetSdk 35, compileSdk 35)
+- `android/crypto/` — существующий Kotlin/JVM lib (из Phase 2), **НЕ переписывался**, только additive: `DoubleRatchet.exportedState` + `constructor(stateBytes)` для SQLCipher-персистенции. 21 оригинальный тест + 2 новых — все зелёные.
+- `android/build.gradle.kts` — AGP 8.7.3 + Kotlin 2.1.0 + Hilt 2.54 + KSP 2.1.0-1.0.29
+- `android/gradle.properties` — AndroidX on, nonTransitiveRClass on, parallel+caching
+- `verify_phase_4.sh` — 16 автопроверок, exit 0 только когда всё зелёное
+
+**Lessons learned (Phase 4):**
+- **Hilt 2.52 не читает Kotlin 2.1 metadata** — "Unable to read Kotlin metadata due to unsupported metadata version". Решение: Hilt 2.54 + KSP (не kapt).
+- **Hilt AGP + Kotlin 2.1 + `@LazyClassKey`** — 2.53.1 не генерирует `_LazyMapKey` aggregator-классы для `@HiltViewModel`. 2.54 фиксит.
+- **BouncyCastle + jspecify packaging conflict** — META-INF/versions/9/OSGI-INF/MANIFEST.MF дубль. Добавить в `packaging.resources.excludes`.
+- **net.zetetic:sqlcipher-android 4.6.1** — `SQLiteDatabaseHook.preKey/postKey` принимают `SQLiteConnection` (не `SQLiteDatabase`), используется `openOrCreateDatabase(File, ByteArray, CursorFactory, DatabaseErrorHandler, SQLiteDatabaseHook)` (5 параметров). `connection.executeRaw(sql, arrayOf(), null)` для PRAGMAs из хука.
+- **SQLCipher JNI в Robolectric не загружается** — `.so` только для Android. Encryption proof test — androidTest (run на эмуляторе), не unit.
+- **MainActivity должен быть FragmentActivity** (не ComponentActivity) — BiometricPrompt требует fragment lifecycle.
+- **`androidx.core:core-telecom:1.0.0-alpha06` недоступен** в Google Maven. Использовать native `android.telecom` API напрямую.
+- **SharedFlow без replay** — в тестах emit до подписки теряется. Для `first()` — сначала `launch` collector, потом emit, либо `UnconfinedTestDispatcher`.
+- **`android.util.Base64` недоступен в JVM unit тестах** — использовать `java.util.Base64` (API 26+, наш minSdk 28 ок) для byte-identical iOS паритета.
+- **Date storage** — GRDB (iOS) и SQLCipher (Android) оба хранят REAL как seconds-since-1970. Android добавил `Long.toSqlDouble()` / `Double.fromSqlDouble()` конверсии — миллисекунды ↔ double seconds.
+- **FCM без google-services.json** — `FirebaseMessaging.getInstance().token` бросает. Обернуть в try/catch, push становится silent no-op. Документировать в commit что google-services.json gitignored.
+
+**Phase 4 success criteria (все ✓):**
+- [x] `./gradlew :crypto:test` → 23/23 (21 оригинал + 2 state-persistence)
+- [x] `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, app-debug.apk ~137 MB
+- [x] `./gradlew :app:testDebugUnitTest` → 92/92
+- [x] `./gradlew :app:lintDebug` → BUILD SUCCESSFUL
+- [x] FLAG_SECURE в MainActivity
+- [x] Certificate pinning 2 пина, байт-в-байт iOS, без fallback
+- [x] SQLCipher PRAGMAs cipher_page_size=4096 + kdf_iter=256000 + memory_security=ON + secure_delete=ON
+- [x] SQLCipher native library load вызов есть
+- [x] Нет SharedPreferences / PreferenceManager в app/src
+- [x] Нет Log.* выводов messageKey / decrypted / plaintext
+- [x] AndroidManifest: allowBackup=false, usesCleartextTraffic=false, POST_NOTIFICATIONS + MANAGE_OWN_CALLS, VIEW intents, applicationId com.kordar.ghostchat
+- [x] EN + RU strings.xml ≥ 58 ключей каждый (у нас 59)
+- [x] ChatViewModel ≤ 300 LOC (81)
+- [x] Все .kt файлы ≤ 400 LOC
+- [x] `verify_phase_4.sh` exit code 0
+
+**Phase 4 — manual verification required (cannot automate):**
+- WebRTC P2P между iOS и Android устройствами
+- FCM push wakes app + launches incoming call UI
+- ConnectionService incoming-call surface (real device)
+- Cross-platform voice call iOS ↔ Android
+- SQLCipher raw-file encryption proof через `./gradlew :app:connectedDebugAndroidTest` на эмуляторе
+- Biometric unlock + decoy PIN + 10-fail panic wipe
+
+---
+
+## Deferred from Phase 4 (→ Phase 7 polish)
+- UI polish (typography system, анимации, haptics, кастомные bubble shapes)
+- ConnectionService incoming-call UI (реальный Android Telecom surface)
+- FCM IncomingPushHandler → CallManager bridge (сейчас NoOp)
+- Material3 deprecation fixes (Divider → HorizontalDivider, menuAnchor → MenuAnchorType overload)
+- Full integration unit tests для ConnectionManager / ContactManager / CallManager (сейчас только manual verification через эмулятор)
+
+---
+
 # Claude / AI Senior Engineer Prompt (Plan Mode)
 
 Before writing any code, review the plan thoroughly.  
