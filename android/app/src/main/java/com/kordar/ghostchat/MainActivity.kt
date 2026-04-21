@@ -92,7 +92,10 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 fun GhostChatTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = darkColorScheme()) { content() }
+    MaterialTheme(
+        colorScheme = darkColorScheme(),
+        typography = com.kordar.ghostchat.ui.theme.GhostTypography
+    ) { content() }
 }
 
 @Composable

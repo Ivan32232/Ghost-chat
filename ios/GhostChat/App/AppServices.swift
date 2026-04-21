@@ -68,6 +68,7 @@ final class AppServices {
             // Panic wipe dispatched via ContactManager — stored weak via reference cycle avoidance.
         }))
         self.sounds = SoundLibrary(muted: !settings.soundEnabled)
+        self.messages.sounds = self.sounds
 
         // Best-effort identity bootstrap (cached after first access).
         _ = try? identity.getOrCreateIdentity()

@@ -2,6 +2,7 @@ package com.kordar.ghostchat.core.di
 
 import android.content.Context
 import com.kordar.ghostchat.core.AppConfig
+import com.kordar.ghostchat.core.audio.SoundLibrary
 import com.kordar.ghostchat.core.crypto.GhostChatCrypto
 import com.kordar.ghostchat.core.crypto.IdentityKeyService
 import com.kordar.ghostchat.core.localization.LocalizationManager
@@ -91,7 +92,16 @@ object CoreModule {
     ).also { it.contactManager = contactManager }
 
     @Provides @Singleton
-    fun provideMessageManager(store: MessageStore): MessageManager = MessageManager(store)
+    fun provideSoundLibrary(
+        @ApplicationContext ctx: Context,
+        settings: SettingsManager
+    ): SoundLibrary = SoundLibrary(ctx) { !settings.soundEnabled.value }
+
+    @Provides @Singleton
+    fun provideMessageManager(
+        store: MessageStore,
+        sounds: SoundLibrary
+    ): MessageManager = MessageManager(store).also { it.sounds = sounds }
 
     @Provides @Singleton
     fun provideContactManager(

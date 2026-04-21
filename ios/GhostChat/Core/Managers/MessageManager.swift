@@ -11,6 +11,8 @@ final class MessageManager: ObservableObject {
     private let store: MessageStore?
     private var deleteTimers: [String: Timer] = [:]
     private var defaultTTL: TimeInterval
+    /// Optional sound cue. Wired through AppServices; nil in headless test fixtures.
+    weak var sounds: SoundLibrary?
 
     var activeContactId: String? {
         didSet { reloadForActiveContact() }
@@ -32,6 +34,7 @@ final class MessageManager: ObservableObject {
             isPending: true
         )
         message = finalize(message, ttl: defaultTTL)
+        sounds?.play(.sent)
         return message
     }
 
@@ -45,6 +48,7 @@ final class MessageManager: ObservableObject {
             senderMessageId: senderMessageId
         )
         message = finalize(message, ttl: defaultTTL)
+        sounds?.play(.incomingMessage)
         return message
     }
 

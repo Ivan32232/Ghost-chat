@@ -35,6 +35,7 @@ import com.kordar.ghostchat.core.files.FileCatalog
 import com.kordar.ghostchat.models.ChatMessage
 import com.kordar.ghostchat.models.MessageType
 import com.kordar.ghostchat.models.Sender
+import com.kordar.ghostchat.ui.theme.bubbleShape
 import java.io.File
 
 @Composable
@@ -81,7 +82,7 @@ private fun PeerOrMeBubble(
         if (isMine) Spacer(Modifier.widthIn(min = 48.dp))
         val bubbleModifier = Modifier
             .widthIn(max = 280.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(bubbleShape(isMe = isMine))
             .background(bg)
 
         when (message.type) {
@@ -104,6 +105,7 @@ private fun TextContent(text: String, fg: Color, modifier: Modifier) {
     Text(
         text = text,
         color = fg,
+        style = MaterialTheme.typography.bodyLarge,
         modifier = modifier.padding(horizontal = 14.dp, vertical = 10.dp)
     )
 }

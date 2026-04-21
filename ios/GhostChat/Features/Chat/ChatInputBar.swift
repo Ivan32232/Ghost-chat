@@ -100,6 +100,8 @@ struct ChatInputBar: View {
 
     private var sendButton: some View {
         Button {
+            // Light haptic pulse on send — mirrors the sonic "sent" cue from SoundLibrary.
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             Task { await vm.send() }
         } label: {
             Image(systemName: "arrow.up.circle.fill")

@@ -37,9 +37,10 @@ struct ChatBubble: View {
 
     private var textContent: some View {
         Text(message.text)
+            .font(GhostType.bubbleBody)
             .foregroundStyle(foreground)
             .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(background, in: RoundedRectangle(cornerRadius: 14))
+            .background(background, in: bubbleShape)
     }
 
     private var voiceContent: some View {
@@ -57,7 +58,7 @@ struct ChatBubble: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(background, in: RoundedRectangle(cornerRadius: 14))
+        .background(background, in: bubbleShape)
     }
 
     private var imageContent: some View {
@@ -96,14 +97,14 @@ struct ChatBubble: View {
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(background, in: RoundedRectangle(cornerRadius: 14))
+        .background(background, in: bubbleShape)
     }
 
     private var systemRow: some View {
         HStack {
             Spacer(minLength: 0)
             Text(message.text)
-                .font(.caption)
+                .font(GhostType.systemNote)
                 .foregroundStyle(.gray)
                 .padding(.horizontal, 14).padding(.vertical, 6)
                 .background(Color.white.opacity(0.05), in: Capsule())
@@ -115,6 +116,11 @@ struct ChatBubble: View {
 
     private var foreground: Color { message.sender == .me ? .black : .white }
     private var background: Color { message.sender == .me ? .white : .white.opacity(0.1) }
+
+    /// The tapered bubble — tail points at `me` on the right, `peer` on the left.
+    private var bubbleShape: BubbleShape {
+        BubbleShape(tailSide: message.sender == .me ? .trailing : .leading)
+    }
 
     private var alignment: Alignment {
         switch message.sender {

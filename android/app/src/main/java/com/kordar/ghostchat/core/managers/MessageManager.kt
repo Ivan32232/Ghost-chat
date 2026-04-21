@@ -1,5 +1,6 @@
 package com.kordar.ghostchat.core.managers
 
+import com.kordar.ghostchat.core.audio.SoundLibrary
 import com.kordar.ghostchat.core.storage.MessageStore
 import com.kordar.ghostchat.models.ChatMessage
 import com.kordar.ghostchat.models.MessageTTL
@@ -25,6 +26,9 @@ class MessageManager(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
 
+    /** Optional sound-cue dispatcher. Wired through CoreModule; nil in headless test fixtures. */
+    var sounds: SoundLibrary? = null
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
@@ -44,7 +48,9 @@ class MessageManager(
             isDelivered = false,
             isPending = true
         )
-        return finalize(m, defaultTtl)
+        val final = finalize(m, defaultTtl)
+        sounds?.play(SoundLibrary.Sound.Sent)
+        return final
     }
 
     fun received(text: String, senderMessageId: String? = null): ChatMessage {
@@ -56,7 +62,9 @@ class MessageManager(
             isPending = false,
             senderMessageId = senderMessageId
         )
-        return finalize(m, defaultTtl)
+        val final = finalize(m, defaultTtl)
+        sounds?.play(SoundLibrary.Sound.IncomingMessage)
+        return final
     }
 
     /** Create a local "sending…" bubble for an outgoing attachment. */
