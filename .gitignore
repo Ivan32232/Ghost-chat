@@ -1,5 +1,8 @@
 node_modules/
 .env
+.env.deploy
+.env.production
+.env.local
 .DS_Store
 *.log
 
@@ -108,3 +111,7 @@ ghost-chat.bak/
 Midjourney.html
 Midjourney_files/test.db
 test.db
+deploy/.env.production
+deploy/.env*
+deploy/.env.production
+deploy/.env*
