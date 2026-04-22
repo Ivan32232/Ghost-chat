@@ -57,10 +57,27 @@ final class CallManager: NSObject, ObservableObject {
     }
 
     func end() async throws {
-        guard let uuid = currentUUID else { return }
-        let action = CXEndCallAction(call: uuid)
-        let tx = CXTransaction(action: action)
-        try await controller.request(tx)
+        // Ask CallKit first if we ever reported the call. Our simulator test flow can
+        // leave the call stuck in `outgoingRinging` (no peer accepts → no report-connected
+        // call delegate callback), in which case CallKit refuses the EndCall transaction.
+        // Always force-terminate the local state as a fallback so the UI's onChange(of:
+        // calls.state) fires and dismisses the CallView.
+        if let uuid = currentUUID {
+            let action = CXEndCallAction(call: uuid)
+            let tx = CXTransaction(action: action)
+            _ = try? await controller.request(tx)
+        }
+        forceEndLocal()
+    }
+
+    /// Force-cleanup local call state when CallKit can't (or won't) drive the EndCall
+    /// action to completion. Safe to call redundantly — idempotent.
+    private func forceEndLocal() {
+        stopDurationTimer()
+        if state != .ended {
+            state = .ended
+        }
+        currentUUID = nil
     }
 
     func setMuted(_ muted: Bool) {

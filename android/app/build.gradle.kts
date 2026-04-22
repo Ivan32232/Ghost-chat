@@ -87,6 +87,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true   // AboutScreen reads VERSION_NAME / VERSION_CODE from BuildConfig.
     }
 
     packaging {

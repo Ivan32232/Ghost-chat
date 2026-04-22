@@ -164,11 +164,17 @@ private fun RootNavHost(
             ContactDetailScreen(contactId = id, onBack = { nav.popBackStack() })
         }
         composable(Destinations.SETTINGS) {
-            SettingsScreen(onOpenDashboard = { nav.navigate(Destinations.SECURITY_DASHBOARD) })
+            SettingsScreen(
+                onOpenDashboard = { nav.navigate(Destinations.SECURITY_DASHBOARD) },
+                onOpenAbout     = { nav.navigate(Destinations.ABOUT) }
+            )
         }
         composable(Destinations.SECURITY_DASHBOARD) {
             val owner = androidx.compose.ui.platform.LocalContext.current as? MainActivity
             owner?.let { SecurityDashboardScreen(connection = it.connection) }
+        }
+        composable(Destinations.ABOUT) {
+            com.kordar.ghostchat.features.settings.AboutScreen()
         }
     }
 }

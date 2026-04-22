@@ -25,28 +25,45 @@ class WelcomeViewModel @Inject constructor(
     private val _navigateToChat = MutableStateFlow(false)
     val navigateToChat: StateFlow<Boolean> = _navigateToChat.asStateFlow()
 
+    /** True while a create / join request is in-flight — gate for the Welcome button. */
+    private val _isBusy = MutableStateFlow(false)
+    val isBusy: StateFlow<Boolean> = _isBusy.asStateFlow()
+
     init {
         contacts.refresh()
     }
 
     fun createRoom() {
+        if (_isBusy.value) return
+        _isBusy.value = true
+        // Navigate immediately — ChatScreen's StatusBanner handles the "waiting" visual.
+        _navigateToChat.value = true
         viewModelScope.launch {
             runCatching { connection.createRoom() }
-                .onSuccess { _navigateToChat.value = true }
-                .onFailure { _error.value = it.localizedMessage }
+                .onFailure {
+                    _navigateToChat.value = false
+                    _error.value = it.localizedMessage ?: "Failed to create room"
+                }
+            _isBusy.value = false
         }
     }
 
     fun joinRoom(rawInput: String) {
+        if (_isBusy.value) return
         val id = extractRoomId(rawInput)
         if (!Room.isValidId(id)) {
             _error.value = "Invalid room link"
             return
         }
+        _isBusy.value = true
+        _navigateToChat.value = true
         viewModelScope.launch {
             runCatching { connection.joinRoom(id) }
-                .onSuccess { _navigateToChat.value = true }
-                .onFailure { _error.value = it.localizedMessage }
+                .onFailure {
+                    _navigateToChat.value = false
+                    _error.value = it.localizedMessage ?: "Failed to join room"
+                }
+            _isBusy.value = false
         }
     }
 

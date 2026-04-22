@@ -49,6 +49,19 @@
     <string name="settings_security_dashboard">Панель безопасности</string>
     <string name="settings_about">О приложении</string>
 
+    <string name="settings_privacy_mode_desc">Пропускать весь трафик через relay-серверы, чтобы скрыть IP</string>
+    <string name="settings_biometric_desc">Требовать Face ID или PIN при открытии приложения</string>
+    <string name="settings_auto_lock_desc">Блокировать приложение после периода бездействия</string>
+    <string name="settings_message_ttl_desc">Сообщения исчезают по истечении этого времени</string>
+    <string name="settings_sound_desc">Воспроизводить звуки при отправке/получении сообщений</string>
+    <string name="settings_wipe_desc">Безвозвратно удалить все контакты, сообщения и ключи шифрования</string>
+    <string name="settings_security_dashboard_desc">Текущее состояние TURN relay, SPKI-пина и обнаруженных угроз</string>
+
+    <string name="about_website">Открыть ghostchat.one</string>
+    <string name="about_privacy_policy">Политика конфиденциальности</string>
+    <string name="about_source_code">GitHub (открытый код)</string>
+    <string name="about_made_by">Сделано KORDAR EOOD</string>
+
     <string name="ttl_thirty_seconds">30 секунд</string>
     <string name="ttl_one_minute">1 минута</string>
     <string name="ttl_five_minutes">5 минут</string>

@@ -2,6 +2,7 @@ package com.kordar.ghostchat.features.settings
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,8 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -37,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.kordar.ghostchat.R
 import com.kordar.ghostchat.models.AutoLockTimeout
@@ -47,6 +52,7 @@ import java.util.Locale
 @Composable
 fun SettingsScreen(
     onOpenDashboard: () -> Unit,
+    onOpenAbout: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val privacy by viewModel.settings.privacyMode.collectAsState()
@@ -67,36 +73,49 @@ fun SettingsScreen(
             .background(Color.Black)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        SectionHeader(stringResource(R.string.settings_privacy_mode))
-        ToggleRow(
+        // Privacy
+        SettingRow(
             label = stringResource(R.string.settings_privacy_mode),
-            checked = privacy,
-            onChange = { viewModel.settings.setPrivacyMode(it) }
-        )
-
-        SectionHeader(stringResource(R.string.settings_biometric))
-        ToggleRow(
-            label = stringResource(R.string.settings_biometric),
-            checked = biometric,
-            onChange = { viewModel.settings.setBiometricEnabled(it) }
-        )
-        TextButton(onClick = onOpenDashboard) {
-            Text(stringResource(R.string.settings_security_dashboard), color = Color.White)
+            description = stringResource(R.string.settings_privacy_mode_desc)
+        ) {
+            Switch(checked = privacy, onCheckedChange = { viewModel.settings.setPrivacyMode(it) })
         }
+        HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
 
-        SectionHeader(stringResource(R.string.settings_auto_lock))
+        // Biometric
+        SettingRow(
+            label = stringResource(R.string.settings_biometric),
+            description = stringResource(R.string.settings_biometric_desc)
+        ) {
+            Switch(checked = biometric, onCheckedChange = { viewModel.settings.setBiometricEnabled(it) })
+        }
+        HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+
+        // Security dashboard — independent section, NOT nested under biometric.
+        NavigationRow(
+            label = stringResource(R.string.settings_security_dashboard),
+            description = stringResource(R.string.settings_security_dashboard_desc),
+            onClick = onOpenDashboard
+        )
+        HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+
+        // Auto-lock
         DropdownRow(
             label = stringResource(R.string.settings_auto_lock),
+            description = stringResource(R.string.settings_auto_lock_desc),
             current = formatAutoLock(ctx, autoLock),
             expanded = autoLockExpanded,
             onToggleExpanded = { autoLockExpanded = it },
             options = AutoLockTimeout.values().map { it to formatAutoLock(ctx, it) },
             onSelect = { viewModel.settings.setAutoLockTimeout(it); autoLockExpanded = false }
         )
+
+        // Message auto-delete
         DropdownRow(
             label = stringResource(R.string.settings_message_ttl),
+            description = stringResource(R.string.settings_message_ttl_desc),
             current = ttlLabel(ttl),
             expanded = ttlExpanded,
             onToggleExpanded = { ttlExpanded = it },
@@ -104,55 +123,81 @@ fun SettingsScreen(
             onSelect = { viewModel.settings.setMessageTTL(it); ttlExpanded = false }
         )
 
-        SectionHeader(stringResource(R.string.settings_language))
-        ExposedDropdownMenuBox(
-            expanded = languageExpanded,
-            onExpandedChange = { languageExpanded = !languageExpanded }
-        ) {
-            OutlinedTextField(
-                value = viewModel.localization.locale.getDisplayLanguage(viewModel.localization.locale).replaceFirstChar { it.uppercase() },
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageExpanded) },
-                colors = darkColors(),
-                modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
-                    .fillMaxWidth()
+        // Language
+        Column {
+            Text(
+                stringResource(R.string.settings_language),
+                color = Color.White,
+                fontWeight = FontWeight.Medium
             )
-            DropdownMenu(
+            Spacer(Modifier.padding(2.dp))
+            ExposedDropdownMenuBox(
                 expanded = languageExpanded,
-                onDismissRequest = { languageExpanded = false }
+                onExpandedChange = { languageExpanded = !languageExpanded }
             ) {
-                listOf("en" to "English", "ru" to "Русский").forEach { (code, name) ->
-                    DropdownMenuItem(
-                        text = { Text(name) },
-                        onClick = {
-                            viewModel.localization.setOverride(Locale(code))
-                            languageExpanded = false
-                        }
-                    )
+                OutlinedTextField(
+                    value = viewModel.localization.locale
+                        .getDisplayLanguage(viewModel.localization.locale)
+                        .replaceFirstChar { it.uppercase() },
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageExpanded) },
+                    colors = darkColors(),
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
+                        .fillMaxWidth()
+                )
+                DropdownMenu(
+                    expanded = languageExpanded,
+                    onDismissRequest = { languageExpanded = false }
+                ) {
+                    listOf("en" to "English", "ru" to "Русский").forEach { (code, name) ->
+                        DropdownMenuItem(
+                            text = { Text(name) },
+                            onClick = {
+                                viewModel.localization.setOverride(Locale(code))
+                                languageExpanded = false
+                            }
+                        )
+                    }
                 }
             }
         }
 
-        ToggleRow(
+        // Sound
+        SettingRow(
             label = stringResource(R.string.settings_sound),
-            checked = sound,
-            onChange = { viewModel.settings.setSoundEnabled(it) }
-        )
+            description = stringResource(R.string.settings_sound_desc)
+        ) {
+            Switch(checked = sound, onCheckedChange = { viewModel.settings.setSoundEnabled(it) })
+        }
 
         HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
-        TextButton(onClick = { confirmWipe = true }) {
-            Text(stringResource(R.string.settings_wipe), color = Color(0xFFE53935), fontWeight = FontWeight.SemiBold)
-        }
+        // Wipe — danger zone
+        NavigationRow(
+            label = stringResource(R.string.settings_wipe),
+            description = stringResource(R.string.settings_wipe_desc),
+            labelColor = Color(0xFFE53935),
+            trailing = null,
+            onClick = { confirmWipe = true }
+        )
+
+        HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+
+        // About
+        NavigationRow(
+            label = stringResource(R.string.settings_about),
+            description = null,
+            onClick = onOpenAbout
+        )
     }
 
     if (confirmWipe) {
         AlertDialog(
             onDismissRequest = { confirmWipe = false },
             title = { Text(stringResource(R.string.settings_wipe)) },
-            text = { Text("This erases every contact, message, and key. It cannot be undone.") },
+            text  = { Text(stringResource(R.string.settings_wipe_desc)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.contacts.panicWipe(ctx)
@@ -168,24 +213,66 @@ fun SettingsScreen(
     }
 }
 
+/** Two-line row: primary label on top, gray description below, trailing content slot. */
 @Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text = text.uppercase(),
-        color = Color.Gray,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier.padding(top = 8.dp)
-    )
-}
-
-@Composable
-private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SettingRow(
+    label: String,
+    description: String?,
+    labelColor: Color = Color.White,
+    trailing: @Composable () -> Unit
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(label, color = Color.White, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, color = labelColor, fontWeight = FontWeight.Medium)
+            if (description != null) {
+                Text(
+                    description,
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+        trailing()
+    }
+}
+
+/** Row with a right-chevron suffix that acts as a navigation entry point. */
+@Composable
+private fun NavigationRow(
+    label: String,
+    description: String?,
+    labelColor: Color = Color.White,
+    trailing: Any? = Unit,   // `null` hides the chevron (used by the wipe button).
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, color = labelColor, fontWeight = FontWeight.Medium)
+            if (description != null) {
+                Text(
+                    description,
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+        if (trailing != null) {
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color.Gray
+            )
+        }
     }
 }
 
@@ -193,6 +280,7 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 @Composable
 private fun <T> DropdownRow(
     label: String,
+    description: String?,
     current: String,
     expanded: Boolean,
     onToggleExpanded: (Boolean) -> Unit,
@@ -200,8 +288,15 @@ private fun <T> DropdownRow(
     onSelect: (T) -> Unit
 ) {
     Column {
-        Text(label, color = Color.Gray)
-        Spacer(Modifier.padding(2.dp))
+        Text(label, color = Color.White, fontWeight = FontWeight.Medium)
+        if (description != null) {
+            Text(
+                description,
+                color = Color.Gray,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+            )
+        }
         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = onToggleExpanded) {
             OutlinedTextField(
                 value = current,

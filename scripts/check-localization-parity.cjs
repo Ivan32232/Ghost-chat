@@ -15,7 +15,13 @@ const ruPath   = path.join(root, 'android/app/src/main/res/values-ru/strings.xml
 
 function readIOSKeys() {
   const json = JSON.parse(fs.readFileSync(iosPath, 'utf8'));
-  return new Set(Object.keys(json.strings || {}));
+  // Only count dot-separated identifier keys (section.name_with_underscores).
+  // Xcode auto-extracts raw literals from SwiftUI source (e.g. "Recording…",
+  // "Cannot display image", "%@") into the xcstrings file; those are NOT real
+  // localization keys — they're just cached English strings — and should not
+  // participate in parity. A real key matches /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/.
+  const idKey = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/;
+  return new Set(Object.keys(json.strings || {}).filter(k => idKey.test(k)));
 }
 
 function readAndroidKeys(xmlPath) {

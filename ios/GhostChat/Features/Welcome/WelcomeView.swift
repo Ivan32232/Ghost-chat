@@ -10,6 +10,8 @@ struct WelcomeView: View {
     @State private var showSettings = false
     @State private var showChat = false
     @State private var errorMessage: String?
+    @State private var isCreating = false
+    @State private var isJoining = false
 
     var body: some View {
         NavigationStack {
@@ -74,22 +76,37 @@ struct WelcomeView: View {
 
     private var createButton: some View {
         Button {
+            guard !isCreating, !isJoining else { return }
+            isCreating = true
+            // Navigate to the chat immediately so the user gets a "waiting" UI
+            // (StatusBanner) instead of a frozen button. Room creation continues
+            // in the background; on failure we pop back and surface the error.
+            showChat = true
             Task {
                 do {
                     try await connection.createRoom()
-                    showChat = true
                 } catch {
+                    showChat = false
                     errorMessage = error.localizedDescription
                 }
+                isCreating = false
             }
         } label: {
-            Text(localization.localized("welcome.create"))
-                .font(.headline)
-                .foregroundStyle(.black)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
-                .background(Color.white, in: RoundedRectangle(cornerRadius: 14))
+            Group {
+                if isCreating {
+                    ProgressView().tint(.black)
+                } else {
+                    Text(localization.localized("welcome.create"))
+                        .font(.headline)
+                        .foregroundStyle(.black)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .background(Color.white.opacity(isCreating ? 0.6 : 1.0),
+                        in: RoundedRectangle(cornerRadius: 14))
         }
+        .disabled(isCreating || isJoining)
     }
 
     private var joinField: some View {
@@ -129,17 +146,21 @@ struct WelcomeView: View {
     // MARK: - Actions
 
     private func join() async {
+        guard !isCreating, !isJoining else { return }
         let id = extractRoomID(from: joinInput)
         guard Room.isValidID(id) else {
             errorMessage = localization.localized("error.invalid_room")
             return
         }
+        isJoining = true
+        showChat = true
         do {
             try await connection.joinRoom(id)
-            showChat = true
         } catch {
+            showChat = false
             errorMessage = error.localizedDescription
         }
+        isJoining = false
     }
 
     private func extractRoomID(from raw: String) -> String {

@@ -53,6 +53,19 @@
     <string name="settings_security_dashboard">Security dashboard</string>
     <string name="settings_about">About</string>
 
+    <string name="settings_privacy_mode_desc">Routes all traffic through relay servers to hide your IP address</string>
+    <string name="settings_biometric_desc">Require Face ID or PIN to open the app</string>
+    <string name="settings_auto_lock_desc">Lock app after period of inactivity</string>
+    <string name="settings_message_ttl_desc">Messages disappear after this time</string>
+    <string name="settings_sound_desc">Play sounds for incoming/outgoing messages</string>
+    <string name="settings_wipe_desc">Permanently delete all contacts, messages, and encryption keys</string>
+    <string name="settings_security_dashboard_desc">Live view of TURN relay, certificate pin, and detected threats</string>
+
+    <string name="about_website">Visit ghostchat.one</string>
+    <string name="about_privacy_policy">Privacy Policy</string>
+    <string name="about_source_code">GitHub (open source)</string>
+    <string name="about_made_by">Made by KORDAR EOOD</string>
+
     <string name="ttl_thirty_seconds">30 seconds</string>
     <string name="ttl_one_minute">1 minute</string>
     <string name="ttl_five_minutes">5 minutes</string>

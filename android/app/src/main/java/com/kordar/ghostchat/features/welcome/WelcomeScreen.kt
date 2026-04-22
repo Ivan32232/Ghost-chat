@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -50,6 +51,7 @@ fun WelcomeScreen(
     val error by viewModel.error.collectAsState()
     val shouldNavigate by viewModel.navigateToChat.collectAsState()
     val contactsList by viewModel.contacts.contacts.collectAsState()
+    val isBusy by viewModel.isBusy.collectAsState()
     var joinInput by remember { mutableStateOf("") }
 
     LaunchedEffect(shouldNavigate) {
@@ -100,19 +102,32 @@ fun WelcomeScreen(
 
             Button(
                 onClick = { viewModel.createRoom() },
+                enabled = !isBusy,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.White,
-                    contentColor = Color.Black
+                    contentColor = Color.Black,
+                    disabledContainerColor = Color.White.copy(alpha = 0.6f),
+                    disabledContentColor = Color.Black
                 ),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.welcome_create),
-                    modifier = Modifier.padding(vertical = 6.dp)
-                )
+                if (isBusy) {
+                    CircularProgressIndicator(
+                        color = Color.Black,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier
+                            .padding(vertical = 6.dp)
+                            .size(20.dp)
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.welcome_create),
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+                }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -135,9 +150,12 @@ fun WelcomeScreen(
                 )
                 Button(
                     onClick = { viewModel.joinRoom(joinInput) },
+                    enabled = !isBusy,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White.copy(alpha = 0.2f),
-                        contentColor = Color.White
+                        contentColor = Color.White,
+                        disabledContainerColor = Color.White.copy(alpha = 0.1f),
+                        disabledContentColor = Color.White.copy(alpha = 0.5f)
                     )
                 ) {
                     Text(stringResource(R.string.welcome_join))
