@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- Absolute base so invite URLs like /room/<id> resolve assets
+     against the site root instead of /room/ (browser would 404 on
+     js/background.js, icons/*, etc.). -->
+<base href="/">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050505">
