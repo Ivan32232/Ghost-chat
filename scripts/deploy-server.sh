@@ -138,19 +138,24 @@ if docker image inspect deploy-ghost-chat:latest >/dev/null 2>&1; then
     docker tag deploy-ghost-chat:latest "deploy-ghost-chat:backup-${TIMESTAMP}"
 fi
 
-# Landing files — copy into a dedicated static dir, so new nginx can serve them
-# without proxying to ghost-chat. Idempotent: rsync local-only with exclude.
-mkdir -p "${REMOTE_LANDING_DIR}"
-for f in index.html privacy.html manifest.json sw.js; do
-    [[ -f "${REMOTE_DIR}/\${f}" && ! -f "${REMOTE_LANDING_DIR}/\${f}" ]] && \
-        cp -p "${REMOTE_DIR}/\${f}" "${REMOTE_LANDING_DIR}/\${f}"
-done
-for d in css js fonts icons; do
-    [[ -d "${REMOTE_DIR}/\${d}" && ! -d "${REMOTE_LANDING_DIR}/\${d}" ]] && \
-        cp -rp "${REMOTE_DIR}/\${d}" "${REMOTE_LANDING_DIR}/\${d}"
-done
+# Landing dir: always snapshot if present, so sync_landing + rsync --delete
+# has a safe rollback target. Idempotent — we preserve the current serving dir
+# before any writes.
+if [[ -d "${REMOTE_LANDING_DIR}" ]]; then
+    rm -rf "${REMOTE_LANDING_DIR}.pre-deploy-${TIMESTAMP}"
+    cp -rp "${REMOTE_LANDING_DIR}" "${REMOTE_LANDING_DIR}.pre-deploy-${TIMESTAMP}"
+else
+    # First deploy — seed landing dir from legacy in-place files if any exist.
+    mkdir -p "${REMOTE_LANDING_DIR}"
+    for f in index.html privacy.html manifest.json sw.js; do
+        [[ -f "${REMOTE_DIR}/\${f}" ]] && cp -p "${REMOTE_DIR}/\${f}" "${REMOTE_LANDING_DIR}/\${f}"
+    done
+    for d in css js fonts icons; do
+        [[ -d "${REMOTE_DIR}/\${d}" ]] && cp -rp "${REMOTE_DIR}/\${d}" "${REMOTE_LANDING_DIR}/\${d}"
+    done
+fi
 EOF
-    ok "snapshot created — nginx.conf.pre-deploy-${TIMESTAMP}, :backup-${TIMESTAMP} image tag"
+    ok "snapshot created — configs.pre-deploy-${TIMESTAMP}, ghostchat-www.pre-deploy-${TIMESTAMP}/, :backup-${TIMESTAMP} image tag"
 }
 
 # --- sync ------------------------------------------------------------------
@@ -180,6 +185,30 @@ sync_code() {
         "${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}/"
 
     ok "sync complete"
+}
+
+sync_landing() {
+    # Repo landing/ → remote ghostchat-www/. --delete is safe because we took
+    # a snapshot in snapshot_remote() and rollback() restores it.
+    # Explicit chmod afterwards — cp -p on the server can carry over 600 from
+    # files created locally (owner-only), and nginx worker cannot read those.
+    if [[ ! -d "${REPO_ROOT}/deploy/landing" ]]; then
+        warn "deploy/landing/ missing locally — skipping landing sync"
+        return 0
+    fi
+    log "rsync: landing/ → ${REMOTE_LANDING_DIR}/"
+    rsync -az --delete \
+        -e "ssh -i ${SSH_KEY} -o ConnectTimeout=20" \
+        --exclude '.DS_Store' \
+        --exclude '*.bak' \
+        "${REPO_ROOT}/deploy/landing/" \
+        "${SSH_USER}@${SSH_HOST}:${REMOTE_LANDING_DIR}/"
+
+    # Normalize permissions so the nginx worker (non-owner) can read everything.
+    # chmod go+rX: add read to group/other on files, and add read+execute on
+    # directories (capital X) — will NOT make files executable by accident.
+    ssh_cmd "chmod -R go+rX ${REMOTE_LANDING_DIR}/"
+    ok "landing synced + permissions normalized"
 }
 
 # --- build & up ------------------------------------------------------------
@@ -275,6 +304,12 @@ for f in nginx.conf docker-compose.yml .env; do
     fi
 done
 
+if [[ -d "${REMOTE_LANDING_DIR}.pre-deploy-${TIMESTAMP}" ]]; then
+    rm -rf "${REMOTE_LANDING_DIR}"
+    mv "${REMOTE_LANDING_DIR}.pre-deploy-${TIMESTAMP}" "${REMOTE_LANDING_DIR}"
+    echo "[rollback] restored ghostchat-www/"
+fi
+
 if docker image inspect "deploy-ghost-chat:backup-${TIMESTAMP}" >/dev/null 2>&1; then
     docker tag "deploy-ghost-chat:backup-${TIMESTAMP}" deploy-ghost-chat:latest
     docker compose up -d ghost-chat
@@ -322,6 +357,7 @@ HELP
 
     snapshot_remote
     sync_code
+    sync_landing
     build_and_start
 
     if ! health_gate; then
@@ -333,7 +369,7 @@ HELP
 
     ROLLBACK_NEEDED=0
     ok "deploy succeeded — snapshot tag :backup-${TIMESTAMP} kept"
-    log "keep snapshot for 24h, then: ssh ... 'cd ${REMOTE_DIR} && rm *.pre-deploy-${TIMESTAMP} && docker rmi deploy-ghost-chat:backup-${TIMESTAMP}'"
+    log "keep snapshot for 24h, then: ssh ... 'cd ${REMOTE_DIR} && rm -rf *.pre-deploy-${TIMESTAMP} ghostchat-www.pre-deploy-${TIMESTAMP} && docker rmi deploy-ghost-chat:backup-${TIMESTAMP}'"
 }
 
 main "$@"
