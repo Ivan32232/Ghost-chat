@@ -27,6 +27,22 @@ final class DeepLinkRouterTests: XCTestCase {
         XCTAssertEqual(DeepLinkRouter.parse(url), "rBwU4hZ688VvG9V2X4c4wg1234567890abcdefghijklmnopqrstuvwxyzABCD-_")
     }
 
+    func test_parse_universalLink_pathForm() {
+        // Safari-fallback form: /room/<id> — nginx serves index.html for this path.
+        let url = URL(string: "https://ghostchat.one/room/rBwU4hZ688VvG9V2X4c4wg1234567890abcdefghijklmnopqrstuvwxyzABCD-_")!
+        XCTAssertEqual(DeepLinkRouter.parse(url), "rBwU4hZ688VvG9V2X4c4wg1234567890abcdefghijklmnopqrstuvwxyzABCD-_")
+    }
+
+    func test_parse_universalLink_pathForm_withTrailingSlash() {
+        let url = URL(string: "https://ghostchat.one/room/rBwU4hZ688VvG9V2X4c4wg1234567890abcdefghijklmnopqrstuvwxyzABCD-_/")!
+        XCTAssertEqual(DeepLinkRouter.parse(url), "rBwU4hZ688VvG9V2X4c4wg1234567890abcdefghijklmnopqrstuvwxyzABCD-_")
+    }
+
+    func test_parse_universalLink_pathForm_wrongSegmentCount_isNil() {
+        // /room/<id>/extra → reject (path must be exactly /room/<id>)
+        XCTAssertNil(DeepLinkRouter.parse(URL(string: "https://ghostchat.one/room/rBwU4hZ688VvG9V2X4c4wg1234567890abcdefghijklmnopqrstuvwxyzABCD-_/extra")!))
+    }
+
     func test_parse_noRoomParam_returnsNil() {
         XCTAssertNil(DeepLinkRouter.parse(URL(string: "ghostchat://")!))
         XCTAssertNil(DeepLinkRouter.parse(URL(string: "https://ghostchat.one/")!))

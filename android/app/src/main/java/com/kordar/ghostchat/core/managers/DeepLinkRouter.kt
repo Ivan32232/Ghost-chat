@@ -39,7 +39,8 @@ class DeepLinkRouter @Inject constructor() {
          * Returns a valid room id parsed from any of the shapes we advertise:
          *   - `ghostchat://?room=<id>`            (query form; current builds)
          *   - `ghostchat://room/<id>`             (legacy path form)
-         *   - `https://ghostchat.one/?room=<id>`  (universal app link)
+         *   - `https://ghostchat.one/?room=<id>`  (universal app link, query)
+         *   - `https://ghostchat.one/room/<id>`   (universal app link, path)
          * Null if the URI doesn't match any shape or the id fails
          * [Room.isValidId] (64-char base64url).
          */
@@ -56,6 +57,13 @@ class DeepLinkRouter @Inject constructor() {
                     val host = uri.host?.lowercase()
                     if (host == "ghostchat.one" || host == "www.ghostchat.one") {
                         uri.getQueryParameter("room")?.takeIf { it.isNotEmpty() }
+                            ?: run {
+                                // Universal-link path form: /room/<id>
+                                val segments = uri.pathSegments
+                                if (segments.size == 2 && segments[0].lowercase() == "room") {
+                                    segments[1]
+                                } else null
+                            }
                     } else null
                 }
                 else -> null

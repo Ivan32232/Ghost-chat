@@ -8,9 +8,10 @@ final class DeepLinkRouter: ObservableObject {
     @Published var pendingRoomId: String?
 
     /// Accepts any form we advertise to users:
-    ///   - `ghostchat://?room=<id>`      (query)
-    ///   - `ghostchat://room/<id>`       (path, shipped in earlier builds)
-    ///   - `https://ghostchat.one/?room=<id>`  (universal link)
+    ///   - `ghostchat://?room=<id>`             (query)
+    ///   - `ghostchat://room/<id>`              (path, shipped in earlier builds)
+    ///   - `https://ghostchat.one/?room=<id>`   (universal link, query)
+    ///   - `https://ghostchat.one/room/<id>`    (universal link, path)
     /// Returns the parsed room id if the URL looks like an invite and the id
     /// passes `Room.isValidID`; `nil` otherwise. Pure — no side effects.
     static func parse(_ url: URL) -> String? {
@@ -35,7 +36,17 @@ final class DeepLinkRouter: ObservableObject {
                 return nil
             }
             let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            candidate = comps?.queryItems?.first(where: { $0.name == "room" })?.value
+            if let q = comps?.queryItems?.first(where: { $0.name == "room" })?.value, !q.isEmpty {
+                candidate = q
+            } else {
+                // Universal-link path form: /room/<id>
+                let parts = url.pathComponents.filter { $0 != "/" }
+                if parts.count == 2, parts.first?.lowercased() == "room" {
+                    candidate = parts.last
+                } else {
+                    candidate = nil
+                }
+            }
         } else {
             candidate = nil
         }

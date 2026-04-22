@@ -37,6 +37,17 @@ class DeepLinkRouterTest {
     }
 
     @Test
+    fun `parses universal link path form`() {
+        // Safari-fallback form: /room/<id> — nginx serves landing index.html.
+        assertEquals(goodId, DeepLinkRouter.parse(Uri.parse("https://ghostchat.one/room/$goodId")))
+    }
+
+    @Test
+    fun `rejects universal link path form with extra segment`() {
+        assertNull(DeepLinkRouter.parse(Uri.parse("https://ghostchat.one/room/$goodId/extra")))
+    }
+
+    @Test
     fun `rejects missing room param`() {
         assertNull(DeepLinkRouter.parse(Uri.parse("ghostchat://")))
         assertNull(DeepLinkRouter.parse(Uri.parse("https://ghostchat.one/")))
