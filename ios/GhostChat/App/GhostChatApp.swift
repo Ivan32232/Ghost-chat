@@ -5,6 +5,7 @@ struct GhostChatApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     @StateObject private var services = AppServicesBox()
+    @StateObject private var deepLink = DeepLinkRouter()
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var locked: Bool = false
@@ -19,6 +20,7 @@ struct GhostChatApp: App {
                 .environmentObject(services.value.calls)
                 .environmentObject(services.value.settings)
                 .environmentObject(services.value.localization)
+                .environmentObject(deepLink)
                 .onAppear {
                     delegate.pushManager = services.value.push
                     delegate.callManager = services.value.calls
@@ -30,7 +32,9 @@ struct GhostChatApp: App {
                     }
                 }
                 .onOpenURL { url in
-                    handleDeepLink(url)
+                    // Never auto-join — DeepLinkRouter only parses + stores; the
+                    // confirmation dialog lives in WelcomeView.
+                    deepLink.submit(url)
                 }
         }
     }
@@ -47,25 +51,6 @@ struct GhostChatApp: App {
             )
         } else {
             WelcomeView()
-        }
-    }
-
-    // MARK: - Deep link
-
-    private func handleDeepLink(_ url: URL) {
-        var id: String?
-        if url.scheme == "ghostchat",
-           let host = url.host,
-           host == "room" {
-            id = url.pathComponents.last
-        } else if url.scheme?.hasPrefix("http") == true,
-                  let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                  let room = comps.queryItems?.first(where: { $0.name == "room" })?.value {
-            id = room
-        }
-        guard let candidate = id, Room.isValidID(candidate) else { return }
-        Task {
-            try? await services.value.connection.joinRoom(candidate)
         }
     }
 }

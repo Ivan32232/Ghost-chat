@@ -4,17 +4,28 @@ struct WelcomeView: View {
     @EnvironmentObject var connection: ConnectionManager
     @EnvironmentObject var contacts: ContactManager
     @EnvironmentObject var localization: LocalizationManager
+    @EnvironmentObject var deepLink: DeepLinkRouter
 
     @State private var joinInput: String = ""
     @State private var showContacts = false
     @State private var showSettings = false
-    @State private var showChat = false
     @State private var errorMessage: String?
     @State private var isCreating = false
     @State private var isJoining = false
 
+    /// Navigation stack managed via `NavigationPath` so we can push Waiting
+    /// → Connecting → Chat without juggling multiple `@State Bool` flags.
+    @State private var path: [WelcomeRoute] = []
+
+    /// Routes we can push from this screen.
+    enum WelcomeRoute: Hashable {
+        case waiting(roomId: String)
+        case connecting
+        case chat
+    }
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ZStack {
                 Color.black.ignoresSafeArea()
                 VStack(spacing: 32) {
@@ -29,8 +40,25 @@ struct WelcomeView: View {
                 .padding(24)
             }
             .preferredColorScheme(.dark)
-            .navigationDestination(isPresented: $showChat) {
-                ChatView()
+            .navigationDestination(for: WelcomeRoute.self) { route in
+                switch route {
+                case .waiting(let id):
+                    WaitingView(
+                        roomId: id,
+                        onAdvance: { path = [.connecting] },
+                        onCancel: { path.removeAll() }
+                    )
+                case .connecting:
+                    ConnectingView(
+                        onAdvance: { path = [.chat] },
+                        onCancel: { error in
+                            path.removeAll()
+                            if let error { errorMessage = error }
+                        }
+                    )
+                case .chat:
+                    ChatView()
+                }
             }
             .navigationDestination(isPresented: $showContacts) {
                 ContactsView()
@@ -38,10 +66,32 @@ struct WelcomeView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
-            .alert("Error", isPresented: .init(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            .alert("Error", isPresented: errorBinding) {
                 Button(localization.localized("action.done")) { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .alert(
+                localization.localized("deepLink.prompt.title"),
+                isPresented: deepLinkAlertBinding
+            ) {
+                Button(localization.localized("deepLink.prompt.cancel"), role: .cancel) {
+                    deepLink.clear()
+                }
+                Button(localization.localized("deepLink.prompt.confirm")) {
+                    let id = deepLink.pendingRoomId
+                    deepLink.clear()
+                    if let id { startJoin(id) }
+                }
+            } message: {
+                Text(localization.localized("deepLink.prompt.message"))
+            }
+        }
+        .onChange(of: path) { newPath in
+            // If ConnectingView popped back to root with an error, leave the
+            // ConnectionManager in a clean state.
+            if newPath.isEmpty && isCreating == false && isJoining == false {
+                connection.leave()
             }
         }
     }
@@ -78,18 +128,18 @@ struct WelcomeView: View {
         Button {
             guard !isCreating, !isJoining else { return }
             isCreating = true
-            // Navigate to the chat immediately so the user gets a "waiting" UI
-            // (StatusBanner) instead of a frozen button. Room creation continues
-            // in the background; on failure we pop back and surface the error.
-            showChat = true
             Task {
                 do {
                     try await connection.createRoom()
+                    // Wait for the server to mint us a room id (roomCreated event).
+                    let id = try await waitForRoomId()
+                    isCreating = false
+                    path = [.waiting(roomId: id)]
                 } catch {
-                    showChat = false
+                    isCreating = false
+                    connection.leave()
                     errorMessage = error.localizedDescription
                 }
-                isCreating = false
             }
         } label: {
             Group {
@@ -145,6 +195,17 @@ struct WelcomeView: View {
 
     // MARK: - Actions
 
+    /// Poll `connection.roomId` for up to 10 seconds waiting for the server
+    /// to respond with a `roomCreated` event after `createRoom()`.
+    private func waitForRoomId(timeout: TimeInterval = 10) async throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let id = connection.roomId, !id.isEmpty { return id }
+            try await Task.sleep(nanoseconds: 50_000_000) // 50 ms
+        }
+        throw ConnectionManager.Error.unexpectedState
+    }
+
     private func join() async {
         guard !isCreating, !isJoining else { return }
         let id = extractRoomID(from: joinInput)
@@ -153,26 +214,40 @@ struct WelcomeView: View {
             return
         }
         isJoining = true
-        showChat = true
-        do {
-            try await connection.joinRoom(id)
-        } catch {
-            showChat = false
-            errorMessage = error.localizedDescription
-        }
+        startJoin(id)
         isJoining = false
+    }
+
+    /// Kicks off `joinRoom(id)` and immediately pushes ConnectingView.
+    /// Used both by the manual join flow and the deep-link confirmation.
+    private func startJoin(_ id: String) {
+        path = [.connecting]
+        Task {
+            do {
+                try await connection.joinRoom(id)
+            } catch {
+                path.removeAll()
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func extractRoomID(from raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let url = URL(string: trimmed),
-           let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-           let room = comps.queryItems?.first(where: { $0.name == "room" })?.value {
-            return room
+        if let url = URL(string: trimmed), let parsed = DeepLinkRouter.parse(url) {
+            return parsed
         }
         if trimmed.hasPrefix("ghostchat://room/") {
             return String(trimmed.dropFirst("ghostchat://room/".count))
         }
         return trimmed
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    }
+
+    private var deepLinkAlertBinding: Binding<Bool> {
+        Binding(get: { deepLink.pendingRoomId != nil }, set: { if !$0 { deepLink.clear() } })
     }
 }
