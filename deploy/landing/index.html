@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="robots" content="noindex, nofollow">
+  <!-- Cache managed by server ETag headers -->
+  <base href="/">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ghost">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <title>Ghost</title>
+  <link rel="stylesheet" href="css/style.css?v=2">
+</head>
+<body>
+  <canvas id="ghost-bg"></canvas>
+  <div class="app">
+    <!-- Welcome Screen -->
+    <div id="welcome-screen" class="screen">
+      <div class="welcome">
+        <div class="welcome-content">
+          <button id="create-room-btn" class="btn-main">
+            <span>Новый чат</span>
+            <svg viewBox="0 0 24 24"><path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8-8-8z"/></svg>
+          </button>
+
+          <div class="divider"><span>или войти</span></div>
+
+          <div class="join-form">
+            <input type="text" id="join-room-input" placeholder="код комнаты" autocomplete="off" spellcheck="false">
+            <button id="join-room-btn" class="btn-join">Войти</button>
+          </div>
+
+          <!-- TURN relay disabled -->
+          <input type="checkbox" id="privacy-mode-toggle" style="display:none">
+
+          <div class="app-promo hidden" id="app-promo-android">
+            <div class="app-promo-icon android">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="#3DDC84"><path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/></svg>
+            </div>
+            <div class="app-promo-text">
+              <strong>Скачать Ghost Chat для Android</strong>
+              <span>APK файл — установить напрямую</span>
+            </div>
+            <svg class="app-promo-arrow" viewBox="0 0 24 24" width="20" height="20"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+          </div>
+          <div class="app-promo hidden" id="app-promo-ios">
+            <div class="app-promo-icon ios">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="var(--text)"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+            </div>
+            <div class="app-promo-text">
+              <strong>Скачать приложение Ghost Chat для iOS</strong>
+              <span>Контакты, звонки и сохранение ключей</span>
+            </div>
+            <svg class="app-promo-arrow" viewBox="0 0 24 24" width="20" height="20"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+          </div>
+          <div class="app-promo hidden" id="app-promo-desktop">
+            <div class="app-promo-icon">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="var(--accent)"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+            </div>
+            <div class="app-promo-text">
+              <strong>Мобильное приложение</strong>
+              <span>Android APK • iOS App Store</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Waiting Screen -->
+    <div id="waiting-screen" class="screen hidden">
+      <div class="waiting">
+        <div class="loader"></div>
+        <p class="waiting-text">ожидание собеседника</p>
+        <span id="room-id-display"></span>
+        <button id="copy-room-btn" class="btn-copy-link">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+          <span>Скопировать ссылку</span>
+        </button>
+        <button id="share-room-btn" class="btn-copy-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>
+          <span>Поделиться ссылкой</span>
+        </button>
+        <p id="copy-feedback" class="hint">Ссылка скопирована!</p>
+        <p class="hint">отправьте ссылку собеседнику (одноразовая)</p>
+        <button id="leave-btn" class="btn-text">отмена</button>
+      </div>
+    </div>
+
+    <!-- Connecting Screen -->
+    <div id="connecting-screen" class="screen hidden">
+      <div class="waiting">
+        <div class="loader"></div>
+        <p class="waiting-text">подключение</p>
+        <p class="hint">устанавливаем защищённое соединение</p>
+        <button id="connecting-leave-btn" class="btn-text">отмена</button>
+      </div>
+    </div>
+
+    <!-- Chat Screen -->
+    <div id="chat-screen" class="screen hidden">
+      <div class="chat">
+        <header class="chat-header">
+          <div class="header-left">
+            <div id="connection-status" class="status-dot"></div>
+            <span class="status-text">зашифровано</span>
+          </div>
+          <div class="header-right">
+            <button id="call-btn" class="btn-icon btn-call" title="Call">
+              <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <div id="messages" class="messages"></div>
+
+        <div id="typing-indicator" class="typing-indicator hidden">
+          <div class="typing-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <span class="typing-text">печатает…</span>
+        </div>
+
+        <div id="reply-preview" class="reply-preview hidden">
+          <div class="reply-preview-bar"></div>
+          <div class="reply-preview-content">
+            <div class="reply-preview-label">Ответ</div>
+            <div class="reply-preview-text" id="reply-preview-text"></div>
+          </div>
+          <button type="button" id="reply-cancel-btn" class="reply-cancel" aria-label="Отменить ответ">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+
+        <div class="input-area">
+          <button type="button" id="attach-btn" class="btn-attach" title="Прикрепить файл" aria-label="Прикрепить файл">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 1 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 1 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6z"/></svg>
+          </button>
+          <input type="file" id="file-input" style="display:none" />
+          <textarea id="message-input" placeholder="Сообщение" rows="1" autocomplete="off" spellcheck="false"></textarea>
+          <button id="send-btn" class="btn-send">
+            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="remote-audio" autoplay playsinline></audio>
+
+  <!-- Call Overlay -->
+  <div id="call-overlay" class="overlay hidden">
+    <div class="call-screen">
+      <div class="call-info">
+        <div class="call-badge">зашифрованный звонок</div>
+        <div id="call-timer" class="call-timer">00:00</div>
+      </div>
+      <div class="call-controls">
+        <div class="call-control-item">
+          <button id="mute-btn" class="btn-round" title="Mute">
+            <svg id="mute-icon-on" class="mute-icon" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            <svg id="mute-icon-off" class="mute-icon hidden" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg>
+          </button>
+          <span class="btn-label">Микро</span>
+        </div>
+        <div class="call-control-item">
+          <button id="speaker-btn" class="btn-round" title="Speaker">
+            <svg id="speaker-icon-off" class="speaker-icon" viewBox="0 0 24 24"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/></svg>
+            <svg id="speaker-icon-on" class="speaker-icon hidden" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+          </button>
+          <span class="btn-label">На ухо</span>
+        </div>
+        <div class="call-control-item">
+          <button id="end-call-btn" class="btn-round btn-end" title="End">
+            <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+          </button>
+          <span class="btn-label btn-label-end">Сброс</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incoming Call -->
+  <div id="incoming-call" class="overlay hidden">
+    <div class="incoming-screen">
+      <div class="incoming-pulse"></div>
+      <p class="incoming-text">Входящий звонок</p>
+      <div class="incoming-controls">
+        <button id="decline-call-btn" class="btn-round btn-decline">
+          <svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+        </button>
+        <button id="accept-call-btn" class="btn-round btn-accept">
+          <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="security-alerts" class="alerts"></div>
+
+  <script type="module" src="js/background.js?v=2"></script>
+  <script type="module" src="js/app.js?v=2"></script>
+</body>
+</html>
