@@ -33,8 +33,10 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kordar.ghostchat.core.managers.CallManager
 import com.kordar.ghostchat.core.managers.ConnectionManager
+import com.kordar.ghostchat.core.managers.DeepLinkRouter
 import com.kordar.ghostchat.features.call.CallScreen
 import com.kordar.ghostchat.features.chat.ChatScreen
+import com.kordar.ghostchat.features.connecting.ConnectingScreen
 import com.kordar.ghostchat.features.contacts.ContactDetailScreen
 import com.kordar.ghostchat.features.contacts.ContactsScreen
 import com.kordar.ghostchat.features.nav.Destinations
@@ -42,10 +44,9 @@ import com.kordar.ghostchat.features.settings.LockScreen
 import com.kordar.ghostchat.features.settings.SecurityDashboardScreen
 import com.kordar.ghostchat.features.settings.SettingsScreen
 import com.kordar.ghostchat.features.settings.SettingsViewModel
+import com.kordar.ghostchat.features.waiting.WaitingScreen
 import com.kordar.ghostchat.features.welcome.WelcomeScreen
-import com.kordar.ghostchat.models.Room
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -58,6 +59,7 @@ class MainActivity : FragmentActivity() {
 
     @Inject lateinit var callManager: CallManager
     @Inject lateinit var connection: ConnectionManager
+    @Inject lateinit var deepLink: DeepLinkRouter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,17 +78,13 @@ class MainActivity : FragmentActivity() {
         handleDeepLink(newIntent.data)
     }
 
+    /**
+     * Deep-link contract: never auto-join. Store the parsed room id in the
+     * [DeepLinkRouter]; WelcomeScreen observes it and shows the confirmation
+     * dialog before any network side-effect.
+     */
     private fun handleDeepLink(uri: Uri?) {
-        val candidate = extractRoomId(uri) ?: return
-        if (!Room.isValidId(candidate)) return
-        lifecycleScope.launch { connection.joinRoom(candidate) }
-    }
-
-    private fun extractRoomId(uri: Uri?): String? {
-        uri ?: return null
-        if (uri.scheme == "ghostchat") return uri.pathSegments.lastOrNull() ?: uri.host
-        if (uri.scheme?.startsWith("http") == true) return uri.getQueryParameter("room")
-        return null
+        deepLink.submit(uri)
     }
 }
 
@@ -137,10 +135,46 @@ private fun RootNavHost(
     NavHost(navController = nav, startDestination = Destinations.WELCOME) {
         composable(Destinations.WELCOME) {
             WelcomeScreen(
-                onOpenChat     = { nav.navigate(Destinations.CHAT) },
-                onOpenSettings = { nav.navigate(Destinations.SETTINGS) },
-                onOpenContacts = { nav.navigate(Destinations.CONTACTS) }
+                onOpenWaiting    = { id -> nav.navigate(Destinations.waiting(id)) },
+                onOpenConnecting = { nav.navigate(Destinations.CONNECTING) },
+                onOpenSettings   = { nav.navigate(Destinations.SETTINGS) },
+                onOpenContacts   = { nav.navigate(Destinations.CONTACTS) }
             )
+        }
+        composable(
+            route = Destinations.WAITING,
+            arguments = listOf(navArgument("roomId") { type = NavType.StringType })
+        ) { entry ->
+            val id = entry.arguments?.getString("roomId").orEmpty()
+            val owner = androidx.compose.ui.platform.LocalContext.current as? MainActivity
+            owner?.let {
+                WaitingScreen(
+                    roomId = id,
+                    connection = it.connection,
+                    onAdvance = {
+                        nav.navigate(Destinations.CONNECTING) {
+                            popUpTo(Destinations.WELCOME) { inclusive = false }
+                        }
+                    },
+                    onCancel = { nav.popBackStack(Destinations.WELCOME, inclusive = false) }
+                )
+            }
+        }
+        composable(Destinations.CONNECTING) {
+            val owner = androidx.compose.ui.platform.LocalContext.current as? MainActivity
+            owner?.let {
+                ConnectingScreen(
+                    connection = it.connection,
+                    onAdvance = {
+                        nav.navigate(Destinations.CHAT) {
+                            popUpTo(Destinations.WELCOME) { inclusive = false }
+                        }
+                    },
+                    onCancel = { _ ->
+                        nav.popBackStack(Destinations.WELCOME, inclusive = false)
+                    }
+                )
+            }
         }
         composable(Destinations.CHAT) {
             ChatScreen(

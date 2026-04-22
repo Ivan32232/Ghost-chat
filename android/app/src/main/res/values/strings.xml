@@ -86,4 +86,23 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_done">Done</string>
     <string name="action_save">Save</string>
+
+    <!-- Waiting / Connecting / Deep link -->
+    <string name="waiting_title">Waiting for peer</string>
+    <string name="waiting_share">Share link</string>
+    <string name="waiting_copy">Copy link</string>
+    <string name="waiting_copied">Copied</string>
+    <string name="waiting_hint">Send this link to your peer — it\'s single-use.</string>
+    <string name="waiting_cancel">Cancel</string>
+    <string name="connecting_title">Setting up secure connection…</string>
+    <string name="connecting_step_signaling">Signaling</string>
+    <string name="connecting_step_webrtc">WebRTC</string>
+    <string name="connecting_step_key_exchange">Key exchange</string>
+    <string name="connecting_step_encrypted">Encrypted</string>
+    <string name="connecting_cancel">Cancel</string>
+    <string name="connecting_error">Connection failed</string>
+    <string name="deep_link_prompt_title">Join encrypted room?</string>
+    <string name="deep_link_prompt_message">A secure peer-to-peer connection will be established.</string>
+    <string name="deep_link_prompt_confirm">Join</string>
+    <string name="deep_link_prompt_cancel">Cancel</string>
 </resources>

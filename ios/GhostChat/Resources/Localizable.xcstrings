@@ -537,7 +537,7 @@
         }
       }
     },
-    "connecting.step.keyExchange": {
+    "connecting.step.key_exchange": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -707,7 +707,7 @@
         }
       }
     },
-    "deepLink.prompt.cancel": {
+    "deep_link.prompt.cancel": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -724,7 +724,7 @@
         }
       }
     },
-    "deepLink.prompt.confirm": {
+    "deep_link.prompt.confirm": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -741,7 +741,7 @@
         }
       }
     },
-    "deepLink.prompt.message": {
+    "deep_link.prompt.message": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -758,7 +758,7 @@
         }
       }
     },
-    "deepLink.prompt.title": {
+    "deep_link.prompt.title": {
       "extractionState": "manual",
       "localizations": {
         "en": {

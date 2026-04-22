@@ -19,7 +19,7 @@ final class ConnectingViewModel: ObservableObject {
             switch self {
             case .signaling:   return "connecting.step.signaling"
             case .webRTC:      return "connecting.step.webrtc"
-            case .keyExchange: return "connecting.step.keyExchange"
+            case .keyExchange: return "connecting.step.key_exchange"
             case .encrypted:   return "connecting.step.encrypted"
             }
         }

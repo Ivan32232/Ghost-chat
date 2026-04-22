@@ -63,7 +63,7 @@ final class ConnectingViewModelTests: XCTestCase {
     func test_phaseLocalizedKeys_allPresent() {
         XCTAssertEqual(ConnectingViewModel.Phase.signaling.localizedKey, "connecting.step.signaling")
         XCTAssertEqual(ConnectingViewModel.Phase.webRTC.localizedKey, "connecting.step.webrtc")
-        XCTAssertEqual(ConnectingViewModel.Phase.keyExchange.localizedKey, "connecting.step.keyExchange")
+        XCTAssertEqual(ConnectingViewModel.Phase.keyExchange.localizedKey, "connecting.step.key_exchange")
         XCTAssertEqual(ConnectingViewModel.Phase.encrypted.localizedKey, "connecting.step.encrypted")
     }
 }

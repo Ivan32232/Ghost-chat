@@ -43,21 +43,30 @@ import com.kordar.ghostchat.R
 
 @Composable
 fun WelcomeScreen(
-    onOpenChat: () -> Unit,
+    onOpenWaiting: (roomId: String) -> Unit,
+    onOpenConnecting: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenContacts: () -> Unit,
     viewModel: WelcomeViewModel = hiltViewModel()
 ) {
     val error by viewModel.error.collectAsState()
-    val shouldNavigate by viewModel.navigateToChat.collectAsState()
+    val target by viewModel.target.collectAsState()
     val contactsList by viewModel.contacts.contacts.collectAsState()
     val isBusy by viewModel.isBusy.collectAsState()
+    val pendingDeepLink by viewModel.deepLink.pendingRoomId.collectAsState()
     var joinInput by remember { mutableStateOf("") }
 
-    LaunchedEffect(shouldNavigate) {
-        if (shouldNavigate) {
-            viewModel.clearNavigation()
-            onOpenChat()
+    LaunchedEffect(target) {
+        when (val t = target) {
+            is WelcomeViewModel.Target.Waiting -> {
+                viewModel.clearTarget()
+                onOpenWaiting(t.roomId)
+            }
+            is WelcomeViewModel.Target.Connecting -> {
+                viewModel.clearTarget()
+                onOpenConnecting()
+            }
+            null -> Unit
         }
     }
 
@@ -70,7 +79,6 @@ fun WelcomeScreen(
         Column(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.app_name),
@@ -85,8 +93,10 @@ fun WelcomeScreen(
 
             Spacer(Modifier.weight(1f))
 
-            // Title
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(
                     text = stringResource(R.string.app_name),
                     color = Color.White,
@@ -197,6 +207,24 @@ fun WelcomeScreen(
             },
             title = { Text("Error") },
             text = { Text(message) }
+        )
+    }
+
+    pendingDeepLink?.let { id ->
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelDeepLink() },
+            title = { Text(stringResource(R.string.deep_link_prompt_title)) },
+            text = { Text(stringResource(R.string.deep_link_prompt_message)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmDeepLink(id) }) {
+                    Text(stringResource(R.string.deep_link_prompt_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelDeepLink() }) {
+                    Text(stringResource(R.string.deep_link_prompt_cancel))
+                }
+            }
         )
     }
 }

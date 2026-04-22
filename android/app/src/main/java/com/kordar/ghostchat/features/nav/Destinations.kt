@@ -6,6 +6,8 @@ package com.kordar.ghostchat.features.nav
  */
 object Destinations {
     const val WELCOME   = "welcome"
+    const val WAITING   = "waiting/{roomId}"
+    const val CONNECTING = "connecting"
     const val CHAT      = "chat"
     const val CALL      = "call"
     const val CONTACTS  = "contacts"
@@ -16,4 +18,5 @@ object Destinations {
     const val ABOUT     = "about"
 
     fun contactDetail(contactId: String) = "contact_detail/$contactId"
+    fun waiting(roomId: String) = "waiting/$roomId"
 }

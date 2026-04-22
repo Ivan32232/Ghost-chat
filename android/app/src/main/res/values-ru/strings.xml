@@ -82,4 +82,23 @@
     <string name="action_cancel">Отмена</string>
     <string name="action_done">Готово</string>
     <string name="action_save">Сохранить</string>
+
+    <!-- Waiting / Connecting / Deep link -->
+    <string name="waiting_title">Ожидание собеседника</string>
+    <string name="waiting_share">Поделиться ссылкой</string>
+    <string name="waiting_copy">Скопировать ссылку</string>
+    <string name="waiting_copied">Скопировано</string>
+    <string name="waiting_hint">Отправьте ссылку собеседнику — она одноразовая.</string>
+    <string name="waiting_cancel">Отмена</string>
+    <string name="connecting_title">Устанавливаем защищённое соединение…</string>
+    <string name="connecting_step_signaling">Сигналинг</string>
+    <string name="connecting_step_webrtc">WebRTC</string>
+    <string name="connecting_step_key_exchange">Обмен ключами</string>
+    <string name="connecting_step_encrypted">Шифрование активно</string>
+    <string name="connecting_cancel">Отмена</string>
+    <string name="connecting_error">Соединение прервано</string>
+    <string name="deep_link_prompt_title">Подключиться к зашифрованной комнате?</string>
+    <string name="deep_link_prompt_message">Будет создано защищённое соединение с собеседником.</string>
+    <string name="deep_link_prompt_confirm">Подключиться</string>
+    <string name="deep_link_prompt_cancel">Отмена</string>
 </resources>

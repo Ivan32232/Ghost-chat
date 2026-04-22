@@ -72,19 +72,19 @@ struct WelcomeView: View {
                 Text(errorMessage ?? "")
             }
             .alert(
-                localization.localized("deepLink.prompt.title"),
+                localization.localized("deep_link.prompt.title"),
                 isPresented: deepLinkAlertBinding
             ) {
-                Button(localization.localized("deepLink.prompt.cancel"), role: .cancel) {
+                Button(localization.localized("deep_link.prompt.cancel"), role: .cancel) {
                     deepLink.clear()
                 }
-                Button(localization.localized("deepLink.prompt.confirm")) {
+                Button(localization.localized("deep_link.prompt.confirm")) {
                     let id = deepLink.pendingRoomId
                     deepLink.clear()
                     if let id { startJoin(id) }
                 }
             } message: {
-                Text(localization.localized("deepLink.prompt.message"))
+                Text(localization.localized("deep_link.prompt.message"))
             }
         }
         .onChange(of: path) { newPath in
