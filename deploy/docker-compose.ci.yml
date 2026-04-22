@@ -1,0 +1,13 @@
+# CI-only override — exposes ghost-chat port 3000 on the host so the
+# GitHub Actions workflow can curl http://localhost:3000/health directly
+# without running the full prod stack (nginx + coturn + TLS).
+#
+# Production does NOT publish this port — nginx reaches ghost-chat over
+# the internal docker network instead. See deploy/docker-compose.yml.
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml up -d ghost-chat
+services:
+  ghost-chat:
+    ports:
+      - "3000:3000"
