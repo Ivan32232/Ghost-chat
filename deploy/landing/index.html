@@ -6,6 +6,20 @@
      against the site root instead of /room/ (browser would 404 on
      js/background.js, icons/*, etc.). -->
 <base href="/">
+<script>
+// Legacy cleanup: the old web client registered /sw.js. Returning visitors
+// can have a stale service worker intercepting requests and serving the old
+// (broken) shell from cache. Unregister anything we find and dump caches —
+// runs once, harmless on first-time visitors.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(reg => reg.unregister());
+  });
+  if (window.caches && caches.keys) {
+    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+  }
+}
+</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050505">
@@ -237,6 +251,10 @@ html.js .reveal.d5{animation-delay:.6s}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none !important;transition:none !important}
   .seal::before{opacity:.5}
+  /* Critical: when animations are off, the @keyframes that would normally
+     animate .reveal from opacity:0 → 1 never runs. Without this override,
+     content stays invisible for users with macOS "Reduce Motion" enabled. */
+  html.js .reveal{opacity:1 !important;transform:none !important}
 }
 </style>
 </head>
