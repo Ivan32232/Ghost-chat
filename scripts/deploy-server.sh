@@ -239,20 +239,25 @@ EOF
 }
 
 # --- health gate -----------------------------------------------------------
+# Important: every probe writes curl output to a temp file and reads from it.
+# Using `curl ... | head -1` would close the pipe early, kill curl with
+# SIGPIPE (exit 141), and trip `set -o pipefail`, which then unwinds out of
+# health_gate on what should have been a successful probe.
 health_gate() {
     log "health gate: up to $((HEALTH_RETRIES * HEALTH_BACKOFF_SEC))s"
     local attempt=0
+    local body_tmp
+    body_tmp="$(mktemp)"
+    # shellcheck disable=SC2064
+    trap "rm -f '${body_tmp}'" RETURN
+
     while (( attempt < HEALTH_RETRIES )); do
         attempt=$(( attempt + 1 ))
         local code
-        code="$(curl -sk -o /dev/null -w '%{http_code}' -m 5 "${HEALTH_URL}" || echo 000)"
-        if [[ "${code}" == "200" ]]; then
-            local body
-            body="$(curl -sk -m 5 "${HEALTH_URL}" || true)"
-            if echo "${body}" | grep -q '"status":"ok"'; then
-                ok "/health → 200 + status:ok (attempt ${attempt})"
-                break
-            fi
+        code="$(curl -sk -o "${body_tmp}" -w '%{http_code}' -m 5 "${HEALTH_URL}" || echo 000)"
+        if [[ "${code}" == "200" ]] && grep -q '"status":"ok"' "${body_tmp}"; then
+            ok "/health → 200 + status:ok (attempt ${attempt})"
+            break
         fi
         printf '%s[wait]%s /health attempt %d/%d (last=%s)\n' "${C_DIM}" "${C_RST}" \
             "${attempt}" "${HEALTH_RETRIES}" "${code}"
@@ -264,13 +269,23 @@ health_gate() {
     done
 
     log "ws gate: upgrade probe (HTTP/1.1 — RFC 6455 does not allow Upgrade over HTTP/2)"
-    local ws_first_line
-    ws_first_line="$(curl -sk --http1.1 -i -m 5 \
+    local ws_curl_rc=0
+    curl -sk --http1.1 -i -m 5 \
         -H 'Connection: Upgrade' \
         -H 'Upgrade: websocket' \
         -H 'Sec-WebSocket-Version: 13' \
         -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
-        "${WS_URL}" | head -1 | tr -d '\r\n')"
+        "${WS_URL}" >"${body_tmp}" 2>/dev/null || ws_curl_rc=$?
+    # curl exits 18 (CURLE_PARTIAL_FILE) for many WS upgrades because the
+    # server keeps the socket open after 101 — that's a success, not a failure.
+    # Only treat hard transport errors (timeout 28, refused 7, ...) as fatal.
+    if (( ws_curl_rc != 0 && ws_curl_rc != 18 && ws_curl_rc != 56 )); then
+        err "/ws upgrade curl failed (exit ${ws_curl_rc})"
+        return 1
+    fi
+    local ws_first_line
+    IFS= read -r ws_first_line < "${body_tmp}" || true
+    ws_first_line="${ws_first_line//$'\r'/}"
     if [[ "${ws_first_line}" != *"101"* ]]; then
         err "/ws upgrade did not return 101 (got: ${ws_first_line:-empty})"
         return 1
@@ -278,9 +293,16 @@ health_gate() {
     ok "/ws upgrade → ${ws_first_line}"
 
     log "landing gate: GET /"
-    local landing_ct
-    landing_ct="$(curl -skI -m 5 "${LANDING_URL}" | grep -i '^content-type:' | head -1 | tr -d '\r\n')"
-    if [[ "${landing_ct}" != *"text/html"* ]]; then
+    curl -skI -m 5 "${LANDING_URL}" >"${body_tmp}" 2>/dev/null
+    local landing_ct=""
+    while IFS= read -r line; do
+        line="${line//$'\r'/}"
+        if [[ "${line,,}" == content-type:* ]]; then
+            landing_ct="${line}"
+            break
+        fi
+    done < "${body_tmp}"
+    if [[ "${landing_ct,,}" != *"text/html"* ]]; then
         err "landing / did not return text/html (got: ${landing_ct:-empty})"
         return 1
     fi
@@ -328,15 +350,23 @@ trap 'rc=$?; if (( rc != 0 && ROLLBACK_NEEDED == 1 )); then rollback; fi; exit $
 # --- main ------------------------------------------------------------------
 main() {
     AUTO_YES=0
+    SIMULATE_ROLLBACK=0
     for arg in "$@"; do
         case "${arg}" in
             --yes|-y) AUTO_YES=1 ;;
+            --simulate-rollback)
+                # Test mode: print the rollback message + exit non-zero without
+                # touching anything remote. Used by scripts/test-deploy-server.sh
+                # to verify the failure path renders correctly.
+                SIMULATE_ROLLBACK=1 ;;
             -h|--help)
                 cat <<HELP
 deploy-server.sh — Ghost Chat v2 production deploy
 
-  --yes    skip interactive confirmation
-  --help   this message
+  --yes                  skip interactive confirmation
+  --simulate-rollback    print the failure message + exit 1 without
+                         contacting the server (test harness)
+  --help                 this message
 
 Before running:
   - deploy/nginx.conf already updated for new architecture (location / → static)
@@ -346,6 +376,13 @@ HELP
                 exit 0 ;;
         esac
     done
+
+    if (( SIMULATE_ROLLBACK == 1 )); then
+        TIMESTAMP="simulated-$(date -u +%Y%m%dT%H%M%SZ)"
+        ROLLBACK_RAN=1
+        err "DEPLOY FAILED — rolled back to snapshot ${TIMESTAMP}"
+        exit 1
+    fi
 
     log "target: ${SSH_USER}@${SSH_HOST}:${REMOTE_DIR}"
     preflight_local
@@ -364,6 +401,14 @@ HELP
         err "health gate failed — rolling back"
         rollback
         ssh_cmd 'docker logs --tail 100 ghost-chat' || true
+        exit 1
+    fi
+
+    # Final guard — even if a previous step quietly armed rollback (e.g. an
+    # unexpected pipeline exit), refuse to print "succeeded" once the rollback
+    # has actually run. The exit status mirrors what the user observes.
+    if (( ROLLBACK_RAN == 1 )); then
+        err "DEPLOY FAILED — rolled back to snapshot ${TIMESTAMP}"
         exit 1
     fi
 
