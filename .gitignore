@@ -6,6 +6,11 @@ node_modules/
 .DS_Store
 *.log
 
+# Playwright + screenshot test artifacts (root level only — actual app
+# resources live under ios/, android/, deploy/landing/icons/, etc.)
+/*.png
+/.playwright-mcp/
+
 # Server compiled output
 server/dist/
 
