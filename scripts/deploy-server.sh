@@ -269,20 +269,16 @@ health_gate() {
     done
 
     log "ws gate: upgrade probe (HTTP/1.1 — RFC 6455 does not allow Upgrade over HTTP/2)"
-    local ws_curl_rc=0
+    # curl exit code is irrelevant here. After a successful 101, the server
+    # holds the socket open (it's a WS now, not HTTP), and curl will exit with
+    # 28 (timeout), 18 (partial), or 56 (recv error) — all of which are normal.
+    # We only care whether the response actually started with 101.
     curl -sk --http1.1 -i -m 5 \
         -H 'Connection: Upgrade' \
         -H 'Upgrade: websocket' \
         -H 'Sec-WebSocket-Version: 13' \
         -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
-        "${WS_URL}" >"${body_tmp}" 2>/dev/null || ws_curl_rc=$?
-    # curl exits 18 (CURLE_PARTIAL_FILE) for many WS upgrades because the
-    # server keeps the socket open after 101 — that's a success, not a failure.
-    # Only treat hard transport errors (timeout 28, refused 7, ...) as fatal.
-    if (( ws_curl_rc != 0 && ws_curl_rc != 18 && ws_curl_rc != 56 )); then
-        err "/ws upgrade curl failed (exit ${ws_curl_rc})"
-        return 1
-    fi
+        "${WS_URL}" >"${body_tmp}" 2>/dev/null || true
     local ws_first_line
     IFS= read -r ws_first_line < "${body_tmp}" || true
     ws_first_line="${ws_first_line//$'\r'/}"
