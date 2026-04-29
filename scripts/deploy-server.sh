@@ -226,12 +226,18 @@ docker compose build --no-cache ghost-chat
 echo "[remote] ghost-chat image rebuilt"
 docker compose up -d ghost-chat
 
-# Nginx config reload only if the config file actually changed hash.
-if docker exec ghost-nginx nginx -t >/dev/null 2>&1; then
-    docker exec ghost-nginx nginx -s reload
-    echo "[remote] nginx reloaded"
-else
-    echo "[remote] nginx -t failed; not reloading"
+# Force-recreate nginx so bind-mounts (nginx.conf, ghostchat-www) re-resolve
+# fresh inodes. If a prior rollback did 'mv' on ghostchat-www, the running
+# nginx container holds a stale inode and serves an empty mount → 403.
+# Recreate is ~2-3 seconds — cheap insurance against the stale-mount class
+# of bug we hit twice already.
+docker compose --profile prod up -d --force-recreate nginx
+echo "[remote] nginx force-recreated"
+
+# Sanity test the new container picked up the config cleanly.
+sleep 2
+if ! docker exec ghost-nginx nginx -t >/dev/null 2>&1; then
+    echo "[remote] nginx -t failed in fresh container; aborting"
     exit 1
 fi
 EOF
@@ -289,6 +295,15 @@ health_gate() {
     ok "/ws upgrade → ${ws_first_line}"
 
     log "landing gate: GET /"
+    # We need BOTH status 200 AND content-type text/html. nginx 403/404 error
+    # pages also have content-type:text/html, so checking only the type lets
+    # broken-mount states slip through (the previous regression).
+    local landing_status
+    landing_status="$(curl -sk -o /dev/null -w '%{http_code}' -m 5 "${LANDING_URL}" || echo 000)"
+    if [[ "${landing_status}" != "200" ]]; then
+        err "landing / did not return 200 (got: ${landing_status})"
+        return 1
+    fi
     curl -skI -m 5 "${LANDING_URL}" >"${body_tmp}" 2>/dev/null
     local landing_ct=""
     local lower
@@ -304,7 +319,7 @@ health_gate() {
         err "landing / did not return text/html (got: ${landing_ct:-empty})"
         return 1
     fi
-    ok "/ → ${landing_ct}"
+    ok "/ → ${landing_status} ${landing_ct}"
     return 0
 }
 
