@@ -291,14 +291,16 @@ health_gate() {
     log "landing gate: GET /"
     curl -skI -m 5 "${LANDING_URL}" >"${body_tmp}" 2>/dev/null
     local landing_ct=""
+    local lower
     while IFS= read -r line; do
         line="${line//$'\r'/}"
-        if [[ "${line,,}" == content-type:* ]]; then
-            landing_ct="${line}"
-            break
-        fi
+        lower="$(printf '%s' "${line}" | tr '[:upper:]' '[:lower:]')"
+        case "${lower}" in
+            content-type:*) landing_ct="${line}"; break ;;
+        esac
     done < "${body_tmp}"
-    if [[ "${landing_ct,,}" != *"text/html"* ]]; then
+    lower="$(printf '%s' "${landing_ct}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "${lower}" != *"text/html"* ]]; then
         err "landing / did not return text/html (got: ${landing_ct:-empty})"
         return 1
     fi
