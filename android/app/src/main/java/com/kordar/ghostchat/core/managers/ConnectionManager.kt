@@ -67,6 +67,19 @@ class ConnectionManager(
     private val _peerIdentity = MutableStateFlow<ByteArray?>(null)
     val peerIdentity: StateFlow<ByteArray?> = _peerIdentity.asStateFlow()
 
+    /**
+     * Authoritative "a remote peer is in the room" signal — sourced ONLY from
+     * signaling-server events ([SignalingEvent.PeerJoined] for host,
+     * [SignalingEvent.RoomJoined] for guest). Local RTC events like
+     * [GhostRTCEvent.DataChannelOpen] / [GhostRTCEvent.AnswerReady] MUST NOT
+     * flip this flag — the WebRTC stack fires those once the local SCTP
+     * association is up, even when no peer has connected. Keeping this flag
+     * separate from [state] is what gates ChatView, fixing the regression
+     * where host bypassed WaitingView.
+     */
+    private val _hasRemotePeer = MutableStateFlow(false)
+    val hasRemotePeer: StateFlow<Boolean> = _hasRemotePeer.asStateFlow()
+
     private val _incomingText = MutableSharedFlow<String>(
         replay = 0, extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
@@ -255,6 +268,7 @@ class ConnectionManager(
         _roomId.value = null
         _safetyNumber.value = null
         _peerIdentity.value = null
+        _hasRemotePeer.value = false
         role = null
         _state.value = ConnectionState.DISCONNECTED
     }
@@ -283,14 +297,48 @@ class ConnectionManager(
     private suspend fun handleSignaling(event: SignalingEvent) {
         when (event) {
             is SignalingEvent.RoomCreated -> _roomId.value = event.roomId
-            is SignalingEvent.RoomJoined  -> _roomId.value = event.roomId
-            is SignalingEvent.PeerJoined  -> if (role == Role.HOST) rtc?.createOffer()
+            is SignalingEvent.RoomJoined  -> {
+                // Server only lets a guest into a non-empty room (server/src/signaling.ts
+                // rejects with "Room not found" / "Room is full"), so receiving roomJoined
+                // implicitly means the host is present.
+                _roomId.value = event.roomId
+                _hasRemotePeer.value = true
+            }
+            is SignalingEvent.PeerJoined  -> {
+                _hasRemotePeer.value = true
+                if (role == Role.HOST) rtc?.createOffer()
+            }
             is SignalingEvent.Signal      -> handleSignalPayload(event.rawJSON)
-            is SignalingEvent.PeerLeft, is SignalingEvent.Disconnected, is SignalingEvent.Error ->
+            is SignalingEvent.PeerLeft -> {
+                _hasRemotePeer.value = false
+                _state.value = ConnectionState.DISCONNECTED
+            }
+            is SignalingEvent.Disconnected, is SignalingEvent.Error ->
                 _state.value = ConnectionState.DISCONNECTED
             else -> Unit
         }
     }
+
+    // MARK: - Test hooks
+
+    /** Test-only re-entry into the signaling event handler. Lets unit tests inject
+     *  [SignalingEvent]s directly without standing up a live WebSocket. */
+    @Suppress("FunctionName")
+    suspend fun _testDispatchSignaling(event: SignalingEvent) = handleSignaling(event)
+
+    /** Test-only re-entry into the RTC event handler. Same reasoning as above —
+     *  exists so tests can verify [GhostRTCEvent.DataChannelOpen] / [GhostRTCEvent.AnswerReady]
+     *  do NOT flip [hasRemotePeer] (the regression test). */
+    @Suppress("FunctionName")
+    suspend fun _testDispatchRtc(event: GhostRTCEvent) = handleRtc(event)
+
+    /** Test-only state setter — mirrors iOS `_set(state:)`. */
+    @Suppress("FunctionName")
+    fun _setState(s: ConnectionState) { _state.value = s }
+
+    /** Test-only peer-identity setter — mirrors iOS `_set(peerIdentity:)`. */
+    @Suppress("FunctionName")
+    fun _setPeerIdentity(id: ByteArray?) { _peerIdentity.value = id }
 
     private suspend fun handleSignalPayload(raw: ByteArray) {
         val text = String(raw, Charsets.UTF_8)

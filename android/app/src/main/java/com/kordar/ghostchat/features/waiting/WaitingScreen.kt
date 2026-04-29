@@ -56,14 +56,20 @@ fun WaitingScreen(
 ) {
     val context = LocalContext.current
     val state by connection.state.collectAsState()
+    val hasRemotePeer by connection.hasRemotePeer.collectAsState()
     val copied by vm.copiedFeedbackVisible.collectAsState()
 
-    LaunchedEffect(state) {
-        when (state) {
-            ConnectionState.WEB_RTC, ConnectionState.ENCRYPTED -> onAdvance()
-            ConnectionState.DISCONNECTED -> onCancel()
-            else -> Unit
+    // Authoritative advance: stay on Waiting until the signaling server confirms
+    // the other side is actually in the room. Local DataChannel events are
+    // insufficient (the host's local DC fires OPEN even when alone — the
+    // regression we're fixing). Watch hasRemotePeer + state separately so this
+    // re-fires on either change.
+    LaunchedEffect(hasRemotePeer, state) {
+        if (hasRemotePeer) {
+            onAdvance()
+            return@LaunchedEffect
         }
+        if (state == ConnectionState.DISCONNECTED) onCancel()
     }
 
     Box(

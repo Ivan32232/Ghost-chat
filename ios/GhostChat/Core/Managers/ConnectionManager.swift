@@ -28,10 +28,19 @@ final class ConnectionManager: ObservableObject {
     @Published private(set) var safetyNumber: String?
     @Published private(set) var peerIdentity: Data?
 
+    /// Authoritative "a remote peer is in the room" signal, sourced ONLY from
+    /// signaling-server events (`peer-joined` for host, `room-joined` for guest).
+    /// Local RTC events like `dataChannelOpen` or `answerReady` MUST NOT flip this —
+    /// stasel/WebRTC fires them once the local SCTP association is up, even when
+    /// no peer has connected. Keeping this flag separate from `state` is what
+    /// gates ChatView, fixing the regression where host bypassed WaitingView.
+    @Published private(set) var hasRemotePeer: Bool = false
+
     // Extension access hooks (see ConnectionHandshake.swift, ConnectionFileTransferRouter.swift).
     func _set(state: ConnectionState) { self.state = state }
     func _set(safetyNumber: String?) { self.safetyNumber = safetyNumber }
     func _set(peerIdentity: Data?) { self.peerIdentity = peerIdentity }
+    func _set(hasRemotePeer: Bool) { self.hasRemotePeer = hasRemotePeer }
     var cryptoRef: GhostChatCrypto? { crypto }
     var rtcRef: GhostRTC? { rtc }
     var roleRef: Role? { role }
@@ -247,6 +256,7 @@ final class ConnectionManager: ObservableObject {
         roomId = nil
         safetyNumber = nil
         peerIdentity = nil
+        hasRemotePeer = false
         role = nil
         state = .disconnected
     }
@@ -287,20 +297,44 @@ final class ConnectionManager: ObservableObject {
         case .roomCreated(let id):
             roomId = id
         case .roomJoined(let id):
+            // Server only lets a guest into a non-empty room (`server/src/signaling.ts`
+            // rejects with "Room not found" / "Room is full"), so receiving roomJoined
+            // implicitly means the host is present.
             roomId = id
+            hasRemotePeer = true
         case .peerJoined:
+            hasRemotePeer = true
             if role == .host {
                 try? await rtc?.createOffer()
             }
         case .signal(let raw):
             await handleSignalPayload(raw)
-        case .peerLeft, .disconnected:
+        case .peerLeft:
+            hasRemotePeer = false
+            state = .disconnected
+        case .disconnected:
             state = .disconnected
         case .error:
             state = .disconnected
         case .connected, .rejoinOk:
             break
         }
+    }
+
+    // MARK: - Test hooks
+
+    /// Test-only re-entry into the signaling event handler. Lets unit tests inject
+    /// `SignalingEvent`s directly without standing up a live WebSocket. Production
+    /// code uses the loop in `startSignalingLoop`.
+    func _test_dispatchSignaling(_ event: SignalingEvent) async {
+        await handleSignaling(event)
+    }
+
+    /// Test-only re-entry into the RTC event handler. Same reasoning as above —
+    /// exists so we can verify that `dataChannelOpen` / `answerReady` do NOT flip
+    /// `hasRemotePeer` (the regression test).
+    func _test_dispatchRTC(_ event: GhostRTCEvent) async {
+        await handleRTC(event)
     }
 
     private func handleSignalPayload(_ raw: Data) async {

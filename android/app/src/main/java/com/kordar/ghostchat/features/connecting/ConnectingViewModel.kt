@@ -38,8 +38,17 @@ object ConnectingViewModel {
         ConnectionState.ENCRYPTED -> Phase.ENCRYPTED
     }
 
-    fun shouldAdvanceToChat(state: ConnectionState): Boolean =
-        state == ConnectionState.ENCRYPTED
+    /**
+     * Three-condition invariant: ChatView is reachable iff the transport says
+     * we're encrypted, the signaling layer confirms a remote peer is in the
+     * room, AND the handshake has surfaced a peer identity. All three must
+     * hold — defense in depth against any one of them being prematurely set.
+     */
+    fun shouldAdvanceToChat(
+        state: ConnectionState,
+        hasRemotePeer: Boolean,
+        peerIdentity: ByteArray?
+    ): Boolean = state == ConnectionState.ENCRYPTED && hasRemotePeer && peerIdentity != null
 
     /**
      * `.disconnected` only means failure if the transport actually got going

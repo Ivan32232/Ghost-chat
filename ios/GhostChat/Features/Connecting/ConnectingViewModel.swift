@@ -47,9 +47,14 @@ final class ConnectingViewModel: ObservableObject {
         }
     }
 
-    /// True if the user should be routed away from this screen.
-    static func shouldAdvanceToChat(_ state: ConnectionState) -> Bool {
-        state == .encrypted
+    /// Three-condition invariant: ChatView is reachable iff the transport says
+    /// we're encrypted, the signaling layer confirms a remote peer is in the
+    /// room, AND the handshake has surfaced a peer identity. All three must
+    /// hold — defense in depth against any one of them being prematurely set.
+    static func shouldAdvanceToChat(state: ConnectionState,
+                                    hasRemotePeer: Bool,
+                                    peerIdentity: Data?) -> Bool {
+        state == .encrypted && hasRemotePeer && peerIdentity != nil
     }
 
     /// True if the transport failed — the caller should pop back to Welcome

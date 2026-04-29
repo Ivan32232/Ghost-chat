@@ -43,16 +43,57 @@ class ConnectingViewModelTest {
         ordinals.zipWithNext().forEach { (a, b) -> assertTrue(a <= b) }
     }
 
+    // shouldAdvanceToChat — three-condition invariant. Mirrors iOS contract:
+    // ChatView reachable iff state==ENCRYPTED && hasRemotePeer && peerIdentity != null.
+
+    private val dummyPeerId: ByteArray = ByteArray(64) { 0xAB.toByte() }
+
     @Test
-    fun `should advance to chat only when encrypted`() {
-        assertTrue(ConnectingViewModel.shouldAdvanceToChat(ConnectionState.ENCRYPTED))
+    fun `should advance when all three conditions met`() {
+        assertTrue(ConnectingViewModel.shouldAdvanceToChat(
+            state = ConnectionState.ENCRYPTED, hasRemotePeer = true, peerIdentity = dummyPeerId))
+    }
+
+    @Test
+    fun `should NOT advance when encrypted but no remote peer (regression guard)`() {
+        // Defends against the host-bypasses-WaitingView regression.
+        assertFalse(ConnectingViewModel.shouldAdvanceToChat(
+            state = ConnectionState.ENCRYPTED, hasRemotePeer = false, peerIdentity = dummyPeerId))
+    }
+
+    @Test
+    fun `should NOT advance when encrypted but peerIdentity null`() {
+        assertFalse(ConnectingViewModel.shouldAdvanceToChat(
+            state = ConnectionState.ENCRYPTED, hasRemotePeer = true, peerIdentity = null))
+    }
+
+    @Test
+    fun `should NOT advance on WEB_RTC even with peer present`() {
+        assertFalse(ConnectingViewModel.shouldAdvanceToChat(
+            state = ConnectionState.WEB_RTC, hasRemotePeer = true, peerIdentity = dummyPeerId))
+    }
+
+    @Test
+    fun `should NOT advance from any non-encrypted state`() {
         listOf(
             ConnectionState.DISCONNECTED,
             ConnectionState.CONNECTING,
             ConnectionState.SIGNALING,
             ConnectionState.WEB_RTC,
             ConnectionState.CONNECTED
-        ).forEach { assertFalse(ConnectingViewModel.shouldAdvanceToChat(it)) }
+        ).forEach {
+            assertFalse(
+                "advance must be false for state=$it",
+                ConnectingViewModel.shouldAdvanceToChat(
+                    state = it, hasRemotePeer = true, peerIdentity = dummyPeerId)
+            )
+        }
+    }
+
+    @Test
+    fun `should fail closed when no condition met`() {
+        assertFalse(ConnectingViewModel.shouldAdvanceToChat(
+            state = ConnectionState.DISCONNECTED, hasRemotePeer = false, peerIdentity = null))
     }
 
     @Test

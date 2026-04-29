@@ -49,6 +49,21 @@ A passing test is the only proof code works.
 - verify_phase_1.sh должен запускать реальный e2e тест Docker, не пропускать его.
 - IPv4-first DNS (`dns.setDefaultResultOrder('ipv4first')`) — КРИТИЧНО для Docker. Без этого APNs/FCM молча отваливаются на AAAA DNS lookup.
 - Rate limiter (5 WS connections/min per IP) ломает тесты если не перезапускать сервер между группами. verify_phase_1.sh делает restart_server между секциями.
+- **WebSocket health check ОБЯЗАТЕЛЬНО через HTTP/1.1** — RFC 6455 Upgrade (`Connection: Upgrade`, `Upgrade: websocket`) — hop-by-hop header, запрещённый в HTTP/2 (RFC 7540 §8.1.2.2). curl по умолчанию на TLS идёт в h2 → nginx проксирует GET /ws без Upgrade → ghost-chat возвращает 404 (WS handler только на `server.on('upgrade')`). В health-gate скрипта используем `curl --http1.1 ...`. iOS/Android WebSocket-клиенты уже шлют HTTP/1.1 по умолчанию.
+- **rsync + Docker bind-mount требует recreate контейнера для подхвата нового inode.** rsync делает update in-place через temp file + rename → новый inode. Bind-mount держится за старый inode (старый файл жив пока у него есть reference). Симптом: `docker exec ghost-nginx grep ... /etc/nginx/nginx.conf` показывает СТАРЫЙ контент после rsync, даже после `nginx -s reload`. Лечение: `docker compose --profile prod up -d nginx` (recreate подхватит новые mount пути) ИЛИ `rsync --inplace` ИЛИ писать через `cat > file < new-content` (сохраняет inode). Для compose changes всё равно нужен recreate потому что новые volume блоки применяются только при старте контейнера.
+- **cp -p сохраняет permissions источника** — для landing файлов нужен явный `chmod 644` чтобы nginx-worker (user nginx в alpine образе) мог читать как не-owner. Снимок `cp -p /root/kordar/deploy/index.html /root/kordar/deploy/ghostchat-www/` перенёс mode `600` от оригинала → `403 Forbidden` на `GET /`. После snapshot всегда: `chmod -R go+rX /root/kordar/deploy/ghostchat-www/` (rX = read + execute только для директорий).
+
+### Production deploy
+- **Скрипт:** `./scripts/deploy-server.sh` (требует `.env.deploy` в корне, см. `.env.deploy.example`).
+- Скрипт делает: local+remote preflight → snapshot (`*.pre-deploy-<TS>` + `docker tag :backup-<TS>`) → selective rsync (server/ + 3 конфига, **НЕ** turnserver.conf и **НЕ** landing) → `docker compose build --no-cache ghost-chat` → `up -d ghost-chat` → `nginx -s reload` → health-gate (`/health`, `/ws` через `--http1.1`, `/`) → rollback trap на любом фейле.
+- **Downtime ~2-5 сек** (замена ghost-chat контейнера), **+ ~2-5 сек если меняется compose.yml** и требуется recreate nginx.
+- **TURN_SECRET** синхронизируется ВРУЧНУЮ между `.env` и `turnserver.conf` (скрипт не трогает turnserver.conf, иначе перетрёт real hex на literal `${TURN_SECRET}`). Команда: `ssh ... "sed -i 's|static-auth-secret=.*|static-auth-secret=<hex>|' /root/kordar/deploy/turnserver.conf && docker restart ghost-turn"`.
+- **Rollback процедура (при фейле deploy):**
+  1. Скрипт авто-роллбэк через `trap ERR`: `cp *.pre-deploy-<TS> ...` + `docker tag :backup-<TS> :latest` + `up -d ghost-chat` + `nginx -s reload`.
+  2. Ручной rollback если trap не сработал: `ssh ... 'cd /root/kordar/deploy && cp nginx.conf.pre-deploy-<TS> nginx.conf && cp docker-compose.yml.pre-deploy-<TS> docker-compose.yml && docker tag deploy-ghost-chat:backup-<TS> deploy-ghost-chat:latest && docker compose up -d ghost-chat && docker exec ghost-nginx nginx -s reload'`.
+  3. Landing/permissions fix если 403: `ssh ... 'chmod -R go+rX /root/kordar/deploy/ghostchat-www/'`.
+  4. Nginx mount не подхвачен после compose.yml update: `ssh ... 'cd /root/kordar/deploy && docker compose --profile prod up -d nginx'`.
+  5. Snapshot cleanup через 24h после подтверждения стабильности: `rm *.pre-deploy-<TS> && docker rmi deploy-ghost-chat:backup-<TS>`.
 
 ---
 
@@ -421,6 +436,10 @@ A passing test is the only proof code works.
 - FCM Push → ConnectionService интеграция: регистрация PhoneAccount должна быть idempotent; используем `telecom.getPhoneAccount(handle)` для check-first-then-register.
 - ffmpeg / afconvert toolchain для звуковых ассетов. `ffmpeg -f lavfi -i sine=...` → .wav → `afconvert -f caff -d ima4` для iOS, `ffmpeg ... -codec:a libvorbis` для Android.
 - `MessageEnvelope.t` даёт нам application-level timestamp, НО nonce replay guard и counter window всё ещё работают на wire-level. Три слоя защиты: nonce LRU → counter window → timestamp window.
+- **Connection flow split:** Welcome → Waiting (share link) → Connecting (handshake progress) → Chat. `ChatView` показывается ТОЛЬКО когда state == `.encrypted`. WaitingView/ConnectingView + `DeepLinkRouter` были добавлены пост-Phase 7 (fix UX — create room давал "Connecting..." на экране chat без share button, пользователь не мог пригласить второго). `ConnectionManager.roomId` поднимается только после `roomCreated` события — WelcomeView polls это перед navigate.
+- **Landing page теперь в git** (`deploy/landing/` — полноценный web-клиент, не просто landing; 5900 LOC JS). Синкается через `deploy-server.sh` → `ghostchat-www/` с явным `chmod -R go+rX` после rsync. Урок из первого деплоя: `cp -p` сохраняет наследованный mode 600 от local files → nginx worker возвращает `403 Forbidden`.
+- **Deep link confirmation dialog ОБЯЗАТЕЛЕН** — auto-join по ссылке без подтверждения был security hole. `DeepLinkRouter` (iOS + Android) только parse+store; alert в WelcomeView/WelcomeScreen — единственная gate.
+- iOS localization keys: **всё lowercase + underscore + dot**. `check-localization-parity.cjs` имеет regex `/^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/` — camelCase (`keyExchange`, `deepLink`) фильтруется как "не real key" и parity check фейлит молча (iOS count меньше Android). Используй `key_exchange`, `deep_link` в dot-notation ID'ах.
 
 **Phase 7 success criteria (все ✓):**
 - [x] `verify_phase_7.sh` exit code 0 (21 шаг PASSED, 0 FAIL)
@@ -658,7 +677,9 @@ ghost-chat/
 │   │   │   └── Localization/ # LocalizationManager
 │   │   ├── Features/
 │   │   │   ├── Welcome/      # Home screen, create/join room, contact list
-│   │   │   ├── Chat/         # ChatView, ChatViewModel (thin orchestrator ≤300 LOC)
+│   │   │   ├── Waiting/      # WaitingView + WaitingViewModel — after Create Room
+│   │   │   ├── Connecting/   # ConnectingView + ConnectingViewModel — handshake progress
+│   │   │   ├── Chat/         # ChatView, ChatViewModel (thin orchestrator ≤300 LOC, shown only when state == .encrypted)
 │   │   │   ├── Call/         # CallView, IncomingCallView
 │   │   │   ├── Contacts/     # ContactsView, ContactDetailView
 │   │   │   └── Settings/     # SettingsView, LockScreenView, SecurityDashboard
@@ -1277,8 +1298,10 @@ core/
 └── localization/ → LocalizationManager.kt
 
 features/
-├── welcome/      → WelcomeScreen.kt
-├── chat/         → ChatScreen.kt, ChatViewModel.kt
+├── welcome/      → WelcomeScreen.kt, WelcomeViewModel.kt
+├── waiting/      → WaitingScreen.kt, WaitingViewModel.kt (post-Create Room)
+├── connecting/   → ConnectingScreen.kt, ConnectingViewModel.kt (handshake progress)
+├── chat/         → ChatScreen.kt, ChatViewModel.kt (only when state == ENCRYPTED)
 ├── call/         → CallScreen.kt, IncomingCallScreen.kt
 ├── contacts/     → ContactsScreen.kt, ContactDetailScreen.kt
 └── settings/     → SettingsScreen.kt, LockScreen.kt
@@ -1466,6 +1489,170 @@ After each session with a saved contact:
 | firebase-admin        | FCM                   |
 | rate-limiter-flexible | Rate limiting         |
 | helmet                | HTTP security headers |
+
+---
+
+## P0 #2 + #3 fix — 2026-04-29 (navigation gate)
+
+**Status: fixed + verified.** iOS 314/314 tests pass (314 incl. +15 invariant tests). Android :app:testDebugUnitTest 248/248 pass (incl. +15 invariant tests). Both `:app:assembleDebug` + `:app:lintDebug` BUILD SUCCESSFUL.
+
+### What changed
+
+- **`ConnectionManager`** (iOS + Android): added `@Published var hasRemotePeer: Bool` (iOS) / `StateFlow<Boolean>` (Android), authoritatively sourced from `SignalingEvent.PeerJoined` (host) and `SignalingEvent.RoomJoined` (guest). Cleared on `PeerLeft` and `reset()`. Test hooks `_test_dispatchSignaling` / `_test_dispatchRTC` (iOS) and `_testDispatchSignaling` / `_testDispatchRtc` (Android) added so unit tests can inject events without standing up a live WebSocket / WebRTC stack.
+- **`ConnectingViewModel.shouldAdvanceToChat`**: signature changed from `(state)` to `(state, hasRemotePeer, peerIdentity)`. All three must hold — three-condition invariant.
+- **`WaitingView` / `WaitingScreen`**: now watches `hasRemotePeer` instead of `state ∈ {webRTC, encrypted}`. Stays put until the signaling layer says a real peer is in the room.
+- **`ConnectingView` / `ConnectingScreen`**: re-evaluates the advance gate on every change of `state`, `hasRemotePeer`, OR `peerIdentity`. SwiftUI uses three separate `.onChange` watchers calling a shared `evaluateAdvance()`; Compose uses a single `LaunchedEffect(state, hasRemotePeer, peerIdentity)`.
+
+### Hard invariant (do NOT regress)
+
+```
+ChatView is rendered ⇔
+    hasRemotePeer == true
+  ∧ state == .encrypted
+  ∧ peerIdentity != nil
+```
+
+Any future change to `ConnectionManager.handleRTC` / `handleSignaling` must preserve this. Specifically: **local DataChannel events MUST NOT flip `hasRemotePeer`.** `dataChannelOpen` and `answerReady` are local-only artifacts of stasel/WebRTC SCTP setup; they fire for the host even when alone in the room. The dedicated regression test `test_handleRTC_dataChannelOpen_doesNotSetHasRemotePeer` (iOS) / `dataChannelOpen does NOT set hasRemotePeer` (Android) holds the line.
+
+### Lesson learned
+
+`state == .webRTC` and `connection.state == .encrypted` are NOT proof that a peer joined. The ratchet code can drive `state` forward purely from local handshake messages on a freshly-opened DataChannel — and the host's local DC opens once SCTP is up, regardless of whether anything is on the other end. Always source "the other party showed up" from the signaling server, never from the WebRTC stack. The fix is exactly this separation: signaling is authoritative for *peer presence*; WebRTC is authoritative for *transport readiness*; crypto is authoritative for *encryption status*. ChatView gates on all three.
+
+### Regression-grep guard
+
+A future verify script should fail the build if any of these patterns reappear (they should NEVER exist after this fix):
+
+```bash
+# Old, broken: navigation gating on RTC state alone
+grep -rn 'state == .webRTC.*onAdvance\|shouldAdvanceToChat([^,]*$' ios/GhostChat/Features
+grep -rn 'ConnectionState.WEB_RTC.*onAdvance\|shouldAdvanceToChat([^,)]*)$' android/app/src/main
+```
+
+The new correct call always passes three arguments to `shouldAdvanceToChat`.
+
+### UI verification (sim A + sim B, 2026-04-29)
+
+Screenshots: `/tmp/ux-test-screenshots-fix/01..07-*.jpg`.
+
+1. Sim A (iPhone 17 Pro): tap "Создать Ghost Chat" → **WaitingView** rendered (was ChatView pre-fix). Title "Ожидание собеседника", full 64-char roomId visible via accessibility, "Поделиться ссылкой" + "Скопировать ссылку" both present. ✅
+2. Sim A: 8 seconds idle — still on WaitingView. No drift. ✅
+3. Sim B (iPhone 16e): `simctl openurl ghostchat://?room=<id>` → app's deep-link confirmation alert "Join encrypted room? / A secure peer-to-peer connection will be established. / Cancel | Join" — **also resolves the Phase-A P1 #6 question**: this alert DOES fire on a fresh launch with the link arriving via openurl from outside the app. Earlier UX-test failure was a same-app context issue. ✅
+4. Tap Join → ConnectingView with 4-phase progress UI. Sim A simultaneously advanced from WaitingView → ConnectingView once `peerJoined` arrived. ✅
+5. Both sims show realistic phase progression (Sim B reached Key exchange, Sim A reached Сигналинг). The handshake doesn't fully complete between two simulators on the same Mac because both share an IP namespace and TURN can't allocate distinct relays — known simulator-only limitation, NOT a regression. Real-device verification still required for end-to-end "encrypted" state.
+
+### Pre-real-device next steps (not blocked by sim limitation)
+
+- [ ] Two physical iPhones on different networks: confirm full Welcome → Waiting → Connecting → Chat → encrypted state
+- [ ] Confirm safety number appears in ChatView header on both ends
+- [ ] iOS ↔ Android cross-platform: same flow
+
+### Files touched
+
+- `ios/GhostChat/Core/Managers/ConnectionManager.swift` — +21 LOC (`hasRemotePeer` state, signaling routing, test hooks)
+- `ios/GhostChat/Features/Connecting/ConnectingViewModel.swift` — sig change
+- `ios/GhostChat/Features/Connecting/ConnectingView.swift` — onChange wiring + `evaluateAdvance()`
+- `ios/GhostChat/Features/Waiting/WaitingView.swift` — onChange now watches `hasRemotePeer`
+- `ios/GhostChatTests/Managers/ConnectionPeerPresenceTests.swift` — new (10 tests)
+- `ios/GhostChatTests/Features/ConnectingViewModelTests.swift` — 6 invariant tests added (1 obsolete test replaced)
+- `android/app/src/main/java/com/kordar/ghostchat/core/managers/ConnectionManager.kt` — mirror of iOS
+- `android/app/src/main/java/com/kordar/ghostchat/features/connecting/ConnectingViewModel.kt` — sig change
+- `android/app/src/main/java/com/kordar/ghostchat/features/connecting/ConnectingScreen.kt` — LaunchedEffect keys
+- `android/app/src/main/java/com/kordar/ghostchat/features/waiting/WaitingScreen.kt` — LaunchedEffect now watches `hasRemotePeer`
+- `android/app/src/test/java/com/kordar/ghostchat/core/managers/ConnectionManagerPeerPresenceTest.kt` — new (10 tests)
+- `android/app/src/test/java/com/kordar/ghostchat/features/connecting/ConnectingViewModelTest.kt` — 6 invariant tests added (1 obsolete replaced)
+
+---
+
+## End-to-end UX testing — 2026-04-29 (iOS, post-Phase-7, build 2.0.0/1)
+
+Full sim-driven walkthrough by a Claude session simulating a real user, using XcodeBuildMCP `ui-automation` workflow on iPhone 17 Pro (iOS 26.2). Results stored in `/tmp/ux-test-2026-04-29.md` and screenshots in `/tmp/ux-test-screenshots/`.
+
+**Headline: app is unshippable today.** The primary user flow (Create Ghost Chat → share link → friend joins → chat) does not work on iOS for two independent root causes. Settings, Security Dashboard, About, Russian localization, and identity persistence are all in great shape and demonstrate Signal/Telegram-grade polish for the parts that work.
+
+### P0 — must fix before any TestFlight
+
+- **Push registration is dead code on iOS.** `PushManager.requestAPNsAuthorization()` and `PushManager.registerForVoIP()` are defined but **never called** anywhere in `ios/GhostChat/`. APNs/VoIP tokens are always nil → server has nothing to push to → saved-contact offline calls/messages cannot deliver to iOS. Wire into `AppDelegate.application(_:didFinishLaunchingWithOptions:)` (after Sentry) and call `requestAPNsAuthorization()` + `UIApplication.shared.registerForRemoteNotifications()` at a user-meaningful moment.
+- **WaitingView is unreachable after Create Ghost Chat.** Host immediately lands in ChatView with "Connecting…" banner — no Share button, no Copy button, no full-room URL anywhere visible. Verified via UI snapshots at t=0.05 s (Welcome) vs t≈0.5 s (already ChatView), no intermediate WaitingView frame. The view itself (`Features/Waiting/WaitingView.swift`) is fully implemented; the navigation-stack just bypasses it. **Likely cause**: `connection.state` flips to `.webRTC` from `dataChannelOpen` (line 350 `ConnectionManager`) for the host's local DC even before any peer joins — `stasel/WebRTC`'s in-band SCTP nuance — so `WaitingView.onChange(of:)` immediately calls `onAdvance`, which then chains through ConnectingView. **Fix**: gate Waiting → Connecting and Connecting → Chat advances on `peerIdentity != nil` (host) AND `state == .encrypted`, NOT on `.webRTC`. Alternatively, hold `state = .signaling` until the `peerJoined` signaling event fires, and only let `dataChannelOpen` lift to `.webRTC` after that.
+- **Manual paste-and-Join also bypasses Waiting/Connecting.** Same root cause as the create-side bug — joining with any 64-char id (valid OR server-rejected) lands in ChatView with "Disconnected" banner instead of staying on ConnectingView until handshake. Fixing the gate above probably fixes this too.
+
+### P1 — fix before public launch
+
+- `Info.plist` permission-description strings (`NS{Camera,Microphone,FaceID,PhotoLibrary,PhotoLibraryAdd}UsageDescription`) are English-only despite `CFBundleLocalizations = [en, ru]`. Need `ios/GhostChat/Resources/ru.lproj/InfoPlist.strings`, regen via XcodeGen.
+- `CFBundleVersion = 1` — never bumped. About screen renders "Version 2.0.0 (build 1)". TestFlight upload will fail "duplicate build". CLAUDE.md already mandates increment-before-archive but there's no enforced check.
+- Deep-link confirmation alert (`deep_link.prompt.title`) did not fire when triggered via same-process `xcrun simctl openurl` for either path-form or query-form. Likely a sim-only quirk — must verify on a real device with Safari "Open in app". If it also fails on real device → P0.
+
+### P2 — polish
+
+- Empty `UILaunchScreen = <dict/>` → blank black launch. Add branded splash.
+- SettingsView Form is taller than the sheet viewport — Wipe + About are below the fold. Scrolling can accidentally toggle the Biometric switch (intercepted swipe).
+- About row hit-test is flaky — required 3 tap attempts (label, chevron, body) before push registered. Suspect SwiftUI Form `Button(.plain)` quirk on iOS 26.2.
+- `formatSeconds("1m")`, `"Immediate"` in Auto-lock picker not localized.
+- "Saved contacts (0)" tile remains full-size and tappable when count is zero — Telegram pattern is to hide.
+- Once Waiting/Connecting are restored: NavigationStack auto-advances them in <50 ms; soften with `Task.sleep(0.25 s)` per phase so the user actually sees progress.
+
+### What works (Signal/Telegram-grade)
+
+- Custom ghost+phone app icon (real, not placeholder), 120×120 (60×60@2x).
+- Welcome view: clear primary CTA, dark theme, accessible.
+- Settings sheet: 7 sections, all with secondary descriptions, native iOS pickers, professional Wipe destructive button styling.
+- **Security Dashboard**: production-grade. Live SPKI fingerprints (Primary + Backup), encryption details (Signal Double Ratchet, P-256 CryptoKit, AES-256-GCM, PQ status), Jailbreak check. This is the kind of screen Signal/Telegram users *don't* even get to see — competitive advantage.
+- About screen: clean, version + 3 external links + KORDAR EOOD attribution.
+- Russian localization: complete coverage of UI strings (one minor "1m" exception). Picker switches locale immediately.
+- Identity persistence: Keychain identity survives 3 cold launches, no state corruption.
+- Wipe-all-data confirmation alert: correct destructive role, clear copy.
+- Leave-from-chat: cleanly resets state and pops to Welcome.
+
+### Method / artifacts
+
+- UI automation enabled by adding `XCODEBUILDMCP_ENABLED_WORKFLOWS=simulator,simulator-management,ui-automation,logging,project-discovery,utilities` to the project's `mcpServers.xcodebuild.env` in `~/.claude.json`. Default-only `simulator` workflow does not expose tap/swipe/type-text.
+- Two simulators (iPhone 17 Pro user A, iPhone 16e user B) booted; only user A actually exercised because share-link is unreachable. SSH/ICMP to `139.59.58.151` blocked from this network — couldn't extract roomId from server logs as a workaround.
+- Full report: `/tmp/ux-test-2026-04-29.md`.
+
+### Next session must
+
+1. Fix P0 #2 navigation gate first (suspect `ConnectionManager.handleRTC.dataChannelOpen` for host before peer). Probably fixes #3 too.
+2. Wire `PushManager` into `AppDelegate` lifecycle for #1.
+3. Re-run the same sim test after fix; verify WaitingView is visible AND the Share button produces a real `https://ghostchat.one/?room=<id>` URL on a system share sheet.
+4. Hand to a real device + real friend before announcing completion.
+
+### User flow critical path (REGRESSION REFERENCE — must hold for any future change)
+
+The intended sequence on iOS, with explicit invariants:
+
+```
+WelcomeView
+   │  tap Create Ghost Chat
+   ▼
+WaitingView          ← MUST be visible. Has Share + Copy + room-id capsule + Cancel.
+   │  peer joins (signaling: peerJoined)
+   ▼
+ConnectingView       ← shows 4-phase progress: Signaling → WebRTC → Key exchange → Encrypted
+   │  state == .encrypted AND peerIdentity != nil AND safetyNumber != nil
+   ▼
+ChatView             ← MUST NOT be displayed otherwise.
+
+Symmetric for guest: WelcomeView → (deep-link confirm alert) → ConnectingView → ChatView.
+```
+
+Hard invariants (failing any of these = bug):
+- `path == [.chat]` is reachable ONLY through `path == [.connecting]` AND only when `state == .encrypted`.
+- `WaitingView` is shown for at least until the actual peer-joined signaling event fires (host side).
+- The full 64-character room URL must be obtainable from the UI by the host before peer joins.
+- After tapping Leave from any of Waiting / Connecting / Chat, `connection.state == .disconnected` and `path == []`.
+
+A useful regression check would be: bring up the iOS sim, tap Create Ghost Chat, take a snapshot at t=0.5 s, assert the snapshot contains the AXLabel "Share" (or `waiting.share` key) — fail otherwise.
+
+### Pre-TestFlight checklist (additive, on top of existing per-phase verify scripts)
+
+- [ ] `pushManager.registerForVoIP()` called from AppDelegate
+- [ ] `await pushManager.requestAPNsAuthorization()` called at a user-meaningful moment
+- [ ] `CFBundleVersion` incremented this Archive
+- [ ] `ios/GhostChat/Resources/ru.lproj/InfoPlist.strings` exists with all 5 NS*UsageDescription keys
+- [ ] `Info.plist:UILaunchScreen` non-empty (image + bg color or storyboard)
+- [ ] Tap "Create Ghost Chat" on a fresh sim — WaitingView appears with Share button visible
+- [ ] Open a fresh `ghostchat://?room=<id>` deep link from Safari on a real device — confirmation alert appears
+- [ ] Real-device send/receive a TestFlight build's APNs push end-to-end
+- [ ] About screen all three external links open in Safari (verify-once)
 
 ---
 

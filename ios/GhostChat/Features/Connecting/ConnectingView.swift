@@ -31,16 +31,13 @@ struct ConnectingView: View {
         .navigationBarBackButtonHidden(true)
         .onChange(of: connection.state) { newState in
             if newState != .disconnected { hadConnection = true }
-            if ConnectingViewModel.shouldAdvanceToChat(newState) {
-                onAdvance()
-                return
-            }
-            if ConnectingViewModel.isTerminalFailure(newState, hadConnection: hadConnection) {
-                onCancel(localization.localized("connecting.error"))
-            }
+            evaluateAdvance()
         }
+        .onChange(of: connection.hasRemotePeer) { _ in evaluateAdvance() }
+        .onChange(of: connection.peerIdentity) { _ in evaluateAdvance() }
         .onAppear {
             if connection.state != .disconnected { hadConnection = true }
+            evaluateAdvance()
         }
     }
 
@@ -68,6 +65,23 @@ struct ConnectingView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
+    }
+
+    /// Re-checks the advance / cancel predicates against the current connection
+    /// snapshot. Called from every `.onChange` watcher because a single SwiftUI
+    /// modifier can only watch one publisher; the invariant depends on three.
+    private func evaluateAdvance() {
+        if ConnectingViewModel.shouldAdvanceToChat(
+            state: connection.state,
+            hasRemotePeer: connection.hasRemotePeer,
+            peerIdentity: connection.peerIdentity
+        ) {
+            onAdvance()
+            return
+        }
+        if ConnectingViewModel.isTerminalFailure(connection.state, hadConnection: hadConnection) {
+            onCancel(localization.localized("connecting.error"))
+        }
     }
 
     private func phaseRow(_ phase: ConnectingViewModel.Phase,

@@ -34,12 +34,42 @@ final class ConnectingViewModelTests: XCTestCase {
         XCTAssertTrue(zip(phases, phases.dropFirst()).allSatisfy { $0.0 <= $0.1 })
     }
 
-    func test_shouldAdvanceToChat_onlyOnEncrypted() {
-        XCTAssertTrue(ConnectingViewModel.shouldAdvanceToChat(.encrypted))
-        XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(.signaling))
-        XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(.webRTC))
-        XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(.disconnected))
-        XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(.connecting))
+    // MARK: - shouldAdvanceToChat — three-condition invariant
+
+    private let dummyPeerId: Data = Data(repeating: 0xAB, count: 64)
+
+    func test_shouldAdvanceToChat_returnsTrue_whenAllThreeConditionsMet() {
+        XCTAssertTrue(ConnectingViewModel.shouldAdvanceToChat(
+            state: .encrypted, hasRemotePeer: true, peerIdentity: dummyPeerId))
+    }
+
+    func test_shouldAdvanceToChat_returnsFalse_whenEncryptedButNoRemotePeer() {
+        // Defends against the regression that lets host bypass WaitingView.
+        XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(
+            state: .encrypted, hasRemotePeer: false, peerIdentity: dummyPeerId))
+    }
+
+    func test_shouldAdvanceToChat_returnsFalse_whenEncryptedButPeerIdentityNil() {
+        XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(
+            state: .encrypted, hasRemotePeer: true, peerIdentity: nil))
+    }
+
+    func test_shouldAdvanceToChat_returnsFalse_whenWebRTCEvenWithPeer() {
+        XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(
+            state: .webRTC, hasRemotePeer: true, peerIdentity: dummyPeerId))
+    }
+
+    func test_shouldAdvanceToChat_returnsFalse_forNonEncryptedStates() {
+        for state in [ConnectionState.disconnected, .connecting, .signaling, .webRTC, .connected] {
+            XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(
+                state: state, hasRemotePeer: true, peerIdentity: dummyPeerId),
+                "advance must be false for state=\(state)")
+        }
+    }
+
+    func test_shouldAdvanceToChat_failsClosed_whenNoConditionMet() {
+        XCTAssertFalse(ConnectingViewModel.shouldAdvanceToChat(
+            state: .disconnected, hasRemotePeer: false, peerIdentity: nil))
     }
 
     func test_isTerminalFailure_disconnected_withPriorConnection_isFailure() {

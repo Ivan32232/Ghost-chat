@@ -47,11 +47,17 @@ fun ConnectingScreen(
     onCancel: (errorKeyId: Int?) -> Unit
 ) {
     val state by connection.state.collectAsState()
+    val hasRemotePeer by connection.hasRemotePeer.collectAsState()
+    val peerIdentity by connection.peerIdentity.collectAsState()
     var hadConnection by remember { mutableStateOf(state != ConnectionState.DISCONNECTED) }
 
-    LaunchedEffect(state) {
+    // Re-evaluate the advance gate on every change to any of the three signals
+    // that compose the invariant. Compose's [LaunchedEffect] keys ensure each
+    // change re-runs the predicate.
+    LaunchedEffect(state, hasRemotePeer, peerIdentity) {
         if (state != ConnectionState.DISCONNECTED) hadConnection = true
-        if (ConnectingViewModel.shouldAdvanceToChat(state)) {
+        if (ConnectingViewModel.shouldAdvanceToChat(
+                state = state, hasRemotePeer = hasRemotePeer, peerIdentity = peerIdentity)) {
             onAdvance()
             return@LaunchedEffect
         }

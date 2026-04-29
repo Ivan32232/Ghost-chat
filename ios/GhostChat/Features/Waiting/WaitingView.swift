@@ -35,14 +35,20 @@ struct WaitingView: View {
             .preferredColorScheme(.dark)
         }
         .navigationBarBackButtonHidden(true)
+        .onChange(of: connection.hasRemotePeer) { remoteThere in
+            // Authoritative advance: stay on Waiting until the signaling server
+            // confirms the other side is actually in the room. Local DataChannel
+            // events are insufficient (the host's local DC fires `.open` even
+            // when alone — the regression we're fixing).
+            if remoteThere { onAdvance() }
+        }
         .onChange(of: connection.state) { newState in
-            // Host path: peer joined → DC opening → key exchange.
-            // Guest path: after joinRoom, once DC is up we also leave waiting.
-            if newState == .webRTC || newState == .encrypted {
-                onAdvance()
-            } else if newState == .disconnected {
-                onCancel()
-            }
+            if newState == .disconnected { onCancel() }
+        }
+        .onAppear {
+            // If the screen appears AFTER the peer already joined (rare race on
+            // very fast networks), the onChange watcher would miss it.
+            if connection.hasRemotePeer { onAdvance() }
         }
     }
 
