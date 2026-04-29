@@ -1492,6 +1492,98 @@ After each session with a saved contact:
 
 ---
 
+## P0 #1 fix — 2026-04-29 (push registration + peer token exchange + Settings toggle)
+
+**Status: fixed + verified (logic-side; APNs/FCM token delivery itself needs real device).** iOS 327/327 tests pass (was 314 → +13 invariant tests). Android :app:testDebugUnitTest 254/254 pass (was 248 → +6 invariant tests). Both platforms `:app:assembleDebug` + `:app:lintDebug` BUILD SUCCESSFUL.
+
+### What changed
+
+**iOS:**
+- `AppDelegate.bootstrapVoIPIfNeeded()` invoked from `GhostChatApp.onAppear` once `pushManager` is bound — registers PKPushRegistry for `.voIP` silently at every launch (no system prompt, required for CallKit incoming-call surfacing from background/killed).
+- `AppDelegate.requestNotificationsAuthorization()` — async wrapper invoked when user opts in via Settings; calls `requestAPNsAuthorization()` and on grant `UIApplication.shared.registerForRemoteNotifications()`.
+- `SettingsManager.notificationsEnabled: Bool` — new Keychain-backed toggle, default OFF (privacy-first).
+- New `Settings → Notifications` section with iOS APNs permission flow + denial alert pointing user to iOS Settings app.
+- `ConnectionManager.peerPushTokens` and `peerNotifyTokens` AsyncStreams — surface peer-supplied tokens decoded from `ControlMessage.pushToken` / `.notifyToken`.
+- `ConnectionManager.ownTokenControlMessages()` (pure) and `forwardOwnPushTokensToPeer()` (best-effort) — invoked from `ConnectionHandshake.completeHandshake` and `completePqHandshake` once `state == .encrypted`. Sends both VoIP and APNs tokens if available.
+- `ConnectionFileTransferRouter` routes inbound `.pushToken`/`.notifyToken` to `handlePeerToken`, which yields decoded raw bytes onto the streams.
+- `Data.tokenHex` / `Data(tokenHex:)` — wire format helpers.
+- `SentryBreadcrumb.push(_:)` — single-line helper that logs to console (visible in `xcrun simctl spawn ... log stream`) and to Sentry breadcrumbs. **NEVER logs token bytes — only length / kind.**
+
+**Android:**
+- `SettingsManager.notificationsEnabled: StateFlow<Boolean>` — mirror of iOS toggle.
+- `SettingsScreen` Notifications section with `rememberLauncherForActivityResult(RequestPermission)` for runtime `POST_NOTIFICATIONS` (API 33+ only; auto-granted on older APIs).
+- `ConnectionManager.peerPushTokens` / `peerNotifyTokens` SharedFlows — same contract as iOS streams.
+- `ConnectionManager.ownTokenControlMessages()` (FCM-only — Android collapses VoIP+notify into one channel).
+- `ConnectionHandshake` accepts `onEncrypted` callback — wired from manager to call `forwardOwnPushTokensToPeer()` exactly when state flips to ENCRYPTED.
+- `ConnectionFileTransferRouter` accepts `onPeerPushToken` callback — routes inbound `PushToken`/`NotifyToken` to `handlePeerToken`.
+- Note: `pushManager.registerForFCM()` was already wired in `GhostChatApplication.onCreate()` — left untouched, symmetric with iOS VoIP silent-at-launch.
+- New strings (EN + RU): `settings_notifications`, `settings_notifications_desc`, `settings_notifications_denied_title`, `settings_notifications_denied_message`.
+
+### Hard invariant (do NOT regress)
+
+```
+push token logging:
+    NEVER log token bytes (security).
+    ALWAYS log length / kind only.
+
+token exchange timing:
+    ChatView never sees `.encrypted` without forwardOwnPushTokensToPeer()
+    having been invoked first.
+
+settings.notificationsEnabled:
+    Default = false (privacy-first).
+    True ⇒ system permission grant was obtained (no silent registration).
+```
+
+### Test coverage
+
+iOS new tests (+13):
+- `PushManagerRegistrationTests` (5): registerForVoIP idempotent, didReceiveAPNsToken stream, voipDelegate stream, settings default+persist
+- `ConnectionPushTokenExchangeTests` (8): empty/voip-only/apns-only/both ownTokenControlMessages; peerPushTokens/peerNotifyTokens stream yielding; invalid hex dropped; reset clears
+
+Android new tests (+6):
+- `ConnectionPushTokenExchangeTest`: empty/with-fcm ownTokenControlMessages, peerPushTokens/peerNotifyTokens flow yielding (UnconfinedTestDispatcher for race-safe collection), settings default+persist
+
+### Verification artefacts
+
+- `xcrun simctl spawn ... log stream` during cold launch shows `[com.apple.xpc:connection] activating connection ... callservicesdaemon.voip` — proof that `registerForVoIP()` runs and PKPushRegistry binds. (`/tmp/ux-test-screenshots-fix-p1/voip-xpc-evidence.txt`)
+- `Settings → Уведомления` section visible in iOS Settings sheet (default OFF). (`/tmp/ux-test-screenshots-fix-p1/01-settings-with-notifications-toggle.jpg`)
+- iOS APNs permission prompt itself is gated by Apple's per-bundle decision cache; if the sim has previously dismissed/denied for this bundle, tapping the toggle won't re-show. **Real-device required to verify the prompt UX itself.**
+
+### Known limits / requires real device
+
+- 🤷 Real APNs token delivery — sim does not return a real token from `pushRegistry(_:didUpdate:for:)` without an APNs sandbox certificate. Sentry breadcrumb `🔔 VoIP token registered (length: N bytes)` won't fire on simulator.
+- 🤷 Real FCM token delivery — Android sim without `google-services.json` + Google Play Services skips token retrieval silently (graceful no-op per `registerForFCM()` design).
+- 🤷 End-to-end "send push to offline peer" — needs real device + `deploy/keys/AuthKey.p8` (APNs) and `deploy/keys/firebase-sa.json` (FCM) on production server.
+
+### Files touched
+
+iOS:
+- `ios/GhostChat/Core/Push/PushManager.swift` — idempotent `registerForVoIP`, breadcrumbs, test hooks
+- `ios/GhostChat/Core/Push/SentryBreadcrumb.swift` — NEW (helper + Data.tokenHex)
+- `ios/GhostChat/Core/Managers/SettingsManager.swift` — `notificationsEnabled` property
+- `ios/GhostChat/Core/Managers/ConnectionManager.swift` — peer token streams + ownTokenControlMessages + forwardOwnPushTokensToPeer + handlePeerToken + _test_routeControl
+- `ios/GhostChat/Core/Managers/ConnectionHandshake.swift` — `await forwardOwnPushTokensToPeer()` after `.encrypted`
+- `ios/GhostChat/Core/Managers/ConnectionFileTransferRouter.swift` — route .pushToken/.notifyToken to `handlePeerToken`
+- `ios/GhostChat/App/AppDelegate.swift` — `bootstrapVoIPIfNeeded` + `requestNotificationsAuthorization`
+- `ios/GhostChat/App/GhostChatApp.swift` — invoke `bootstrapVoIPIfNeeded()` from `.onAppear`
+- `ios/GhostChat/Features/Settings/SettingsView.swift` — Notifications section + denial alert
+- `ios/GhostChat/Resources/Localizable.xcstrings` — 4 new keys (EN + RU)
+- `ios/GhostChatTests/Push/PushManagerRegistrationTests.swift` — NEW
+- `ios/GhostChatTests/Managers/ConnectionPushTokenExchangeTests.swift` — NEW
+
+Android:
+- `android/app/src/main/java/com/kordar/ghostchat/core/managers/SettingsManager.kt` — `notificationsEnabled` property
+- `android/app/src/main/java/com/kordar/ghostchat/core/managers/ConnectionManager.kt` — peer token flows + ownTokenControlMessages + forwardOwnPushTokensToPeer + handlePeerToken + _testRouteControl
+- `android/app/src/main/java/com/kordar/ghostchat/core/managers/ConnectionHandshake.kt` — `onEncrypted` callback
+- `android/app/src/main/java/com/kordar/ghostchat/core/managers/ConnectionFileTransferRouter.kt` — onPeerPushToken callback
+- `android/app/src/main/java/com/kordar/ghostchat/features/settings/SettingsScreen.kt` — Notifications section + POST_NOTIFICATIONS launcher
+- `android/app/src/main/res/values/strings.xml` — 4 new keys (EN)
+- `android/app/src/main/res/values-ru/strings.xml` — 4 new keys (RU)
+- `android/app/src/test/java/com/kordar/ghostchat/core/managers/ConnectionPushTokenExchangeTest.kt` — NEW
+
+---
+
 ## P0 #2 + #3 fix — 2026-04-29 (navigation gate)
 
 **Status: fixed + verified.** iOS 314/314 tests pass (314 incl. +15 invariant tests). Android :app:testDebugUnitTest 248/248 pass (incl. +15 invariant tests). Both `:app:assembleDebug` + `:app:lintDebug` BUILD SUCCESSFUL.

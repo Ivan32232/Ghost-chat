@@ -24,6 +24,10 @@ struct GhostChatApp: App {
                 .onAppear {
                     delegate.pushManager = services.value.push
                     delegate.callManager = services.value.calls
+                    // Silent VoIP registration is safe at every launch — required
+                    // for CallKit to surface incoming calls from background/killed
+                    // state. APNs alert opt-in lives in Settings (privacy first).
+                    delegate.bootstrapVoIPIfNeeded()
                     locked = services.value.auth.biometricEnabled && services.value.auth.hasMainPIN
                 }
                 .onChange(of: scenePhase) { newPhase in

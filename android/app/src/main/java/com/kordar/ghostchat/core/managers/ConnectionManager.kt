@@ -95,6 +95,23 @@ class ConnectionManager(
     )
     val fileTransferAborted: SharedFlow<String> = _fileTransferAborted.asSharedFlow()
 
+    /**
+     * Peer's FCM push token, surfaced after the peer sends ControlMessage.PushToken
+     * over the encrypted channel. Subscribers (typically ContactManager on
+     * save-contact) persist these so we can later relay calls/messages via the
+     * server while the peer is offline.
+     */
+    private val _peerPushTokens = MutableSharedFlow<String>(
+        replay = 0, extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val peerPushTokens: SharedFlow<String> = _peerPushTokens.asSharedFlow()
+
+    /** Same as [peerPushTokens] but for the iOS APNs alert / Android FCM notify channel. */
+    private val _peerNotifyTokens = MutableSharedFlow<String>(
+        replay = 0, extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val peerNotifyTokens: SharedFlow<String> = _peerNotifyTokens.asSharedFlow()
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var signaling: SignalingClient? = null
     private var rtc: GhostRTC? = null
@@ -340,6 +357,60 @@ class ConnectionManager(
     @Suppress("FunctionName")
     fun _setPeerIdentity(id: ByteArray?) { _peerIdentity.value = id }
 
+    // MARK: - Push token exchange (P0 #1)
+
+    /**
+     * Build the list of [ControlMessage] token-broadcasts the local side has
+     * available right now. Pure — depends only on `push.fcmToken`. Empty list
+     * means nothing to forward (token not yet registered).
+     */
+    fun ownTokenControlMessages(): List<ControlMessage> {
+        val out = mutableListOf<ControlMessage>()
+        push.fcmToken?.let { out.add(ControlMessage.PushToken(it)) }
+        return out
+    }
+
+    /**
+     * Forward locally-known push tokens to the peer. Caller must invoke only
+     * after `state == ENCRYPTED` (otherwise [sendControl] throws). Best-effort —
+     * failures are swallowed so a transient send glitch doesn't tear down
+     * the session.
+     */
+    suspend fun forwardOwnPushTokensToPeer() {
+        if (_state.value != ConnectionState.ENCRYPTED) return
+        for (msg in ownTokenControlMessages()) {
+            runCatching { sendControl(msg) }
+            android.util.Log.i("PushManager", "🔔 Push token forwarded to peer")
+        }
+    }
+
+    /**
+     * Inbound routing entrypoint for the two token control messages. Surfaces
+     * to the appropriate [SharedFlow] so subscribers (e.g. ContactManager
+     * during save-contact) can store them.
+     */
+    fun handlePeerToken(ctrl: ControlMessage) {
+        when (ctrl) {
+            is ControlMessage.PushToken -> {
+                _peerPushTokens.tryEmit(ctrl.token)
+                android.util.Log.i("PushManager", "🔔 Peer push token received and stored (length: ${ctrl.token.length} chars)")
+            }
+            is ControlMessage.NotifyToken -> {
+                _peerNotifyTokens.tryEmit(ctrl.token)
+                android.util.Log.i("PushManager", "🔔 Peer notify token received and stored (length: ${ctrl.token.length} chars)")
+            }
+            else -> Unit
+        }
+    }
+
+    /**
+     * Test-only re-entry into the control-message router. Lets unit tests
+     * inject [ControlMessage.PushToken] / [ControlMessage.NotifyToken] without
+     * standing up the full crypto + DC pipeline.
+     */
+    @Suppress("FunctionName")
+    fun _testRouteControl(ctrl: ControlMessage) = handlePeerToken(ctrl)
+
     private suspend fun handleSignalPayload(raw: ByteArray) {
         val text = String(raw, Charsets.UTF_8)
         val obj = runCatching { json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return
@@ -393,7 +464,8 @@ class ConnectionManager(
         roleProvider      = { role },
         stateFlow         = _state,
         safetyNumberFlow  = _safetyNumber,
-        peerIdentityFlow  = _peerIdentity
+        peerIdentityFlow  = _peerIdentity,
+        onEncrypted       = { forwardOwnPushTokensToPeer() }
     )
 
     private suspend fun startKeyExchangeOverDataChannel() = handshake.startKeyExchangeOverDataChannel()
@@ -427,7 +499,8 @@ class ConnectionManager(
         incomingFile        = _incomingFile,
         fileTransferAborted = _fileTransferAborted,
         sendControl         = { ctrl -> sendControl(ctrl) },
-        awaitSendSlot       = { awaitSendSlot() }
+        awaitSendSlot       = { awaitSendSlot() },
+        onPeerPushToken     = { ctrl -> handlePeerToken(ctrl) }
     )
 
     private suspend fun handleControl(ctrl: ControlMessage) = fileRouter.route(ctrl)

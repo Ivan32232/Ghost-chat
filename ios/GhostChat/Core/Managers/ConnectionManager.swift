@@ -57,6 +57,15 @@ final class ConnectionManager: ObservableObject {
     let incomingFile: AsyncStream<FileTransferService.IncomingFile>
     let fileTransferAborted: AsyncStream<String>
 
+    /// Peer's VoIP push token (decoded raw bytes), surfaced after the peer sends
+    /// a `ControlMessage.pushToken` in the encrypted channel. Subscribers
+    /// (typically `ContactManager` on save-contact) can persist these so we can
+    /// later relay calls/messages via the server while the peer is offline.
+    let peerPushTokens: AsyncStream<Data>
+    /// Same as `peerPushTokens` but for the iOS APNs alert / Android FCM notify
+    /// channel.
+    let peerNotifyTokens: AsyncStream<Data>
+
     private let signalingURL: URL
     private let apiBaseURL: URL
     private let identity: IdentityKeyService
@@ -74,6 +83,8 @@ final class ConnectionManager: ObservableObject {
     private var incomingContinuation: AsyncStream<String>.Continuation?
     var fileContinuation: AsyncStream<FileTransferService.IncomingFile>.Continuation?
     var abortContinuation: AsyncStream<String>.Continuation?
+    private var peerPushContinuation: AsyncStream<Data>.Continuation?
+    private var peerNotifyContinuation: AsyncStream<Data>.Continuation?
     private var tasks: [Task<Void, Never>] = []
 
     init(
@@ -98,7 +109,67 @@ final class ConnectionManager: ObservableObject {
         var abortCont: AsyncStream<String>.Continuation!
         self.fileTransferAborted = AsyncStream { abortCont = $0 }
         self.abortContinuation = abortCont
+        var peerPushCont: AsyncStream<Data>.Continuation!
+        self.peerPushTokens = AsyncStream { peerPushCont = $0 }
+        self.peerPushContinuation = peerPushCont
+        var peerNotifyCont: AsyncStream<Data>.Continuation!
+        self.peerNotifyTokens = AsyncStream { peerNotifyCont = $0 }
+        self.peerNotifyContinuation = peerNotifyCont
         wireChunkTimeoutHandlers()
+    }
+
+    // MARK: - Push token exchange (P0 #1)
+
+    /// Build the list of `ControlMessage` token-broadcasts the local side has
+    /// available right now. Pure — depends only on `push.voipToken` and
+    /// `push.apnsToken`. Empty list means nothing to forward (token not yet
+    /// registered or APNs alerts not opted-in).
+    func ownTokenControlMessages() -> [ControlMessage] {
+        var out: [ControlMessage] = []
+        if let voip = push.voipToken {
+            out.append(.pushToken(token: voip.tokenHex))
+        }
+        if let apns = push.apnsToken {
+            out.append(.notifyToken(token: apns.tokenHex))
+        }
+        return out
+    }
+
+    /// Forward locally-known push tokens to the peer. Caller must invoke only
+    /// after `state == .encrypted` (otherwise `sendControl` throws). Best-effort
+    /// — failures are swallowed so a transient send glitch doesn't tear down
+    /// the session.
+    func forwardOwnPushTokensToPeer() async {
+        guard state == .encrypted else { return }
+        for msg in ownTokenControlMessages() {
+            try? await sendControl(msg)
+            SentryBreadcrumb.push("Push token forwarded to peer (\(msg.wireType))")
+        }
+    }
+
+    /// Inbound routing entrypoint for the two token control messages. Decodes
+    /// hex → bytes and surfaces to the appropriate AsyncStream so subscribers
+    /// (e.g. `ContactManager` during save-contact) can store them.
+    func handlePeerToken(_ ctrl: ControlMessage) {
+        switch ctrl {
+        case .pushToken(let hex):
+            guard let bytes = Data(tokenHex: hex) else { return }
+            peerPushContinuation?.yield(bytes)
+            SentryBreadcrumb.push("Peer push token received and stored (length: \(bytes.count) bytes)")
+        case .notifyToken(let hex):
+            guard let bytes = Data(tokenHex: hex) else { return }
+            peerNotifyContinuation?.yield(bytes)
+            SentryBreadcrumb.push("Peer notify token received and stored (length: \(bytes.count) bytes)")
+        default:
+            break
+        }
+    }
+
+    /// Test-only re-entry into the control-message router. Lets unit tests
+    /// inject `.pushToken` / `.notifyToken` without standing up the full
+    /// crypto + DC pipeline.
+    func _test_routeControl(_ ctrl: ControlMessage) async {
+        handlePeerToken(ctrl)
     }
 
     private func wireChunkTimeoutHandlers() {

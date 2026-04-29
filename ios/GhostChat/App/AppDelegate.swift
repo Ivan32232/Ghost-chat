@@ -18,7 +18,32 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         configureSentry()
+        // Pending: pushManager wired by GhostChatApp.onAppear; register VoIP
+        // there once the Manager is available.
         return true
+    }
+
+    /// Called from `GhostChatApp.onAppear` once the AppServices' `pushManager`
+    /// has been bound to this delegate. VoIP registration is silent (no system
+    /// prompt) so it's safe to do at every launch — needed for CallKit to
+    /// surface incoming calls when the app is in the background or killed.
+    func bootstrapVoIPIfNeeded() {
+        guard let push = pushManager else { return }
+        push.registerForVoIP()
+    }
+
+    /// Called from the Settings notifications toggle when the user opts in.
+    /// Triggers the iOS APNs permission prompt and, on grant, registers for
+    /// remote notifications so APNs delivers a device token to
+    /// `didRegisterForRemoteNotificationsWithDeviceToken`.
+    @MainActor
+    func requestNotificationsAuthorization() async -> Bool {
+        guard let push = pushManager else { return false }
+        let granted = await push.requestAPNsAuthorization()
+        if granted {
+            await UIApplication.shared.registerForRemoteNotifications()
+        }
+        return granted
     }
 
     /// Boot Sentry only when a DSN is actually configured. PII is aggressively scrubbed

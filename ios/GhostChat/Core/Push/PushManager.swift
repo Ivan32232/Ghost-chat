@@ -44,6 +44,9 @@ final class PushManager: NSObject {
     // MARK: - Registration
 
     func registerForVoIP() {
+        // Idempotent — safe to call from AppDelegate.didFinishLaunchingWithOptions
+        // even if app is relaunched after a crash.
+        if registry != nil { return }
         let registry = PKPushRegistry(queue: .main)
         registry.delegate = self
         registry.desiredPushTypes = [.voIP]
@@ -58,6 +61,23 @@ final class PushManager: NSObject {
     func didReceiveAPNsToken(_ token: Data) {
         apnsToken = token
         apnsTokenContinuation?.yield(token)
+        // Length only — never log token bytes (security).
+        SentryBreadcrumb.push("APNs token registered (length: \(token.count) bytes)")
+    }
+
+    // MARK: - Test hooks
+
+    /// Test-only: simulate `pushRegistry(_:didUpdate:for:)` delivering a VoIP
+    /// token without standing up the real PKPushRegistry. Used by
+    /// `PushManagerRegistrationTests` to verify token bookkeeping.
+    func _test_setVoipToken(_ token: Data) {
+        voipToken = token
+        voipTokenContinuation?.yield(token)
+    }
+
+    /// Test-only: clear voipToken to verify reset/rotation paths.
+    func _test_clearVoipToken() {
+        voipToken = nil
     }
 
     // MARK: - Send
@@ -131,6 +151,8 @@ extension PushManager: PKPushRegistryDelegate {
         guard type == .voIP else { return }
         voipToken = pushCredentials.token
         voipTokenContinuation?.yield(pushCredentials.token)
+        // Length only — never log token bytes (security).
+        SentryBreadcrumb.push("VoIP token registered (length: \(pushCredentials.token.count) bytes)")
     }
 
     func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {

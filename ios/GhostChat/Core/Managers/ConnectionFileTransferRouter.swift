@@ -42,9 +42,14 @@ extension ConnectionManager {
                 try? await sendControl(msg)
             }
 
+        case .pushToken, .notifyToken:
+            // Peer-supplied push tokens — surface to subscribers so save-contact
+            // flows can persist them. P0 #1 wiring.
+            handlePeerToken(ctrl)
+
         case .renegotiate, .callRequest, .callResponse, .callEnd,
              .securityAlert, .messageAck, .messageRead, .ready,
-             .pushToken, .notifyToken, .typing, .capabilities,
+             .typing, .capabilities,
              .messageDelete, .messageEdit, .messagePin:
             // Other control types are handled in their own phases — ignore here so they
             // don't get mistaken for text messages.

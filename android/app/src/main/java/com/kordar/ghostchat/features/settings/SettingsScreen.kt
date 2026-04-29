@@ -57,6 +57,7 @@ fun SettingsScreen(
 ) {
     val privacy by viewModel.settings.privacyMode.collectAsState()
     val biometric by viewModel.settings.biometricEnabled.collectAsState()
+    val notifications by viewModel.settings.notificationsEnabled.collectAsState()
     val sound by viewModel.settings.soundEnabled.collectAsState()
     val ttl by viewModel.settings.messageTTL.collectAsState()
     val autoLock by viewModel.settings.autoLockTimeout.collectAsState()
@@ -65,7 +66,23 @@ fun SettingsScreen(
     var languageExpanded by remember { mutableStateOf(false) }
     var ttlExpanded by remember { mutableStateOf(false) }
     var autoLockExpanded by remember { mutableStateOf(false) }
+    var notificationsDenied by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
+
+    // Runtime POST_NOTIFICATIONS launcher (API 33+). On older APIs the system
+    // grants the permission automatically, so the launcher result is always true.
+    val notificationsPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.settings.setNotificationsEnabled(true)
+            android.util.Log.i("PushManager", "🔔 Notifications opt-in granted")
+        } else {
+            viewModel.settings.setNotificationsEnabled(false)
+            notificationsDenied = true
+            android.util.Log.i("PushManager", "🔔 Notifications opt-in denied")
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -92,6 +109,43 @@ fun SettingsScreen(
             Switch(checked = biometric, onCheckedChange = { viewModel.settings.setBiometricEnabled(it) })
         }
         HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+
+        // Notifications opt-in (default OFF; tapping ON triggers POST_NOTIFICATIONS
+        // runtime prompt on API 33+). If denied, toggle bounces back to OFF and we
+        // surface a one-shot dialog pointing the user to system settings.
+        SettingRow(
+            label = stringResource(R.string.settings_notifications),
+            description = stringResource(R.string.settings_notifications_desc)
+        ) {
+            Switch(
+                checked = notifications,
+                onCheckedChange = { newValue ->
+                    if (newValue) {
+                        if (android.os.Build.VERSION.SDK_INT >= 33) {
+                            notificationsPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            viewModel.settings.setNotificationsEnabled(true)
+                        }
+                    } else {
+                        viewModel.settings.setNotificationsEnabled(false)
+                    }
+                }
+            )
+        }
+        HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+
+        if (notificationsDenied) {
+            AlertDialog(
+                onDismissRequest = { notificationsDenied = false },
+                title = { Text(stringResource(R.string.settings_notifications_denied_title)) },
+                text = { Text(stringResource(R.string.settings_notifications_denied_message)) },
+                confirmButton = {
+                    TextButton(onClick = { notificationsDenied = false }) {
+                        Text(stringResource(R.string.action_done))
+                    }
+                }
+            )
+        }
 
         // Security dashboard — independent section, NOT nested under biometric.
         NavigationRow(

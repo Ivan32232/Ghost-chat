@@ -41,6 +41,10 @@
     <string name="settings_title">Настройки</string>
     <string name="settings_privacy_mode">Режим приватности (TURN)</string>
     <string name="settings_biometric">Биометрическая блокировка</string>
+    <string name="settings_notifications">Уведомления</string>
+    <string name="settings_notifications_desc">Получать уведомления когда контакты пишут вам в офлайне</string>
+    <string name="settings_notifications_denied_title">Уведомления отключены</string>
+    <string name="settings_notifications_denied_message">Вы можете включить уведомления в Настройках Android → Приложения → Ghost Chat → Уведомления.</string>
     <string name="settings_auto_lock">Автоблокировка</string>
     <string name="settings_language">Язык</string>
     <string name="settings_sound">Звук</string>

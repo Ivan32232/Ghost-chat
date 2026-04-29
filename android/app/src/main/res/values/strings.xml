@@ -45,6 +45,10 @@
     <string name="settings_title">Settings</string>
     <string name="settings_privacy_mode">Privacy mode (TURN relay)</string>
     <string name="settings_biometric">Biometric lock</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_notifications_desc">Receive notifications when contacts message you while you\'re offline</string>
+    <string name="settings_notifications_denied_title">Notifications disabled</string>
+    <string name="settings_notifications_denied_message">You can enable notifications in Android Settings → Apps → Ghost Chat → Notifications.</string>
     <string name="settings_auto_lock">Auto-lock</string>
     <string name="settings_language">Language</string>
     <string name="settings_sound">Sound</string>

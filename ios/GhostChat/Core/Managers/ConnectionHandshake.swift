@@ -25,6 +25,7 @@ extension ConnectionManager {
             if ready {
                 _set(state: .encrypted)
                 _set(safetyNumber: try? await crypto.safetyNumber())
+                await forwardOwnPushTokensToPeer()
             }
             // Otherwise HOST sits in awaitingPq until a PqExchangePacket arrives.
         } else {
@@ -34,6 +35,7 @@ extension ConnectionManager {
             if let pqOut {
                 try rtc.send(try JSONEncoder().encode(pqOut))
             }
+            await forwardOwnPushTokensToPeer()
         }
     }
 
@@ -42,5 +44,6 @@ extension ConnectionManager {
         try await crypto.completePQ(pqCiphertext: pkt.pqCiphertext)
         _set(state: .encrypted)
         _set(safetyNumber: try? await crypto.safetyNumber())
+        await forwardOwnPushTokensToPeer()
     }
 }

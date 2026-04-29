@@ -16,12 +16,14 @@ internal class ConnectionFileTransferRouter(
     private val incomingFile: MutableSharedFlow<FileTransferService.IncomingFile>,
     private val fileTransferAborted: MutableSharedFlow<String>,
     private val sendControl: suspend (ControlMessage) -> Unit,
-    private val awaitSendSlot: suspend () -> Unit
+    private val awaitSendSlot: suspend () -> Unit,
+    private val onPeerPushToken: (ControlMessage) -> Unit = {}
 ) {
 
     suspend fun route(ctrl: ControlMessage) {
         val ft = fileTransfer()
         when (ctrl) {
+            is ControlMessage.PushToken, is ControlMessage.NotifyToken -> onPeerPushToken(ctrl)
             is ControlMessage.FileStart -> {
                 ft.handleStart(
                     fileId = ctrl.fileId, name = ctrl.name, size = ctrl.size,

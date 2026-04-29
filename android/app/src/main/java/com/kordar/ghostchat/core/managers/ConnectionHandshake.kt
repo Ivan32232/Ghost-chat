@@ -19,7 +19,8 @@ internal class ConnectionHandshake(
     private val roleProvider: () -> Role?,
     private val stateFlow: MutableStateFlow<ConnectionState>,
     private val safetyNumberFlow: MutableStateFlow<String?>,
-    private val peerIdentityFlow: MutableStateFlow<ByteArray?>
+    private val peerIdentityFlow: MutableStateFlow<ByteArray?>,
+    private val onEncrypted: suspend () -> Unit = {}
 ) {
     suspend fun startKeyExchangeOverDataChannel() {
         val crypto = cryptoProvider() ?: return
@@ -37,6 +38,7 @@ internal class ConnectionHandshake(
         val crypto = cryptoProvider() ?: return
         val rtc = rtcProvider() ?: return
         pkt ?: return
+        var becameEncrypted = false
         runCatching {
             if (role == Role.HOST) {
                 val ready = crypto.completeAsHost(pkt)
@@ -44,6 +46,7 @@ internal class ConnectionHandshake(
                 if (ready) {
                     stateFlow.value = ConnectionState.ENCRYPTED
                     safetyNumberFlow.value = runCatching { crypto.safetyNumber() }.getOrNull()
+                    becameEncrypted = true
                 }
             } else {
                 val pqOut = crypto.completeAsGuest(pkt)
@@ -53,8 +56,10 @@ internal class ConnectionHandshake(
                 if (pqOut != null) {
                     rtc.send(PqExchangePacket.encode(pqOut).toByteArray(Charsets.UTF_8))
                 }
+                becameEncrypted = true
             }
         }
+        if (becameEncrypted) onEncrypted()
     }
 
     suspend fun completePq(pkt: PqExchangePacket) {
@@ -64,5 +69,6 @@ internal class ConnectionHandshake(
             stateFlow.value = ConnectionState.ENCRYPTED
             safetyNumberFlow.value = runCatching { crypto.safetyNumber() }.getOrNull()
         }
+        onEncrypted()
     }
 }

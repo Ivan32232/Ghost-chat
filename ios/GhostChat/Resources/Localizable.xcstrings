@@ -146,6 +146,30 @@
         }
       }
     },
+    "settings.notifications": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Notifications" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Уведомления" } }
+      }
+    },
+    "settings.notifications_desc": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Receive notifications when contacts message you while you're offline" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Получать уведомления когда контакты пишут вам в офлайне" } }
+      }
+    },
+    "settings.notifications_denied_title": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Notifications disabled" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Уведомления отключены" } }
+      }
+    },
+    "settings.notifications_denied_message": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "You can enable notifications in iOS Settings → Ghost Chat → Notifications." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Вы можете включить уведомления в Настройках iOS → Ghost Chat → Уведомления." } }
+      }
+    },
     "app.name": {
       "extractionState": "stale",
       "localizations": {

@@ -9,12 +9,14 @@ struct SettingsView: View {
     @State private var showWipeConfirm = false
     @State private var showDashboard = false
     @State private var showAbout = false
+    @State private var notificationsDenied = false
 
     var body: some View {
         NavigationStack {
             Form {
                 privacySection
                 biometricSection
+                notificationsSection
                 securityDashboardSection
                 timersSection
                 languageSection
@@ -39,6 +41,14 @@ struct SettingsView: View {
                 }
             } message: {
                 Text(localization.localized("settings.wipe_desc"))
+            }
+            .alert(
+                localization.localized("settings.notifications_denied_title"),
+                isPresented: $notificationsDenied
+            ) {
+                Button(localization.localized("action.done"), role: .cancel) {}
+            } message: {
+                Text(localization.localized("settings.notifications_denied_message"))
             }
         }
     }
@@ -65,6 +75,42 @@ struct SettingsView: View {
                 Toggle("", isOn: $settings.biometricEnabled).labelsHidden()
             }
         }
+    }
+
+    /// Notifications opt-in. Default OFF; tapping ON triggers the iOS APNs
+    /// permission prompt. If denied, the toggle bounces back to OFF and we
+    /// surface a one-shot alert pointing the user to iOS Settings.
+    private var notificationsSection: some View {
+        Section {
+            SettingRow(
+                label: localization.localized("settings.notifications"),
+                description: localization.localized("settings.notifications_desc")
+            ) {
+                Toggle("", isOn: notificationsBinding).labelsHidden()
+            }
+        }
+    }
+
+    private var notificationsBinding: Binding<Bool> {
+        Binding(
+            get: { settings.notificationsEnabled },
+            set: { newValue in
+                if newValue {
+                    Task { @MainActor in
+                        let delegate = UIApplication.shared.delegate as? AppDelegate
+                        let granted = (await delegate?.requestNotificationsAuthorization()) ?? false
+                        if granted {
+                            settings.notificationsEnabled = true
+                        } else {
+                            settings.notificationsEnabled = false
+                            notificationsDenied = true
+                        }
+                    }
+                } else {
+                    settings.notificationsEnabled = false
+                }
+            }
+        )
     }
 
     private var securityDashboardSection: some View {
